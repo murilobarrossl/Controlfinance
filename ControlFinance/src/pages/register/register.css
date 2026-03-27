@@ -1,0 +1,199 @@
+@font-face {
+  font-family: 'Arial Nova';
+  src: url('../../assets/fonts/Arial Nova.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Times New Roman';
+  src: url('../../assets/fonts/Times New Roman.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Prompt-Regular';
+  src: url('../../assets/fonts/Prompt-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
+.register-page {
+  display: flex;
+  min-height: 100vh;
+  background: #0a1a3e;
+  font-family: 'Arial Nova', sans-serif;
+  align-items: stretch;
+}
+
+.register-left {
+  flex: 1;
+  padding: 60px 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+}
+
+.register-brand-label {
+  font-family: 'Times New Roman', serif;
+  color: #e84520;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.register-headline {
+  font-family: 'Times New Roman', serif;
+  color: #fff;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+  max-width: 480px;
+}
+
+.register-description {
+  font-family: 'Prompt-Regular', sans-serif;
+  color: #a8bedc;
+  font-size: 15px;
+  line-height: 1.7;
+  max-width: 440px;
+  margin: 0;
+}
+
+.register-chart {
+  width: 100%;
+  max-width: 480px;
+  object-fit: contain;
+}
+
+.register-right {
+  width: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 32px;
+}
+
+.register-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 36px 32px;
+  width: 100%;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+}
+
+.register-logo {
+  height: 48px;
+  object-fit: contain;
+  margin-bottom: 28px;
+  display: block;
+}
+
+.register-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.register-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.register-field label {
+  font-family: 'Prompt-Regular', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a2d52;
+}
+
+.register-field input {
+  border: 1.5px solid #dde3ef;
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 14px;
+  font-family: 'Prompt-Regular', sans-serif;
+  color: #1a2d52;
+  outline: none;
+  transition: border-color 0.2s;
+  background: #fff;
+}
+
+.register-field input::placeholder {
+  font-family: 'Prompt-Regular', sans-serif;
+}
+
+.register-field input:focus {
+  border-color: #0a1a3e;
+}
+
+.register-password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.register-lock-icon {
+  position: absolute;
+  left: 12px;
+  color: #8a9bbf;
+  pointer-events: none;
+}
+
+.register-field .register-password-input {
+  border: 1.5px solid #dde3ef;
+  border-radius: 10px;
+  padding: 11px 40px 11px 40px;
+  font-size: 14px;
+  font-family: 'Prompt-Regular', sans-serif;
+  color: #1a2d52;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+.register-field .register-password-input::placeholder {
+  font-family: 'Prompt-Regular', sans-serif;
+}
+
+.register-field .register-password-input:focus {
+  border-color: #0a1a3e;
+}
+
+.register-eye-btn {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #8a9bbf;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.register-submit {
+  margin-top: 4px;
+  background: linear-gradient(135deg, #e84520, #c4350f);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 13px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: 'Prompt-Regular', sans-serif;
+  cursor: pointer;
+  width: 100%;
+  transition: opacity 0.2s;
+}
+
+.register-submit:hover {
+  opacity: 0.9;
+}
