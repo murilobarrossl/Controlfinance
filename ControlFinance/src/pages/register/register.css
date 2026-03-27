@@ -22,7 +22,7 @@
 .register-page {
   display: flex;
   min-height: 100vh;
-  background: #0a1a3e;
+  background: #001647;
   font-family: 'Arial Nova', sans-serif;
   align-items: stretch;
 }
@@ -38,7 +38,7 @@
 
 .register-brand-label {
   font-family: 'Times New Roman', serif;
-  color: #e84520;
+  color: #ed4a31;
   font-size: 40px;
   font-weight: 700;
   letter-spacing: 3px;
@@ -57,7 +57,7 @@
 
 .register-description {
   font-family: 'Prompt-Regular', sans-serif;
-  color: #a8bedc;
+  color: #ffffff;
   font-size: 15px;
   line-height: 1.7;
   max-width: 440px;
@@ -109,7 +109,7 @@
   font-family: 'Prompt-Regular', sans-serif;
   font-size: 13px;
   font-weight: 600;
-  color: #1a2d52;
+  color: #001647;
 }
 
 .register-field input {
@@ -118,7 +118,7 @@
   padding: 11px 14px;
   font-size: 14px;
   font-family: 'Prompt-Regular', sans-serif;
-  color: #1a2d52;
+  color: #001647;
   outline: none;
   transition: border-color 0.2s;
   background: #fff;
@@ -129,7 +129,7 @@
 }
 
 .register-field input:focus {
-  border-color: #0a1a3e;
+  border-color: #001647;
 }
 
 .register-password-wrap {
@@ -151,7 +151,7 @@
   padding: 11px 40px 11px 40px;
   font-size: 14px;
   font-family: 'Prompt-Regular', sans-serif;
-  color: #1a2d52;
+  color: #001647;
   outline: none;
   width: 100%;
   box-sizing: border-box;
@@ -164,7 +164,7 @@
 }
 
 .register-field .register-password-input:focus {
-  border-color: #0a1a3e;
+  border-color: #001647;
 }
 
 .register-eye-btn {
