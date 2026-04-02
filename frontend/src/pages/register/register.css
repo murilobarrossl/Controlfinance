@@ -1,3 +1,4 @@
+/* fontes */
 @font-face {
   font-family: 'Arial Nova';
   src: url('../../assets/fonts/Arial Nova.ttf') format('truetype');
@@ -19,6 +20,7 @@
   font-display: swap;
 }
 
+/* layout geral */
 .register-page {
   display: flex;
   min-height: 100vh;
@@ -27,6 +29,7 @@
   align-items: stretch;
 }
 
+/* lado esquerdo */
 .register-left {
   flex: 1;
   padding: 60px 56px;
@@ -36,6 +39,7 @@
   gap: 20px;
 }
 
+/* título da marca */
 .register-brand-label {
   font-family: 'Times New Roman', serif;
   color: #ed4a31;
@@ -45,6 +49,7 @@
   text-transform: uppercase;
 }
 
+/* headline principal */
 .register-headline {
   font-family: 'Times New Roman', serif;
   color: #fff;
@@ -55,6 +60,7 @@
   max-width: 480px;
 }
 
+/* descrição */
 .register-description {
   font-family: 'Prompt-Regular', sans-serif;
   color: #ffffff;
@@ -64,12 +70,14 @@
   margin: 0;
 }
 
+/* imagem do gráfico */
 .register-chart {
   width: 100%;
   max-width: 480px;
   object-fit: contain;
 }
 
+/* lado direito (formulário) */
 .register-right {
   width: 400px;
   display: flex;
@@ -78,6 +86,7 @@
   padding: 40px 32px;
 }
 
+/* card do formulário */
 .register-card {
   background: #fff;
   border-radius: 20px;
@@ -86,6 +95,7 @@
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
 }
 
+/* logo */
 .register-logo {
   height: 48px;
   object-fit: contain;
@@ -93,18 +103,21 @@
   display: block;
 }
 
+/* container dos campos */
 .register-fields {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
+/* grupo de campo */
 .register-field {
   display: flex;
   flex-direction: column;
   gap: 5px;
 }
 
+/* label */
 .register-field label {
   font-family: 'Prompt-Regular', sans-serif;
   font-size: 13px;
@@ -112,6 +125,7 @@
   color: #001647;
 }
 
+/* input padrão */
 .register-field input {
   border: 1.5px solid #dde3ef;
   border-radius: 10px;
@@ -124,20 +138,24 @@
   background: #fff;
 }
 
+/* placeholder */
 .register-field input::placeholder {
   font-family: 'Prompt-Regular', sans-serif;
 }
 
+/* foco do input */
 .register-field input:focus {
   border-color: #001647;
 }
 
+/* wrapper da senha */
 .register-password-wrap {
   position: relative;
   display: flex;
   align-items: center;
 }
 
+/* ícone de cadeado */
 .register-lock-icon {
   position: absolute;
   left: 12px;
@@ -145,6 +163,7 @@
   pointer-events: none;
 }
 
+/* input de senha */
 .register-field .register-password-input {
   border: 1.5px solid #dde3ef;
   border-radius: 10px;
@@ -159,14 +178,17 @@
   transition: border-color 0.2s;
 }
 
+/* placeholder da senha */
 .register-field .register-password-input::placeholder {
   font-family: 'Prompt-Regular', sans-serif;
 }
 
+/* foco da senha */
 .register-field .register-password-input:focus {
   border-color: #001647;
 }
 
+/* botão de mostrar senha */
 .register-eye-btn {
   position: absolute;
   right: 12px;
@@ -179,6 +201,7 @@
   align-items: center;
 }
 
+/* botão submit */
 .register-submit {
   margin-top: 4px;
   background: linear-gradient(135deg, #e84520, #c4350f);
@@ -194,6 +217,7 @@
   transition: opacity 0.2s;
 }
 
+/* hover do botão */
 .register-submit:hover {
   opacity: 0.9;
 }
