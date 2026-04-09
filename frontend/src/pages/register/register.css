@@ -1,21 +1,21 @@
 /* fontes */
 @font-face {
-  font-family: 'Arial Nova';
-  src: url('../../assets/fonts/Arial Nova.ttf') format('truetype');
+  font-family: "Arial Nova";
+  src: url("../../assets/fonts/Arial Nova.ttf") format("truetype");
   font-weight: 400;
   font-display: swap;
 }
 
 @font-face {
-  font-family: 'Times New Roman';
-  src: url('../../assets/fonts/Times New Roman.ttf') format('truetype');
+  font-family: "Times New Roman";
+  src: url("../../assets/fonts/Times New Roman.ttf") format("truetype");
   font-weight: 400;
   font-display: swap;
 }
 
 @font-face {
-  font-family: 'Prompt-Regular';
-  src: url('../../assets/fonts/Prompt-Regular.ttf') format('truetype');
+  font-family: "Prompt-Regular";
+  src: url("../../assets/fonts/Prompt-Regular.ttf") format("truetype");
   font-weight: 400;
   font-display: swap;
 }
@@ -25,7 +25,7 @@
   display: flex;
   min-height: 100vh;
   background: #001647;
-  font-family: 'Arial Nova', sans-serif;
+  font-family: "Arial Nova", sans-serif;
   align-items: stretch;
 }
 
@@ -41,7 +41,7 @@
 
 /* título da marca */
 .register-brand-label {
-  font-family: 'Times New Roman', serif;
+  font-family: "Times New Roman", serif;
   color: #ed4a31;
   font-size: 40px;
   font-weight: 700;
@@ -51,7 +51,7 @@
 
 /* headline principal */
 .register-headline {
-  font-family: 'Times New Roman', serif;
+  font-family: "Times New Roman", serif;
   color: #fff;
   font-size: 40px;
   font-weight: 700;
@@ -62,9 +62,9 @@
 
 /* descrição */
 .register-description {
-  font-family: 'Prompt-Regular', sans-serif;
+  font-family: "Prompt-Regular", sans-serif;
   color: #ffffff;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.7;
   max-width: 440px;
   margin: 0;
@@ -119,8 +119,8 @@
 
 /* label */
 .register-field label {
-  font-family: 'Prompt-Regular', sans-serif;
-  font-size: 13px;
+  font-family: "Prompt-Regular", sans-serif;
+  font-size: 12px;
   font-weight: 600;
   color: #001647;
 }
@@ -131,7 +131,7 @@
   border-radius: 10px;
   padding: 11px 14px;
   font-size: 14px;
-  font-family: 'Prompt-Regular', sans-serif;
+  font-family: "Prompt-Regular", sans-serif;
   color: #001647;
   outline: none;
   transition: border-color 0.2s;
@@ -140,7 +140,7 @@
 
 /* placeholder */
 .register-field input::placeholder {
-  font-family: 'Prompt-Regular', sans-serif;
+  font-family: "Prompt-Regular", sans-serif;
 }
 
 /* foco do input */
@@ -169,7 +169,7 @@
   border-radius: 10px;
   padding: 11px 40px 11px 40px;
   font-size: 14px;
-  font-family: 'Prompt-Regular', sans-serif;
+  font-family: "Prompt-Regular", sans-serif;
   color: #001647;
   outline: none;
   width: 100%;
@@ -180,7 +180,7 @@
 
 /* placeholder da senha */
 .register-field .register-password-input::placeholder {
-  font-family: 'Prompt-Regular', sans-serif;
+  font-family: "Prompt-Regular", sans-serif;
 }
 
 /* foco da senha */
@@ -209,9 +209,9 @@
   border: none;
   border-radius: 10px;
   padding: 13px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
-  font-family: 'Prompt-Regular', sans-serif;
+  font-family: "Prompt-Regular", sans-serif;
   cursor: pointer;
   width: 100%;
   transition: opacity 0.2s;
@@ -220,4 +220,32 @@
 /* hover do botão */
 .register-submit:hover {
   opacity: 0.9;
+}
+
+/* texto "não tem conta?" */
+.register-login {
+  margin-top: 12px;
+  text-align: center;
+  font-family: "Prompt-Regular", sans-serif;
+  font-size: 14px;
+  color: #6b7a99;
+}
+
+/* link "registre-se" */
+.register-login a {
+  color: #e84520;
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: 4px;
+  font-size: 14px;
+  transition:
+    color 0.2s,
+    opacity 0.2s;
+}
+
+/* hover do link */
+.register-login a:hover {
+  color: #c4350f;
+  opacity: 0.9;
+  text-decoration: underline;
 }
