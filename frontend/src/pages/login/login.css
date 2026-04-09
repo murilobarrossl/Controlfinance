@@ -1,0 +1,251 @@
+/* fontes */
+@font-face {
+  font-family: "Arial Nova";
+  src: url("../../assets/fonts/Arial Nova.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Times New Roman";
+  src: url("../../assets/fonts/Times New Roman.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Prompt-Regular";
+  src: url("../../assets/fonts/Prompt-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+/* layout geral */
+.login-page {
+  display: flex;
+  min-height: 100vh;
+  background: #001647;
+  font-family: "Arial Nova", sans-serif;
+  align-items: stretch;
+}
+
+/* lado esquerdo */
+.login-left {
+  flex: 1;
+  padding: 60px 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+}
+
+/* título da marca */
+.login-brand-label {
+  font-family: "Times New Roman", serif;
+  color: #ed4a31;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+/* headline principal */
+.login-headline {
+  font-family: "Times New Roman", serif;
+  color: #fff;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+  max-width: 480px;
+}
+
+/* descrição */
+.login-description {
+  font-family: "Prompt-Regular", sans-serif;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.7;
+  max-width: 440px;
+  margin: 0;
+}
+
+/* imagem do gráfico */
+.login-chart {
+  width: 100%;
+  max-width: 480px;
+  object-fit: contain;
+}
+
+/* lado direito (formulário) */
+.login-right {
+  width: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 32px;
+}
+
+/* card do formulário */
+.login-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 36px 32px;
+  width: 100%;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+}
+
+/* logo */
+.login-logo {
+  height: 48px;
+  object-fit: contain;
+  margin-bottom: 28px;
+  display: block;
+}
+
+/* container dos campos */
+.login-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* grupo de campo */
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* label */
+.login-field label {
+  font-family: "Prompt-Regular", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #001647;
+}
+
+/* input padrão */
+.login-field input {
+  border: 1.5px solid #dde3ef;
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 14px;
+  font-family: "Prompt-Regular", sans-serif;
+  color: #001647;
+  outline: none;
+  transition: border-color 0.2s;
+  background: #fff;
+}
+
+/* placeholder */
+.login-field input::placeholder {
+  font-family: "Prompt-Regular", sans-serif;
+}
+
+/* foco do input */
+.login-field input:focus {
+  border-color: #001647;
+}
+
+/* wrapper da senha */
+.login-password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* ícone de cadeado */
+.login-lock-icon {
+  position: absolute;
+  left: 12px;
+  color: #8a9bbf;
+  pointer-events: none;
+}
+
+/* input de senha */
+.login-field .login-password-input {
+  border: 1.5px solid #dde3ef;
+  border-radius: 10px;
+  padding: 11px 40px 11px 40px;
+  font-size: 14px;
+  font-family: "Prompt-Regular", sans-serif;
+  color: #001647;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+/* placeholder da senha */
+.login-field .login-password-input::placeholder {
+  font-family: "Prompt-Regular", sans-serif;
+}
+
+/* foco da senha */
+.login-field .login-password-input:focus {
+  border-color: #001647;
+}
+
+/* botão de mostrar senha */
+.login-eye-btn {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #8a9bbf;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* botão submit */
+.login-submit {
+  margin-top: 4px;
+  background: linear-gradient(135deg, #e84520, #c4350f);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 13px;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: "Prompt-Regular", sans-serif;
+  cursor: pointer;
+  width: 100%;
+  transition: opacity 0.2s;
+}
+
+/* hover do botão */
+.login-submit:hover {
+  opacity: 0.9;
+}
+
+/* texto "não tem conta?" */
+.login-register {
+  margin-top: 12px;
+  text-align: center;
+  font-family: "Prompt-Regular", sans-serif;
+  font-size: 14px;
+  color: #6b7a99;
+}
+
+/* link "registre-se" */
+.login-register a {
+  color: #e84520;
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: 4px;
+  font-size: 14px;
+  transition:
+    color 0.2s,
+    opacity 0.2s;
+}
+
+/* hover do link */
+.login-register a:hover {
+  color: #c4350f;
+  opacity: 0.9;
+  text-decoration: underline;
+}
