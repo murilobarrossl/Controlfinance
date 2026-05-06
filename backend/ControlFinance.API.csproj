@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ControlFinance.API</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Entity Framework Core + PostgreSQL -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore"                  Version="8.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design"           Version="8.0.4" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL"          Version="8.0.4" />
+
+    <!-- JWT Authentication -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.4" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens"                Version="7.5.1" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt"               Version="7.5.1" />
+
+    <!-- Bcrypt para hash de senha -->
+    <PackageReference Include="BCrypt.Net-Next"                               Version="4.0.3" />
+
+    <!-- Swagger -->
+    <PackageReference Include="Swashbuckle.AspNetCore"                        Version="6.6.2" />
+  </ItemGroup>
+
+</Project>
