@@ -53,7 +53,7 @@ export default function RegisterPage() {
       localStorage.setItem("user", JSON.stringify(data.user));
       navigate("/dashboard");
 
-    } catch (err) {
+    } catch {
       setError("Não foi possível conectar ao servidor.");
     } finally {
       setLoading(false);

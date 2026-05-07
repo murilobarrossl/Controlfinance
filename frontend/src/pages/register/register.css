@@ -73,8 +73,9 @@
 /* imagem do gráfico */
 .register-chart {
   width: 100%;
-  max-width: 480px;
+  max-width: 500px;
   object-fit: contain;
+  align-self: left;
 }
 
 /* lado direito (formulário) */
