@@ -73,7 +73,7 @@
 /* imagem do gráfico */
 .login-chart {
   width: 100%;
-  max-width: 480px;
+  max-width: 500px;
   object-fit: contain;
 }
 
