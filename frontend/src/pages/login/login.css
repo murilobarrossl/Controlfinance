@@ -249,3 +249,12 @@
   opacity: 0.9;
   text-decoration: underline;
 }
+.login-error {
+  background-color: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  text-align: center;
+}
