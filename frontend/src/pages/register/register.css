@@ -73,7 +73,7 @@
 /* imagem do gráfico */
 .register-chart {
   width: 100%;
-  max-width: 500px;
+  max-width: 600px;
   object-fit: contain;
 }
 
