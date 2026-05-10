@@ -2,6 +2,7 @@ import { useState } from "react";
 import graficologo from "../../assets/images/graficologo.png";
 import logoappfinance from "../../assets/images/logoappfinance.png";
 import "./register.css";
+import { Link, useNavigate } from "react-router-dom";
 
 const applyMask = (value, mask, prev) => {
   const isDeleting = prev && value.length < prev.length;
@@ -25,7 +26,10 @@ const applyMask = (value, mask, prev) => {
 };
 
 export default function RegisterPage() {
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const [form, setForm] = useState({
     nome: "",
@@ -38,8 +42,39 @@ export default function RegisterPage() {
   const handleChange = (field) => (e) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
-  const handleSubmit = () => {
-    console.log(form);
+  const handleSubmit = async () => {
+    setError("");
+    setLoading(true);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/auth/register`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: form.nome,
+            email: form.email,
+            document: form.documento,
+            phone: form.celular,
+            password: form.senha,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || "Erro ao criar conta.");
+        return;
+      }
+
+      navigate("/dashboard");
+    } catch {
+      setError("Erro de conexão. Tente novamente.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -70,6 +105,8 @@ export default function RegisterPage() {
           />
 
           <div className="register-fields">
+            {error && <div className="register-error">{error}</div>}
+
             <div className="register-field">
               <label>Nome</label>
               <input
@@ -200,9 +237,17 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <button className="register-submit" onClick={handleSubmit}>
-              Criar conta
+            <button
+              className="register-submit"
+              onClick={handleSubmit}
+              disabled={loading}
+            >
+              {loading ? "Criando conta..." : "Criar conta"}
             </button>
+
+            <p className="register-login">
+              Já tem uma conta? <Link to="/login">Entre aqui</Link>
+            </p>
           </div>
         </div>
       </div>

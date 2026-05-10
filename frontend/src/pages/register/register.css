@@ -221,3 +221,24 @@
 .register-submit:hover {
   opacity: 0.9;
 }
+
+.register-login a {
+  color: #e84520;
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: 4px;
+  font-size: 14px;
+  transition:
+    color 0.2s,
+    opacity 0.2s;
+}
+
+.register-error {
+  background-color: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  text-align: center;
+}
