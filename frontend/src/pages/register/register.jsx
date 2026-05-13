@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import graficologo from "../../assets/images/graficologo.png";
 import logoappfinance from "../../assets/images/logoappfinance.png";
 import { register } from "../../../api/auth.js";
+import "./register.css";
 import "../../../api/auth.js";
 
 const applyMask = (value, mask, prev) => {
