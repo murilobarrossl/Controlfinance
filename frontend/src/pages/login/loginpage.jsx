@@ -28,7 +28,7 @@ const CNPJ_MASK = "##.###.###/####-##";
 
 const getCpfCnpjMask = (digits) => (digits.length <= 11 ? CPF_MASK : CNPJ_MASK);
 
-// mode: "email" | "cpf"
+// modo: "email" | "cpf"
 export default function LoginPage({ mode = "email" }) {
   const navigate = useNavigate();
   const isCpf = mode === "cpf";

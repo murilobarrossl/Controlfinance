@@ -246,7 +246,7 @@ export default function RegisterPage() {
             </button>
 
             <p className="register-login">
-              Já tem uma conta? <Link to="/login">Entre aqui</Link>
+              Já tem uma conta? <Link to="/loginemail">Entre aqui</Link>
             </p>
           </div>
         </div>
