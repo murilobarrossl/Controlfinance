@@ -3,8 +3,7 @@ import { useState } from "react";
 import graficologo from "../../assets/images/graficologo.png";
 import logoappfinance from "../../assets/images/logoappfinance.png";
 import "./loginstyle.css";
-
-const API_URL = "http://localhost:5000/api";
+import { login } from "../../../api/auth.js";
 
 const applyMask = (value, mask, prev) => {
   const isDeleting = prev && value.length < prev.length;
@@ -70,24 +69,12 @@ export default function LoginPage({ mode = "email" }) {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier, password: senha }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.message || "Credenciais incorretas.");
-        return;
-      }
-
+      const data = await login(identifier, senha);
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
       navigate("/dashboard");
-    } catch {
-      setError("Não foi possível conectar ao servidor.");
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
