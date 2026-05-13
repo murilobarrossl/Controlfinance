@@ -26,7 +26,7 @@ public class TokenService : ITokenService
         var secretKey   = jwtSettings["SecretKey"]!;
         var issuer      = jwtSettings["Issuer"]!;
         var audience    = jwtSettings["Audience"]!;
-        var expiresInHours = int.Parse(jwtSettings["ExpiresInHours"] ?? "8");
+        var expiresInHours = int.TryParse(jwtSettings["ExpiresInHours"], out var h) ? h : 8;
 
         var key   = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
