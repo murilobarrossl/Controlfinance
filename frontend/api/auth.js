@@ -1,18 +1,13 @@
-const API_URL = import.meta.env.VITE_API_URL;
+import { apiFetch } from "./client.js";
 
-export const apiFetch = async (endpoint, options = {}) => {
-  const token = localStorage.getItem("token");
-
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
-    },
+export const login = async (identifier, password) =>
+  apiFetch("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ identifier, password }),
   });
 
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.message || "Erro na requisição.");
-  return data;
-};
+export const register = async (payload) =>
+  apiFetch("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
