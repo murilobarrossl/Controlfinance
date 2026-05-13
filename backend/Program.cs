@@ -53,7 +53,7 @@ builder.Services.AddCors(options =>
     {
         policy
             .WithOrigins(
-                "http://localhost:5173",  // Vite dev server padrão
+                "http://localhost:5173",
                 "http://localhost:3000"
             )
             .AllowAnyHeader()
@@ -74,7 +74,6 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v1"
     });
 
-    // Habilita o campo "Authorize" no Swagger para testar JWT
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name         = "Authorization",
@@ -106,12 +105,13 @@ builder.Services.AddSwaggerGen(c =>
 // ──────────────────────────────────────────
 var app = builder.Build();
 
-// Aplica migrações automaticamente ao iniciar (útil em dev)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 }
+
+app.UseCors("FrontendPolicy");
 
 if (app.Environment.IsDevelopment())
 {
@@ -119,7 +119,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors("FrontendPolicy");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

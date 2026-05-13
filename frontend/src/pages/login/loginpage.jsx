@@ -27,7 +27,6 @@ const CNPJ_MASK = "##.###.###/####-##";
 
 const getCpfCnpjMask = (digits) => (digits.length <= 11 ? CPF_MASK : CNPJ_MASK);
 
-// modo: "email" | "cpf"
 export default function LoginPage({ mode = "email" }) {
   const navigate = useNavigate();
   const isCpf = mode === "cpf";
@@ -69,7 +68,11 @@ export default function LoginPage({ mode = "email" }) {
     setLoading(true);
 
     try {
-      const data = await login(identifier, senha);
+      const cleanIdentifier = isCpf
+        ? identifier.replace(/\D/g, "")
+        : identifier;
+
+      const data = await login(cleanIdentifier, senha);
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
       navigate("/dashboard");
