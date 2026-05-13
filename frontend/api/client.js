@@ -12,7 +12,9 @@ export const apiFetch = async (endpoint, options = {}) => {
     },
   });
 
-  const data = await response.json();
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
+
   if (!response.ok) throw new Error(data.message || "Erro na requisição.");
   return data;
 };

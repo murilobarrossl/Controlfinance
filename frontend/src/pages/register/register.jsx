@@ -4,7 +4,6 @@ import graficologo from "../../assets/images/graficologo.png";
 import logoappfinance from "../../assets/images/logoappfinance.png";
 import { register } from "../../../api/auth.js";
 import "./register.css";
-import "../../../api/auth.js";
 
 const applyMask = (value, mask, prev) => {
   const isDeleting = prev && value.length < prev.length;
@@ -63,8 +62,8 @@ export default function RegisterPage() {
       await register({
         name:        form.nome,
         email:       form.email,
-        document:    form.documento,
-        phoneNumber: form.celular,
+        document:    form.documento.replace(/\D/g, ""),
+        phoneNumber: form.celular.replace(/\D/g, ""),
         password:    form.senha,
       });
       navigate("/dashboard");
