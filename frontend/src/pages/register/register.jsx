@@ -139,7 +139,7 @@ export default function RegisterPage() {
             </div>
 
             <div className="register-field">
-              <label>Senha</label>
+              <label>Senha (mínimo 8 caracteres)</label>
               <div className="register-password-wrap">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
