@@ -3,7 +3,7 @@ import { useState } from "react";
 import graficologo from "../../assets/images/graficologo.png";
 import logoappfinance from "../../assets/images/logoappfinance.png";
 import "./loginstyle.css";
-import { login } from "../../../api/auth.js";
+import { login } from "../../api/auth.js";
 
 const applyMask = (value, mask, prev) => {
   const isDeleting = prev && value.length < prev.length;
@@ -75,7 +75,7 @@ export default function LoginPage({ mode = "email" }) {
       const data = await login(cleanIdentifier, senha);
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
-      navigate("/dashboard");
+      navigate("/welcome");
     } catch (err) {
       setError(err.message);
     } finally {
