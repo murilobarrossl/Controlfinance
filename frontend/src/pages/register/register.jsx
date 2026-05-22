@@ -59,13 +59,15 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      await register({
+      const data = await register({
         name:        form.nome,
         email:       form.email,
         document:    form.documento.replace(/\D/g, ""),
         phoneNumber: form.celular.replace(/\D/g, ""),
         password:    form.senha,
       });
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
       navigate("/dashboard");
     } catch (err) {
       setError(err.message);

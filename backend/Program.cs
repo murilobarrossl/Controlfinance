@@ -19,6 +19,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // ──────────────────────────────────────────
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
+builder.Services.AddSingleton<IRateLimitService, RateLimitService>();
+
+// EmailService usa HttpClient — registra via factory
+builder.Services.AddHttpClient<IEmailService, EmailService>();
 
 // ──────────────────────────────────────────
 //  JWT

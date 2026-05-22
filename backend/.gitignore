@@ -1,0 +1,16 @@
+# Build
+bin/
+obj/
+
+# Secrets — NUNCA commitar
+.env
+appsettings.Production.json
+appsettings.Local.json
+
+# IDE
+.vs/
+.vscode/
+*.user
+
+# Logs
+*.log

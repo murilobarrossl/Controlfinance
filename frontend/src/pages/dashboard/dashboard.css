@@ -1,0 +1,332 @@
+@font-face { font-family: "Prompt"; src: url("../../assets/fonts/Prompt-Regular.ttf") format("truetype"); }
+@font-face { font-family: "Times New Roman"; src: url("../../assets/fonts/Times New Roman.ttf") format("truetype"); }
+
+:root {
+  --navy:   #001647;
+  --navy2:  #002070;
+  --blue:   #1a3a6b;
+  --red:    #e84520;
+  --green:  #1aad5e;
+  --white:  #ffffff;
+  --gray:   #8a9bbf;
+  --border: rgba(255,255,255,0.08);
+  --card:   #ffffff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body { background: var(--navy); }
+
+.dash-root {
+  min-height: 100vh;
+  background: var(--navy);
+  color: var(--white);
+  font-family: "Prompt", sans-serif;
+}
+
+/* ── NAVBAR ── */
+.dash-nav {
+  background: var(--navy);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  height: 58px;
+  gap: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.dash-nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 28px;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.dash-nav-brand {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.brand-control  { font-size: 14px; font-weight: 700; color: var(--white); font-family: "Times New Roman", serif; }
+.brand-finance  { font-size: 14px; font-weight: 700; color: var(--red);   font-family: "Times New Roman", serif; }
+
+.dash-nav-links {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dash-nav-links::-webkit-scrollbar { display: none; }
+
+.dash-nav-links a {
+  color: var(--gray);
+  font-size: 12.5px;
+  text-decoration: none;
+  padding: 0 14px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+}
+.dash-nav-links a:hover  { color: var(--white); }
+.dash-nav-links a.active { color: var(--white); border-bottom-color: var(--red); }
+
+.dash-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.dash-nav-cnpj { font-size: 12px; color: var(--gray); }
+.dash-logout {
+  background: none; border: none; cursor: pointer;
+  color: var(--gray); display: flex; align-items: center;
+  transition: color 0.2s;
+}
+.dash-logout:hover { color: var(--red); }
+
+/* ── BODY ── */
+.dash-body { padding: 16px 24px; display: flex; flex-direction: column; gap: 14px; }
+
+/* ── ACCOUNT SELECTOR ── */
+.dash-account-selector { display: flex; align-items: center; }
+
+.dash-account-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--navy2);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 20px;
+  padding: 6px 14px 6px 8px;
+  cursor: pointer;
+}
+
+.dash-account-toggle {
+  width: 32px; height: 18px;
+  background: linear-gradient(90deg, #1a3a6b 50%, #f5a623 50%);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  flex-shrink: 0;
+}
+.toggle-inner {
+  width: 14px; height: 14px;
+  background: var(--white);
+  border-radius: 50%;
+  margin-left: auto;
+}
+
+.dash-account-select {
+  background: transparent;
+  border: none;
+  color: var(--white);
+  font-family: "Prompt", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+}
+.dash-account-select option { background: var(--navy2); color: var(--white); }
+
+/* ── ROW 1 ── */
+.dash-row1 {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr 1.3fr;
+  gap: 14px;
+}
+
+/* ── CARDS ── */
+.dash-card {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 18px 20px;
+  color: var(--navy);
+}
+
+.dash-card-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #6b7a99;
+  margin-bottom: 10px;
+}
+
+/* SALDO */
+.dash-balance-value {
+  font-size: clamp(26px, 2.8vw, 40px);
+  font-weight: 700;
+  color: var(--green);
+  line-height: 1.1;
+  margin-bottom: 6px;
+}
+.dash-balance-bank { font-size: 13px; color: #6b7a99; }
+
+/* BAR CHART */
+.bar-chart { display: flex; gap: 12px; align-items: flex-end; height: 180px; }
+.bar-y { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; height: 160px; padding-bottom: 24px; }
+.bar-y span { font-size: 10px; color: #6b7a99; }
+.bar-cols { display: flex; gap: 24px; align-items: flex-end; height: 160px; }
+.bar-col { display: flex; flex-direction: column; align-items: center; gap: 4px; justify-content: flex-end; }
+.bar-val { font-size: 11px; color: var(--navy); font-weight: 600; }
+.bar { width: 52px; border-radius: 4px 4px 0 0; transition: height 0.5s ease; }
+.bar.income  { background: var(--navy); }
+.bar.expense { background: var(--red); }
+.bar-lbl { font-size: 11px; color: #6b7a99; }
+
+/* DONUT */
+.donut-wrap { display: flex; align-items: center; gap: 14px; }
+.donut-center-text { font-size: 12px; fill: #001647; font-weight: 700; font-family: "Prompt", sans-serif; }
+.donut-legend { display: flex; flex-direction: column; gap: 5px; }
+.donut-item { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.donut-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.donut-name { color: #6b7a99; flex: 1; }
+.donut-pct { color: var(--navy); font-weight: 700; }
+
+/* ── ROW 2 ── */
+.dash-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* CONTAS */
+.dash-bill-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+.dash-bill-tabs { display: flex; gap: 6px; }
+.dash-tab {
+  background: none;
+  border: 1px solid rgba(0,22,71,0.15);
+  border-radius: 20px;
+  color: #6b7a99;
+  font-family: "Prompt", sans-serif;
+  font-size: 12px;
+  padding: 5px 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.dash-tab.active { background: var(--navy); border-color: var(--navy); color: var(--white); }
+.dash-add-btn {
+  background: var(--navy);
+  border: none;
+  border-radius: 8px;
+  color: var(--white);
+  font-family: "Prompt", sans-serif;
+  font-size: 12px;
+  padding: 7px 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+.dash-add-btn:hover { background: var(--navy2); }
+
+.dash-bill-table { width: 100%; border-collapse: collapse; }
+.dash-bill-table th { font-size: 10px; color: #6b7a99; font-weight: 400; text-align: left; padding: 0 8px 8px; letter-spacing: 0.5px; }
+.dash-bill-table td { font-size: 13px; padding: 9px 8px; border-top: 1px solid rgba(0,22,71,0.08); vertical-align: middle; color: var(--navy); }
+.bill-type  { color: #6b7a99 !important; }
+.bill-amount { font-weight: 700 !important; }
+.bill-icon {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700;
+}
+.bill-icon.plus  { background: rgba(26,173,94,0.15); color: var(--green); }
+.bill-icon.minus { background: rgba(232,69,32,0.15);  color: var(--red); }
+.due-overdue { color: var(--red) !important; font-weight: 600; }
+
+/* CARTÕES */
+.dash-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.dash-card-select {
+  background: var(--navy);
+  border: none;
+  border-radius: 20px;
+  color: var(--white);
+  font-family: "Prompt", sans-serif;
+  font-size: 12px;
+  padding: 5px 12px;
+  cursor: pointer;
+  outline: none;
+}
+.dash-card-due-link { font-size: 11px; color: var(--navy2); text-decoration: underline; cursor: pointer; }
+.dash-card-due      { font-size: 11px; color: #6b7a99; margin-left: auto; }
+
+.dash-card-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.dash-card-limit h4,
+.dash-card-invoice h4,
+.dash-card-parcels h4 {
+  font-size: 10px; color: #6b7a99;
+  text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;
+}
+
+.dash-card-limit-val { font-size: 20px; font-weight: 700; color: var(--navy); }
+.dash-limit-bar-bg   { height: 5px; background: rgba(0,22,71,0.1); border-radius: 3px; margin-top: 6px; }
+.dash-limit-bar      { height: 5px; background: var(--red); border-radius: 3px; }
+.dash-limit-total    { font-size: 10px; color: #6b7a99; margin-top: 4px; }
+
+.dash-invoice-val  { font-size: 20px; font-weight: 700; color: var(--navy); }
+.dash-invoice-sub  { font-size: 11px; color: #6b7a99; margin-top: 4px; }
+
+.dash-parcel-row {
+  display: flex; justify-content: space-between;
+  font-size: 11px; padding: 4px 0;
+  border-bottom: 1px solid rgba(0,22,71,0.08);
+}
+.dash-parcel-row:last-child { border-bottom: none; }
+.dash-parcel-name { color: #6b7a99; }
+.dash-parcel-val  { color: var(--navy); font-weight: 600; }
+.dash-parcel-info { color: #6b7a99; font-size: 10px; }
+
+/* CARD VISUAL */
+.card-visual {
+  background: linear-gradient(135deg, #001647 0%, #002a8f 60%, #001a5e 100%);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--white);
+  height: 140px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 8px 24px rgba(0,22,71,0.3);
+}
+.card-visual-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.card-nfc { opacity: 0.7; }
+.card-number { font-size: 12px; letter-spacing: 2px; opacity: 0.8; }
+.card-bottom { display: flex; align-items: flex-end; justify-content: space-between; }
+.card-label-sm { font-size: 8px; opacity: 0.6; letter-spacing: 1px; }
+.card-holder { font-size: 10px; font-weight: 600; letter-spacing: 0.5px; }
+
+/* LOADING */
+.dash-loading {
+  min-height: 100vh; background: var(--navy);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--white); font-family: "Prompt", sans-serif; font-size: 16px;
+}
+
+/* RESPONSIVE */
+@media (max-width: 1200px) {
+  .dash-card-body { grid-template-columns: 1fr 1fr; }
+  .card-visual { display: none; }
+}
+@media (max-width: 1024px) {
+  .dash-row1 { grid-template-columns: 1fr 1fr; }
+  .dash-row2 { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .dash-row1 { grid-template-columns: 1fr; }
+  .dash-nav-links { display: none; }
+  .dash-card-body { grid-template-columns: 1fr; }
+}

@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ControlFinance.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260508120534_DashboardEntities")]
-    partial class DashboardEntities
+    [Migration("20260521181412_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

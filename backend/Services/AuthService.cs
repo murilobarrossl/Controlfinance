@@ -8,18 +8,26 @@ namespace ControlFinance.API.Services;
 public interface IAuthService
 {
     Task<(bool Success, string Error, AuthResponseDto? Data)> RegisterAsync(RegisterRequestDto dto);
-    Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto);
+    Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto, string clientIp);
 }
 
 public class AuthService : IAuthService
 {
-    private readonly AppDbContext  _db;
-    private readonly ITokenService _tokenService;
+    private readonly AppDbContext    _db;
+    private readonly ITokenService   _tokenService;
+    private readonly IEmailService   _emailService;
+    private readonly IRateLimitService _rateLimiter;
 
-    public AuthService(AppDbContext db, ITokenService tokenService)
+    public AuthService(
+        AppDbContext db,
+        ITokenService tokenService,
+        IEmailService emailService,
+        IRateLimitService rateLimiter)
     {
         _db           = db;
         _tokenService = tokenService;
+        _emailService = emailService;
+        _rateLimiter  = rateLimiter;
     }
 
     // ──────────────────────────────────────────
@@ -28,12 +36,10 @@ public class AuthService : IAuthService
 
     public async Task<(bool Success, string Error, AuthResponseDto? Data)> RegisterAsync(RegisterRequestDto dto)
     {
-        // Verifica e-mail duplicado
         var emailExists = await _db.Users.AnyAsync(u => u.Email == dto.Email.ToLower());
         if (emailExists)
             return (false, "E-mail já cadastrado.", null);
 
-        // Verifica documento duplicado (apenas números)
         var cleanDocument = CleanDocument(dto.Document);
         var docExists = await _db.Users.AnyAsync(u => u.Document == cleanDocument);
         if (docExists)
@@ -51,8 +57,14 @@ public class AuthService : IAuthService
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        var token = _tokenService.GenerateToken(user);
+        // Dispara email de boas-vindas em background (não bloqueia o response)
+        _ = Task.Run(async () =>
+        {
+            try { await _emailService.SendWelcomeEmailAsync(user.Email, user.Name); }
+            catch { /* log aqui quando o Sentry estiver integrado */ }
+        });
 
+        var token = _tokenService.GenerateToken(user);
         return (true, string.Empty, BuildResponse(user, token));
     }
 
@@ -60,11 +72,19 @@ public class AuthService : IAuthService
     //  LOGIN
     // ──────────────────────────────────────────
 
-    public async Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto)
+    public async Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto, string clientIp)
     {
+        var rateLimitKey = $"login:{clientIp}:{dto.Identifier.ToLower().Trim()}";
+
+        // Verifica rate limit antes de qualquer consulta ao banco
+        if (!_rateLimiter.AllowAttempt(rateLimitKey))
+        {
+            var seconds = _rateLimiter.GetLockoutSeconds(rateLimitKey);
+            return (false, $"Muitas tentativas. Tente novamente em {seconds / 60}min {seconds % 60}s.", null);
+        }
+
         var identifier = dto.Identifier.Trim();
 
-        // Tenta localizar por e-mail ou documento
         var user = await _db.Users
             .FirstOrDefaultAsync(u =>
                 u.Email    == identifier.ToLower() ||
@@ -77,8 +97,10 @@ public class AuthService : IAuthService
         if (!passwordValid)
             return (false, "Credenciais inválidas.", null);
 
-        var token = _tokenService.GenerateToken(user);
+        // Login bem-sucedido — reseta o contador
+        _rateLimiter.Reset(rateLimitKey);
 
+        var token = _tokenService.GenerateToken(user);
         return (true, string.Empty, BuildResponse(user, token));
     }
 
