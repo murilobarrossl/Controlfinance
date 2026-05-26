@@ -29,52 +29,66 @@ const formatDue = (dateStr, status) => {
 };
 
 const mapTx = (t) => ({
-  id:       t.id,
-  name:     t.name,
-  type:     t.type === "Income" ? "Receita" : t.type === "Expense" ? "Despesa" : t.type,
-  amount:   t.amount,
-  dueDate:  t.dueDate,
-  status:   t.status,
+  id: t.id,
+  name: t.name,
+  type:
+    t.type === "Income" ? "Receita" : t.type === "Expense" ? "Despesa" : t.type,
+  amount: t.amount,
+  dueDate: t.dueDate,
+  status: t.status,
   isIncome: t.type === "Income",
-  due:      formatDue(t.dueDate, t.status),
+  due: formatDue(t.dueDate, t.status),
 });
 
 const mapCard = (c) => ({
-  id:             c.card.id,
-  name:           c.card.name,
+  id: c.card.id,
+  name: c.card.name,
   limitAvailable: c.card.availableLimit,
-  limitTotal:     c.card.creditLimit,
-  invoice:        c.currentInvoice,
-  invoiceDue:     c.invoiceDueDate,
-  parcels: c.installments?.map((i) => ({
-    name:  i.description,
-    info:  `Parcela ${i.currentInstallment}/${i.totalInstallments}`,
-    value: i.installmentAmount,
-    vence: new Date(i.nextDueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).toUpperCase(),
-  })) ?? [],
+  limitTotal: c.card.creditLimit,
+  invoice: c.currentInvoice,
+  invoiceDue: c.invoiceDueDate,
+  parcels:
+    c.installments?.map((i) => ({
+      name: i.description,
+      info: `Parcela ${i.currentInstallment}/${i.totalInstallments}`,
+      value: i.installmentAmount,
+      vence: new Date(i.nextDueDate)
+        .toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })
+        .toUpperCase(),
+    })) ?? [],
 });
 
 // ── Logo ──────────────────────────────────────────────────────
 function LogoIcon() {
   return (
     <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <rect width="34" height="34" rx="7" fill="#0a1a4a"/>
-      <rect x="4" y="21" width="4" height="9" rx="1" fill="#1a3a6b"/>
-      <rect x="10" y="16" width="4" height="14" rx="1" fill="#1a3a6b"/>
-      <rect x="16" y="11" width="4" height="19" rx="1" fill="#1a3a6b"/>
-      <rect x="22" y="6" width="4" height="24" rx="1" fill="#1a3a6b"/>
-      <path d="M6 19 L12 14 L18 9 L24 4" stroke="#e84520" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="6"  cy="19" r="2" fill="#e84520"/>
-      <circle cx="12" cy="14" r="2" fill="#e84520"/>
-      <circle cx="18" cy="9"  r="2" fill="#e84520"/>
-      <circle cx="24" cy="4"  r="2" fill="#e84520"/>
+      <rect width="34" height="34" rx="7" fill="#0a1a4a" />
+      <rect x="4" y="21" width="4" height="9" rx="1" fill="#1a3a6b" />
+      <rect x="10" y="16" width="4" height="14" rx="1" fill="#1a3a6b" />
+      <rect x="16" y="11" width="4" height="19" rx="1" fill="#1a3a6b" />
+      <rect x="22" y="6" width="4" height="24" rx="1" fill="#1a3a6b" />
+      <path
+        d="M6 19 L12 14 L18 9 L24 4"
+        stroke="#e84520"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="6" cy="19" r="2" fill="#e84520" />
+      <circle cx="12" cy="14" r="2" fill="#e84520" />
+      <circle cx="18" cy="9" r="2" fill="#e84520" />
+      <circle cx="24" cy="4" r="2" fill="#e84520" />
     </svg>
   );
 }
 
 // ── Donut Chart ───────────────────────────────────────────────
 function DonutChart({ data }) {
-  const size = 160, cx = 80, cy = 80, R = 58, thickness = 22;
+  const size = 160,
+    cx = 80,
+    cy = 80,
+    R = 58,
+    thickness = 22;
   const total = data.reduce((s, d) => s + d.value, 0) || 1;
   let cumAngle = -90;
   const slices = data.map((d, i) => {
@@ -98,8 +112,22 @@ function DonutChart({ data }) {
     return (
       <div className="donut-wrap">
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-          <circle cx={cx} cy={cy} r={R} fill="none" stroke="#f0f0f0" strokeWidth={thickness}/>
-          <text x={cx} y={cy + 5} textAnchor="middle" className="donut-center-text">GASTOS</text>
+          <circle
+            cx={cx}
+            cy={cy}
+            r={R}
+            fill="none"
+            stroke="#f0f0f0"
+            strokeWidth={thickness}
+          />
+          <text
+            x={cx}
+            y={cy + 5}
+            textAnchor="middle"
+            className="donut-center-text"
+          >
+            GASTOS
+          </text>
         </svg>
         <div className="donut-legend">
           <span style={{ fontSize: 12, color: "#8a9bbf" }}>Sem dados</span>
@@ -112,16 +140,31 @@ function DonutChart({ data }) {
     <div className="donut-wrap">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         {slices.map((s, i) => (
-          <path key={i} d={arc(s.start, s.sweep)} fill="none" stroke={s.color} strokeWidth={thickness}/>
+          <path
+            key={i}
+            d={arc(s.start, s.sweep)}
+            fill="none"
+            stroke={s.color}
+            strokeWidth={thickness}
+          />
         ))}
-        <text x={cx} y={cy + 5} textAnchor="middle" className="donut-center-text">GASTOS</text>
+        <text
+          x={cx}
+          y={cy + 5}
+          textAnchor="middle"
+          className="donut-center-text"
+        >
+          GASTOS
+        </text>
       </svg>
       <div className="donut-legend">
         {slices.map((s, i) => (
           <div key={i} className="donut-item">
-            <span className="donut-dot" style={{ background: s.color }}/>
+            <span className="donut-dot" style={{ background: s.color }} />
             <span className="donut-name">{s.name}</span>
-            <span className="donut-pct">{Math.round((s.value / total) * 100)}%</span>
+            <span className="donut-pct">
+              {Math.round((s.value / total) * 100)}%
+            </span>
           </div>
         ))}
       </div>
@@ -136,17 +179,25 @@ function BarChart({ income, expense }) {
   return (
     <div className="bar-chart">
       <div className="bar-y">
-        {yLabels.map((v) => <span key={v}>R$ {v.toLocaleString("pt-BR")}</span>)}
+        {yLabels.map((v) => (
+          <span key={v}>R$ {v.toLocaleString("pt-BR")}</span>
+        ))}
       </div>
       <div className="bar-cols">
         <div className="bar-col">
           <span className="bar-val">{fmt(income)}</span>
-          <div className="bar income" style={{ height: `${(income / max) * 140}px` }}/>
+          <div
+            className="bar income"
+            style={{ height: `${(income / max) * 140}px` }}
+          />
           <span className="bar-lbl">Receitas</span>
         </div>
         <div className="bar-col">
           <span className="bar-val">{fmt(expense)}</span>
-          <div className="bar expense" style={{ height: `${(expense / max) * 140}px` }}/>
+          <div
+            className="bar expense"
+            style={{ height: `${(expense / max) * 140}px` }}
+          />
           <span className="bar-lbl">Despesas</span>
         </div>
       </div>
@@ -161,16 +212,37 @@ function CardVisual() {
       <div className="card-visual-top">
         <div className="card-chip">
           <svg width="28" height="22" viewBox="0 0 28 22" fill="none">
-            <rect width="28" height="22" rx="3" fill="#d4a93a"/>
-            <rect x="9" width="10" height="22" rx="2" fill="#c49020" opacity="0.5"/>
-            <rect y="7" width="28" height="8" rx="1" fill="#c49020" opacity="0.4"/>
+            <rect width="28" height="22" rx="3" fill="#d4a93a" />
+            <rect
+              x="9"
+              width="10"
+              height="22"
+              rx="2"
+              fill="#c49020"
+              opacity="0.5"
+            />
+            <rect
+              y="7"
+              width="28"
+              height="8"
+              rx="1"
+              fill="#c49020"
+              opacity="0.4"
+            />
           </svg>
         </div>
         <div className="card-nfc">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2">
-            <path d="M1 6a11 11 0 0 1 0 12"/>
-            <path d="M5 8a7 7 0 0 1 0 8"/>
-            <path d="M9 10a3 3 0 0 1 0 4"/>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="rgba(255,255,255,0.7)"
+            strokeWidth="2"
+          >
+            <path d="M1 6a11 11 0 0 1 0 12" />
+            <path d="M5 8a7 7 0 0 1 0 8" />
+            <path d="M9 10a3 3 0 0 1 0 4" />
           </svg>
         </div>
       </div>
@@ -182,8 +254,8 @@ function CardVisual() {
         </div>
         <div className="card-brand">
           <svg width="48" height="30" viewBox="0 0 48 30">
-            <circle cx="18" cy="15" r="13" fill="#e84520" opacity="0.9"/>
-            <circle cx="30" cy="15" r="13" fill="#f5a623" opacity="0.9"/>
+            <circle cx="18" cy="15" r="13" fill="#e84520" opacity="0.9" />
+            <circle cx="30" cy="15" r="13" fill="#f5a623" opacity="0.9" />
           </svg>
         </div>
       </div>
@@ -192,27 +264,27 @@ function CardVisual() {
 }
 
 const NAV_LINKS = [
-  { to: "/importacao",       label: "Importação de Extratos" },
-  { to: "/dashboard",        label: "Dashboard Inteligente"  },
-  { to: "/contas-bancarias", label: "Contas Bancárias"       },
-  { to: "/receitas",         label: "Receitas"               },
-  { to: "/despesas",         label: "Despesas"               },
-  { to: "/relatorios",       label: "Relatórios"             },
-  { to: "/categorias",       label: "Categorias"             },
-  { to: "/conciliacao",      label: "Conciliação"            },
-  { to: "/planejamento",     label: "Planejamento"           },
+  { to: "/importacao", label: "Importação de Extratos" },
+  { to: "/dashboard", label: "Dashboard Inteligente" },
+  { to: "/contas-bancarias", label: "Contas Bancárias" },
+  { to: "/receitas", label: "Receitas" },
+  { to: "/despesas", label: "Despesas" },
+  { to: "/relatorios", label: "Relatórios" },
+  { to: "/categorias", label: "Categorias" },
+  { to: "/conciliacao", label: "Conciliação" },
+  { to: "/planejamento", label: "Planejamento" },
 ];
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user") ?? "{}");
 
-  const [data, setData]               = useState(MOCK);
-  const [accounts, setAccounts]       = useState([]);
+  const [data, setData] = useState(MOCK);
+  const [accounts, setAccounts] = useState([]);
   const [selectedAcc, setSelectedAcc] = useState(null);
   const [selectedCard, setSelectedCard] = useState(0);
-  const [tab, setTab]                 = useState("pending");
-  const [loading, setLoading]         = useState(true);
+  const [tab, setTab] = useState("pending");
+  const [loading, setLoading] = useState(true);
 
   const loadDashboard = (bankAccountId) => {
     setLoading(true);
@@ -220,16 +292,19 @@ export default function Dashboard() {
       .then((dash) => {
         if (dash && !dash.message) {
           setData({
-            balance:    dash.activeAccount?.balance  ?? 0,
-            income:     dash.totalIncome             ?? 0,
-            expense:    dash.totalExpense            ?? 0,
-            bankName:   dash.activeAccount?.name     ?? "—",
+            balance: dash.activeAccount?.balance ?? 0,
+            income: dash.totalIncome ?? 0,
+            expense: dash.totalExpense ?? 0,
+            bankName: dash.activeAccount?.name ?? "—",
             categories: dash.categoryExpenses?.length
-              ? dash.categoryExpenses.map((c) => ({ name: c.categoryName, value: c.percentage }))
+              ? dash.categoryExpenses.map((c) => ({
+                  name: c.categoryName,
+                  value: c.percentage,
+                }))
               : [],
             bills: {
               pending: dash.pendingTransactions?.map(mapTx) ?? [],
-              paid:    dash.paidTransactions?.map(mapTx)    ?? [],
+              paid: dash.paidTransactions?.map(mapTx) ?? [],
             },
             cards: dash.activeCard ? [mapCard(dash.activeCard)] : [],
           });
@@ -256,16 +331,27 @@ export default function Dashboard() {
       .catch(() => setLoading(false));
   }, []);
 
-  const logout = () => { localStorage.clear(); navigate("/loginemail"); };
+  const logout = () => {
+    localStorage.clear();
+    navigate("/loginemail");
+  };
 
-  if (loading) return <div className="dash-loading"><span>Carregando...</span></div>;
+  if (loading)
+    return (
+      <div className="dash-loading">
+        <span>Carregando...</span>
+      </div>
+    );
 
-  const card    = data.cards?.[selectedCard];
-  const bills   = tab === "pending" ? data.bills.pending : data.bills.paid;
+  const card = data.cards?.[selectedCard];
+  const bills = tab === "pending" ? data.bills.pending : data.bills.paid;
   const balance = selectedAcc?.balance ?? data.balance;
-  const bankName = selectedAcc?.name  ?? data.bankName;
+  const bankName = selectedAcc?.name ?? data.bankName;
   const daysUntilDue = card
-    ? Math.max(0, Math.round((new Date(card.invoiceDue) - new Date()) / 86400000))
+    ? Math.max(
+        0,
+        Math.round((new Date(card.invoiceDue) - new Date()) / 86400000),
+      )
     : 0;
 
   return (
@@ -273,7 +359,7 @@ export default function Dashboard() {
       {/* NAVBAR */}
       <nav className="dash-nav">
         <a href="/dashboard" className="dash-nav-logo">
-          <LogoIcon/>
+          <LogoIcon />
           <div className="dash-nav-brand">
             <span className="brand-control">Control</span>
             <span className="brand-finance">Finance</span>
@@ -281,7 +367,11 @@ export default function Dashboard() {
         </a>
         <div className="dash-nav-links">
           {NAV_LINKS.map((l) => (
-            <Link key={l.to} to={l.to} className={l.to === "/dashboard" ? "active" : ""}>
+            <Link
+              key={l.to}
+              to={l.to}
+              className={l.to === "/dashboard" ? "active" : ""}
+            >
               {l.label}
             </Link>
           ))}
@@ -289,10 +379,19 @@ export default function Dashboard() {
         <div className="dash-nav-right">
           <span className="dash-nav-cnpj">{user.document ?? "/CNPJ"}</span>
           <button className="dash-logout" onClick={logout} title="Sair">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
             </svg>
           </button>
         </div>
@@ -303,34 +402,58 @@ export default function Dashboard() {
         <div className="dash-account-selector">
           <div className="dash-account-pill">
             <div className="dash-account-toggle">
-              <span className="toggle-inner"/>
+              <span className="toggle-inner" />
             </div>
             <select
               className="dash-account-select"
               value={selectedAcc?.id ?? ""}
               onChange={(e) => {
-                const acc = accounts.find((a) => String(a.id) === e.target.value);
+                const acc = accounts.find(
+                  (a) => String(a.id) === e.target.value,
+                );
                 setSelectedAcc(acc ?? null);
                 if (acc) loadDashboard(acc.id);
               }}
             >
               {accounts.length ? (
-                accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)
+                accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))
               ) : (
                 <option value="">Nenhuma conta</option>
               )}
             </select>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="6 9 12 15 18 9"/>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
+              <polyline points="6 9 12 15 18 9" />
             </svg>
           </div>
         </div>
 
         {/* SEM CONTA */}
         {accounts.length === 0 && (
-          <div style={{ textAlign: "center", padding: "60px 20px", color: "#8a9bbf" }}>
-            <p style={{ fontSize: 16, marginBottom: 16 }}>Nenhuma conta bancária cadastrada.</p>
-            <Link to="/contas-bancarias" style={{ color: "#e84520", fontWeight: 700 }}>
+          <div
+            style={{
+              textAlign: "center",
+              padding: "60px 20px",
+              color: "#8a9bbf",
+            }}
+          >
+            <p style={{ fontSize: 16, marginBottom: 16 }}>
+              Nenhuma conta bancária cadastrada.
+            </p>
+            <Link
+              to="/contas-bancarias"
+              style={{ color: "#e84520", fontWeight: 700 }}
+            >
               + Adicionar conta
             </Link>
           </div>
@@ -347,11 +470,11 @@ export default function Dashboard() {
               </div>
               <div className="dash-card">
                 <div className="dash-card-title">Receitas e Despesas/Mês</div>
-                <BarChart income={data.income} expense={data.expense}/>
+                <BarChart income={data.income} expense={data.expense} />
               </div>
               <div className="dash-card">
                 <div className="dash-card-title">Categorias</div>
-                <DonutChart data={data.categories}/>
+                <DonutChart data={data.categories} />
               </div>
             </div>
 
@@ -361,12 +484,23 @@ export default function Dashboard() {
               <div className="dash-card">
                 <div className="dash-bill-header">
                   <div>
-                    <div className="dash-card-title" style={{ marginBottom: 10 }}>Contas a Pagar e Receber</div>
+                    <div
+                      className="dash-card-title"
+                      style={{ marginBottom: 10 }}
+                    >
+                      Contas a Pagar e Receber
+                    </div>
                     <div className="dash-bill-tabs">
-                      <button className={`dash-tab ${tab === "pending" ? "active" : ""}`} onClick={() => setTab("pending")}>
+                      <button
+                        className={`dash-tab ${tab === "pending" ? "active" : ""}`}
+                        onClick={() => setTab("pending")}
+                      >
                         Pendentes ({data.bills.pending.length})
                       </button>
-                      <button className={`dash-tab ${tab === "paid" ? "active" : ""}`} onClick={() => setTab("paid")}>
+                      <button
+                        className={`dash-tab ${tab === "paid" ? "active" : ""}`}
+                        onClick={() => setTab("paid")}
+                      >
                         Pagos ({data.bills.paid.length})
                       </button>
                     </div>
@@ -377,7 +511,14 @@ export default function Dashboard() {
                 </div>
 
                 {bills.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "24px 0", color: "#8a9bbf", fontSize: 13 }}>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "24px 0",
+                      color: "#8a9bbf",
+                      fontSize: 13,
+                    }}
+                  >
                     Nenhuma transação encontrada.
                   </div>
                 ) : (
@@ -394,11 +535,23 @@ export default function Dashboard() {
                     <tbody>
                       {bills.map((b) => (
                         <tr key={b.id}>
-                          <td><span className={`bill-icon ${b.isIncome ? "plus" : "minus"}`}>{b.isIncome ? "+" : "−"}</span></td>
+                          <td>
+                            <span
+                              className={`bill-icon ${b.isIncome ? "plus" : "minus"}`}
+                            >
+                              {b.isIncome ? "+" : "−"}
+                            </span>
+                          </td>
                           <td>{b.name}</td>
                           <td className="bill-type">{b.type}</td>
                           <td className="bill-amount">{fmt(b.amount)}</td>
-                          <td className={b.due === "Em Atraso" ? "due-overdue" : ""}>{b.due}</td>
+                          <td
+                            className={
+                              b.due === "Em Atraso" ? "due-overdue" : ""
+                            }
+                          >
+                            {b.due}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -410,30 +563,54 @@ export default function Dashboard() {
               {card ? (
                 <div className="dash-card">
                   <div className="dash-card-header">
-                    <div className="dash-card-title" style={{ margin: 0 }}>Cartões</div>
+                    <div className="dash-card-title" style={{ margin: 0 }}>
+                      Cartões
+                    </div>
                     <select
                       className="dash-card-select"
                       value={selectedCard}
                       onChange={(e) => setSelectedCard(Number(e.target.value))}
                     >
-                      {data.cards.map((c, i) => <option key={c.id} value={i}>{c.name}</option>)}
+                      {data.cards.map((c, i) => (
+                        <option key={c.id} value={i}>
+                          {c.name}
+                        </option>
+                      ))}
                     </select>
-                    <span className="dash-card-due-link">(Ver fatura completa)</span>
-                    <span className="dash-card-due">Vence em {daysUntilDue} Dias</span>
+                    <span className="dash-card-due-link">
+                      (Ver fatura completa)
+                    </span>
+                    <span className="dash-card-due">
+                      Vence em {daysUntilDue} Dias
+                    </span>
                   </div>
                   <div className="dash-card-body">
                     <div className="dash-card-limit">
                       <h4>Limite Disponível</h4>
-                      <div className="dash-card-limit-val">{fmt(card.limitAvailable)}</div>
-                      <div className="dash-limit-bar-bg">
-                        <div className="dash-limit-bar" style={{ width: `${((card.limitTotal - card.limitAvailable) / card.limitTotal) * 100}%` }}/>
+                      <div className="dash-card-limit-val">
+                        {fmt(card.limitAvailable)}
                       </div>
-                      <div className="dash-limit-total">Limite Total {fmt(card.limitTotal)}</div>
+                      <div className="dash-limit-bar-bg">
+                        <div
+                          className="dash-limit-bar"
+                          style={{
+                            width: `${((card.limitTotal - card.limitAvailable) / card.limitTotal) * 100}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="dash-limit-total">
+                        Limite Total {fmt(card.limitTotal)}
+                      </div>
                     </div>
                     <div className="dash-card-invoice">
                       <h4>Fatura Atual (Aberta)</h4>
-                      <div className="dash-invoice-val">{fmt(card.invoice)}</div>
-                      <div className="dash-invoice-sub">Vencimento: {new Date(card.invoiceDue).toLocaleDateString("pt-BR")}</div>
+                      <div className="dash-invoice-val">
+                        {fmt(card.invoice)}
+                      </div>
+                      <div className="dash-invoice-sub">
+                        Vencimento:{" "}
+                        {new Date(card.invoiceDue).toLocaleDateString("pt-BR")}
+                      </div>
                     </div>
                     <div className="dash-card-parcels">
                       <h4>Parcelas a vencer</h4>
@@ -444,20 +621,39 @@ export default function Dashboard() {
                             <div className="dash-parcel-info">{p.info}</div>
                           </div>
                           <div style={{ textAlign: "right" }}>
-                            <div className="dash-parcel-val">{fmt(p.value)}</div>
-                            <div className="dash-parcel-info">Vence {p.vence}</div>
+                            <div className="dash-parcel-val">
+                              {fmt(p.value)}
+                            </div>
+                            <div className="dash-parcel-info">
+                              Vence {p.vence}
+                            </div>
                           </div>
                         </div>
                       ))}
                     </div>
-                    <CardVisual/>
+                    <CardVisual />
                   </div>
                 </div>
               ) : (
-                <div className="dash-card" style={{ display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, color: "#8a9bbf" }}>
+                <div
+                  className="dash-card"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexDirection: "column",
+                    gap: 12,
+                    color: "#8a9bbf",
+                  }}
+                >
                   <div style={{ fontSize: 32 }}>💳</div>
                   <p style={{ fontSize: 14 }}>Nenhum cartão cadastrado.</p>
-                  <Link to="/cartoes" style={{ color: "#e84520", fontWeight: 700, fontSize: 13 }}>+ Adicionar cartão</Link>
+                  <Link
+                    to="/cartoes"
+                    style={{ color: "#e84520", fontWeight: 700, fontSize: 13 }}
+                  >
+                    + Adicionar cartão
+                  </Link>
                 </div>
               )}
             </div>

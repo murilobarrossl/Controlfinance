@@ -29,14 +29,14 @@ export default function RegisterPage() {
   const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading]           = useState(false);
-  const [error, setError]               = useState("");
-  const [form, setForm]                 = useState({
-    nome:      "",
-    email:     "",
-    celular:   "",
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({
+    nome: "",
+    email: "",
+    celular: "",
     documento: "",
-    senha:     "",
+    senha: "",
   });
 
   const handleChange = (field) => (e) =>
@@ -44,8 +44,11 @@ export default function RegisterPage() {
 
   const handleDocumentoChange = (e) => {
     const digits = e.target.value.replace(/\D/g, "").slice(0, 14);
-    const mask   = getDocumentMask(digits);
-    setForm((prev) => ({ ...prev, documento: applyMask(e.target.value, mask, prev.documento) }));
+    const mask = getDocumentMask(digits);
+    setForm((prev) => ({
+      ...prev,
+      documento: applyMask(e.target.value, mask, prev.documento),
+    }));
   };
 
   const handleCelularChange = (e) =>
@@ -60,11 +63,11 @@ export default function RegisterPage() {
 
     try {
       const data = await register({
-        name:        form.nome,
-        email:       form.email,
-        document:    form.documento.replace(/\D/g, ""),
+        name: form.nome,
+        email: form.email,
+        document: form.documento.replace(/\D/g, ""),
         phoneNumber: form.celular.replace(/\D/g, ""),
-        password:    form.senha,
+        password: form.senha,
       });
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
@@ -88,12 +91,20 @@ export default function RegisterPage() {
           despesas e investimentos em um único lugar, com visão clara do seu
           saldo e decisões mais inteligentes para o seu futuro financeiro.
         </p>
-        <img src={graficologo} alt="Gráfico financeiro" className="register-chart" />
+        <img
+          src={graficologo}
+          alt="Gráfico financeiro"
+          className="register-chart"
+        />
       </div>
 
       <div className="register-right">
         <div className="register-card">
-          <img src={logoappfinance} alt="Control Finance" className="register-logo" />
+          <img
+            src={logoappfinance}
+            alt="Control Finance"
+            className="register-logo"
+          />
 
           <div className="register-fields">
             {error && <div className="register-error">{error}</div>}
@@ -173,14 +184,34 @@ export default function RegisterPage() {
                   aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                 >
                   {showPassword ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
                       <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
                       <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
                       <path d="m2 2 20 20" />
                     </svg>
                   ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
                       <circle cx="12" cy="12" r="3" />
                     </svg>
