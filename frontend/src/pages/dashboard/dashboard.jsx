@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getBankAccounts, getDashboard } from "../../api/finance.js";
-import logoappfinance from "../../assets/images/logoappfinance.png";
+import logoappfinancebranco from "../../assets/images/logoappfinancebranco.png";
 import "./dashboard.css";
 
 const fmt = (v) =>
@@ -63,9 +63,9 @@ const mapCard = (c) => ({
 function LogoIcon() {
   return (
     <img
-      src={logoappfinance}
+      src={logoappfinancebranco}
       alt="Control Finance"
-      style={{ width: 34, height: 34 }}
+      style={{ width: 120, height: 40 }}
     />
   );
 }
