@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getBankAccounts, getDashboard } from "../../api/finance.js";
+import logoappfinance from "../../assets/images/logoappfinance.png";
 import "./dashboard.css";
 
 const fmt = (v) =>
@@ -61,24 +62,11 @@ const mapCard = (c) => ({
 // ── Logo ──────────────────────────────────────────────────────
 function LogoIcon() {
   return (
-    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <rect width="34" height="34" rx="7" fill="#0a1a4a" />
-      <rect x="4" y="21" width="4" height="9" rx="1" fill="#1a3a6b" />
-      <rect x="10" y="16" width="4" height="14" rx="1" fill="#1a3a6b" />
-      <rect x="16" y="11" width="4" height="19" rx="1" fill="#1a3a6b" />
-      <rect x="22" y="6" width="4" height="24" rx="1" fill="#1a3a6b" />
-      <path
-        d="M6 19 L12 14 L18 9 L24 4"
-        stroke="#e84520"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="6" cy="19" r="2" fill="#e84520" />
-      <circle cx="12" cy="14" r="2" fill="#e84520" />
-      <circle cx="18" cy="9" r="2" fill="#e84520" />
-      <circle cx="24" cy="4" r="2" fill="#e84520" />
-    </svg>
+    <img
+      src={logoappfinance}
+      alt="Control Finance"
+      style={{ width: 34, height: 34 }}
+    />
   );
 }
 
@@ -90,13 +78,21 @@ function DonutChart({ data }) {
     R = 58,
     thickness = 22;
   const total = data.reduce((s, d) => s + d.value, 0) || 1;
-  let cumAngle = -90;
-  const slices = data.map((d, i) => {
+  const slices = data.reduce((acc, d, i) => {
+    const prevAngle = acc.length
+      ? acc[acc.length - 1].start + acc[acc.length - 1].sweep
+      : -90;
     const sweep = (d.value / total) * 360;
-    const start = cumAngle;
-    cumAngle += sweep;
-    return { ...d, sweep, start, color: DONUT_COLORS[i % DONUT_COLORS.length] };
-  });
+    return [
+      ...acc,
+      {
+        ...d,
+        sweep,
+        start: prevAngle,
+        color: DONUT_COLORS[i % DONUT_COLORS.length],
+      },
+    ];
+  }, []);
   const polar = (deg, r) => {
     const rad = ((deg - 90) * Math.PI) / 180;
     return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
@@ -360,10 +356,6 @@ export default function Dashboard() {
       <nav className="dash-nav">
         <a href="/dashboard" className="dash-nav-logo">
           <LogoIcon />
-          <div className="dash-nav-brand">
-            <span className="brand-control">Control</span>
-            <span className="brand-finance">Finance</span>
-          </div>
         </a>
         <div className="dash-nav-links">
           {NAV_LINKS.map((l) => (
