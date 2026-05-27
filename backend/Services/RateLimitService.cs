@@ -1,68 +1,35 @@
-using System.Collections.Concurrent;
-
 namespace ControlFinance.API.Services;
 
-public interface IRateLimitService
+public class RateLimitService
 {
-    /// <summary>
-    /// Retorna true se a tentativa é permitida.
-    /// Retorna false (bloqueado) se o limite foi atingido.
-    /// </summary>
-    bool AllowAttempt(string key);
+    private readonly Dictionary<string, (int attempts, DateTime lastAttempt)> _attempts = new();
+    private const int MaxAttempts = 5;
+    private static readonly TimeSpan Window = TimeSpan.FromMinutes(15);
 
-    /// <summary>Reseta o contador após login bem-sucedido.</summary>
-    void Reset(string key);
-
-    /// <summary>Segundos restantes de bloqueio, ou 0 se liberado.</summary>
-    int GetLockoutSeconds(string key);
-}
-
-public class RateLimitService : IRateLimitService
-{
-    // Configurações
-    private const int MaxAttempts    = 5;     // tentativas antes de bloquear
-    private const int WindowSeconds  = 300;   // janela de 5 minutos
-    private const int LockoutSeconds = 900;   // 15 minutos bloqueado
-
-    private record AttemptRecord(int Count, DateTime WindowStart, DateTime? LockedUntil);
-
-    private readonly ConcurrentDictionary<string, AttemptRecord> _store = new();
-
-    public bool AllowAttempt(string key)
+    public bool IsBlocked(string identifier)
     {
-        var now = DateTime.UtcNow;
-        var record = _store.GetOrAdd(key, _ => new AttemptRecord(0, now, null));
-
-        // Ainda está bloqueado?
-        if (record.LockedUntil.HasValue && now < record.LockedUntil.Value)
-            return false;
-
-        // Janela expirou — reseta
-        if ((now - record.WindowStart).TotalSeconds > WindowSeconds)
-            record = new AttemptRecord(0, now, null);
-
-        var newCount = record.Count + 1;
-
-        if (newCount > MaxAttempts)
+        if (!_attempts.TryGetValue(identifier, out var entry)) return false;
+        if (DateTime.UtcNow - entry.lastAttempt > Window)
         {
-            // Bloqueia
-            _store[key] = record with { Count = newCount, LockedUntil = now.AddSeconds(LockoutSeconds) };
+            _attempts.Remove(identifier);
             return false;
         }
-
-        _store[key] = record with { Count = newCount };
-        return true;
+        return entry.attempts >= MaxAttempts;
     }
 
-    public void Reset(string key) =>
-        _store.TryRemove(key, out _);
-
-    public int GetLockoutSeconds(string key)
+    public void RegisterFailure(string identifier)
     {
-        if (!_store.TryGetValue(key, out var record)) return 0;
-        if (!record.LockedUntil.HasValue) return 0;
+        if (_attempts.TryGetValue(identifier, out var entry))
+            _attempts[identifier] = (entry.attempts + 1, DateTime.UtcNow);
+        else
+            _attempts[identifier] = (1, DateTime.UtcNow);
+    }
 
-        var remaining = (int)(record.LockedUntil.Value - DateTime.UtcNow).TotalSeconds;
-        return remaining > 0 ? remaining : 0;
+    public void RegisterSuccess(string identifier) => _attempts.Remove(identifier);
+
+    public int RemainingAttempts(string identifier)
+    {
+        if (!_attempts.TryGetValue(identifier, out var entry)) return MaxAttempts;
+        return Math.Max(0, MaxAttempts - entry.attempts);
     }
 }

@@ -8,31 +8,24 @@ namespace ControlFinance.API.Services;
 public interface IAuthService
 {
     Task<(bool Success, string Error, AuthResponseDto? Data)> RegisterAsync(RegisterRequestDto dto);
-    Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto, string clientIp);
+    Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto);
 }
 
 public class AuthService : IAuthService
 {
-    private readonly AppDbContext    _db;
-    private readonly ITokenService   _tokenService;
-    private readonly IEmailService   _emailService;
-    private readonly IRateLimitService _rateLimiter;
+    private readonly AppDbContext _db;
+    private readonly ITokenService _tokenService;
+    private readonly EmailService _emailService;
+    private readonly RateLimitService _rateLimit;
 
-    public AuthService(
-        AppDbContext db,
-        ITokenService tokenService,
-        IEmailService emailService,
-        IRateLimitService rateLimiter)
+    public AuthService(AppDbContext db, ITokenService tokenService,
+        EmailService emailService, RateLimitService rateLimit)
     {
-        _db           = db;
+        _db = db;
         _tokenService = tokenService;
         _emailService = emailService;
-        _rateLimiter  = rateLimiter;
+        _rateLimit = rateLimit;
     }
-
-    // ──────────────────────────────────────────
-    //  REGISTER
-    // ──────────────────────────────────────────
 
     public async Task<(bool Success, string Error, AuthResponseDto? Data)> RegisterAsync(RegisterRequestDto dto)
     {
@@ -47,66 +40,54 @@ public class AuthService : IAuthService
 
         var user = new User
         {
-            Name         = dto.Name.Trim(),
-            Email        = dto.Email.ToLower().Trim(),
-            PhoneNumber  = CleanPhone(dto.PhoneNumber),
-            Document     = cleanDocument,
+            Name = dto.Name.Trim(),
+            Email = dto.Email.ToLower().Trim(),
+            PhoneNumber = CleanPhone(dto.PhoneNumber),
+            Document = cleanDocument,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
         };
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        // Dispara email de boas-vindas em background (não bloqueia o response)
-        _ = Task.Run(async () =>
-        {
-            try { await _emailService.SendWelcomeEmailAsync(user.Email, user.Name); }
-            catch { /* log aqui quando o Sentry estiver integrado */ }
-        });
-
         var token = _tokenService.GenerateToken(user);
+
+        // Envia email de boas-vindas (não bloqueia o cadastro se falhar)
+        try { await _emailService.SendWelcomeEmailAsync(user.Email, user.Name); }
+        catch (Exception ex) { Console.WriteLine($"EMAIL ERROR: {ex.Message}"); }
         return (true, string.Empty, BuildResponse(user, token));
     }
 
-    // ──────────────────────────────────────────
-    //  LOGIN
-    // ──────────────────────────────────────────
-
-    public async Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto, string clientIp)
+    public async Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto)
     {
-        var rateLimitKey = $"login:{clientIp}:{dto.Identifier.ToLower().Trim()}";
-
-        // Verifica rate limit antes de qualquer consulta ao banco
-        if (!_rateLimiter.AllowAttempt(rateLimitKey))
-        {
-            var seconds = _rateLimiter.GetLockoutSeconds(rateLimitKey);
-            return (false, $"Muitas tentativas. Tente novamente em {seconds / 60}min {seconds % 60}s.", null);
-        }
-
         var identifier = dto.Identifier.Trim();
+
+        // Rate limiting por identificador
+        if (_rateLimit.IsBlocked(identifier))
+            return (false, "Muitas tentativas. Tente novamente em 15 minutos.", null);
 
         var user = await _db.Users
             .FirstOrDefaultAsync(u =>
-                u.Email    == identifier.ToLower() ||
+                u.Email == identifier.ToLower() ||
                 u.Document == CleanDocument(identifier));
 
         if (user is null || !user.IsActive)
+        {
+            _rateLimit.RegisterFailure(identifier);
             return (false, "Credenciais inválidas.", null);
+        }
 
         var passwordValid = BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash);
         if (!passwordValid)
-            return (false, "Credenciais inválidas.", null);
+        {
+            _rateLimit.RegisterFailure(identifier);
+            return (false, $"Credenciais inválidas. {_rateLimit.RemainingAttempts(identifier)} tentativas restantes.", null);
+        }
 
-        // Login bem-sucedido — reseta o contador
-        _rateLimiter.Reset(rateLimitKey);
-
+        _rateLimit.RegisterSuccess(identifier);
         var token = _tokenService.GenerateToken(user);
         return (true, string.Empty, BuildResponse(user, token));
     }
-
-    // ──────────────────────────────────────────
-    //  HELPERS
-    // ──────────────────────────────────────────
 
     private static string CleanDocument(string doc) =>
         new string(doc.Where(char.IsDigit).ToArray());
@@ -117,11 +98,11 @@ public class AuthService : IAuthService
     private static AuthResponseDto BuildResponse(User user, string token) => new()
     {
         Token = token,
-        User  = new UserInfoDto
+        User = new UserInfoDto
         {
-            Id       = user.Id,
-            Name     = user.Name,
-            Email    = user.Email,
+            Id = user.Id,
+            Name = user.Name,
+            Email = user.Email,
             Document = user.Document,
         }
     };

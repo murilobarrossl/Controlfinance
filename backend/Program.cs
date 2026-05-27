@@ -19,11 +19,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // ──────────────────────────────────────────
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
-builder.Services.AddSingleton<IRateLimitService, RateLimitService>();
-
-// EmailService usa HttpClient — registra via factory
-builder.Services.AddHttpClient<IEmailService, EmailService>();
+builder.Services.AddSingleton<EncryptionService>();
+builder.Services.AddSingleton<RateLimitService>();
+builder.Services.AddHttpClient<EmailService>();
 
 // ──────────────────────────────────────────
 //  JWT
@@ -50,7 +48,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // ──────────────────────────────────────────
-//  CORS — permite chamadas do React (Vite)
+//  CORS
 // ──────────────────────────────────────────
 builder.Services.AddCors(options =>
 {
