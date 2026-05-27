@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getConnectors, createIntegration, getIntegrationStatus } from "../../api/polp.js";
+import {
+  getConnectors,
+  createIntegration,
+  getIntegrationStatus,
+} from "../../api/polp.js";
 import logoappfinance from "../../assets/images/logoappfinance.png";
 import "./onboarding.css";
 
@@ -8,16 +12,76 @@ import "./onboarding.css";
 //  Bancos padrão (fallback se a API falhar)
 // ──────────────────────────────────────────
 const DEFAULT_BANKS = [
-  { id: "001", name: "Banco do Brasil",  color: "#F9C200", textColor: "#003882", initials: "BB"  },
-  { id: "260", name: "Nubank",           color: "#820AD1", textColor: "#fff",    initials: "Nu"  },
-  { id: "341", name: "Itaú",             color: "#EC7000", textColor: "#fff",    initials: "It"  },
-  { id: "033", name: "Santander",        color: "#CC0000", textColor: "#fff",    initials: "San" },
-  { id: "336", name: "C6 Bank",          color: "#000",    textColor: "#fff",    initials: "C6"  },
-  { id: "237", name: "Bradesco",         color: "#CC092F", textColor: "#fff",    initials: "Bra" },
-  { id: "077", name: "Inter",            color: "#FF6B00", textColor: "#fff",    initials: "Int" },
-  { id: "104", name: "Caixa Econômica", color: "#005CA9", textColor: "#fff",    initials: "CEF" },
-  { id: "422", name: "Safra",            color: "#1B3A6B", textColor: "#fff",    initials: "Saf" },
-  { id: "290", name: "PagBank",          color: "#00C851", textColor: "#fff",    initials: "Pag" },
+  {
+    id: "001",
+    name: "Banco do Brasil",
+    color: "#F9C200",
+    textColor: "#003882",
+    initials: "BB",
+  },
+  {
+    id: "260",
+    name: "Nubank",
+    color: "#820AD1",
+    textColor: "#fff",
+    initials: "Nu",
+  },
+  {
+    id: "341",
+    name: "Itaú",
+    color: "#EC7000",
+    textColor: "#fff",
+    initials: "It",
+  },
+  {
+    id: "033",
+    name: "Santander",
+    color: "#CC0000",
+    textColor: "#fff",
+    initials: "San",
+  },
+  {
+    id: "336",
+    name: "C6 Bank",
+    color: "#000",
+    textColor: "#fff",
+    initials: "C6",
+  },
+  {
+    id: "237",
+    name: "Bradesco",
+    color: "#CC092F",
+    textColor: "#fff",
+    initials: "Bra",
+  },
+  {
+    id: "077",
+    name: "Inter",
+    color: "#FF6B00",
+    textColor: "#fff",
+    initials: "Int",
+  },
+  {
+    id: "104",
+    name: "Caixa Econômica",
+    color: "#005CA9",
+    textColor: "#fff",
+    initials: "CEF",
+  },
+  {
+    id: "422",
+    name: "Safra",
+    color: "#1B3A6B",
+    textColor: "#fff",
+    initials: "Saf",
+  },
+  {
+    id: "290",
+    name: "PagBank",
+    color: "#00C851",
+    textColor: "#fff",
+    initials: "Pag",
+  },
 ];
 
 // ──────────────────────────────────────────
@@ -25,10 +89,10 @@ const DEFAULT_BANKS = [
 // ──────────────────────────────────────────
 function SyncScreen({ bank, integrationId, onSuccess }) {
   const [steps, setSteps] = useState([
-    { label: "Conexão estabelecida",      status: "done"    },
-    { label: "Contas encontradas",         status: "active"  },
-    { label: "Importando transações...",   status: "pending" },
-    { label: "Categorizando com IA",       status: "pending" },
+    { label: "Conexão estabelecida", status: "done" },
+    { label: "Contas encontradas", status: "active" },
+    { label: "Importando transações...", status: "pending" },
+    { label: "Categorizando com IA", status: "pending" },
   ]);
 
   useEffect(() => {
@@ -60,10 +124,10 @@ function SyncScreen({ bank, integrationId, onSuccess }) {
   const advanceStep = (index) => {
     setSteps((prev) =>
       prev.map((s, i) => {
-        if (i < index)  return { ...s, status: "done"    };
-        if (i === index) return { ...s, status: "active"  };
+        if (i < index) return { ...s, status: "done" };
+        if (i === index) return { ...s, status: "active" };
         return { ...s, status: "pending" };
-      })
+      }),
     );
   };
 
@@ -82,14 +146,24 @@ function SyncScreen({ bank, integrationId, onSuccess }) {
             <div key={step.label} className={`sync-step ${step.status}`}>
               <span className="sync-step-dot" />
               <span className="sync-step-label">{step.label}</span>
-              {step.status === "done"   && <span className="sync-step-status">✓ Concluído</span>}
-              {step.status === "active" && <span className="sync-step-status">Em andamento</span>}
+              {step.status === "done" && (
+                <span className="sync-step-status">✓ Concluído</span>
+              )}
+              {step.status === "active" && (
+                <span className="sync-step-status">Em andamento</span>
+              )}
             </div>
           ))}
         </div>
 
         <div className="sync-ai-box">
-          <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M12 2a5 5 0 0 1 5 5v3a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5Z" />
             <path d="M15 14a6 6 0 0 1-6 0" />
             <path d="M9.5 14.5 8 20l4-2 4 2-1.5-5.5" />
@@ -106,22 +180,24 @@ function SyncScreen({ bank, integrationId, onSuccess }) {
 // ──────────────────────────────────────────
 export default function OnboardingPage() {
   const navigate = useNavigate();
-  const [banks, setBanks]               = useState(DEFAULT_BANKS);
-  const [search, setSearch]             = useState("");
+  const [banks, setBanks] = useState(DEFAULT_BANKS);
+  const [search, setSearch] = useState("");
   const [selectedBank, setSelectedBank] = useState(null);
   const [integrationId, setIntegrationId] = useState(null);
-  const [syncing, setSyncing]           = useState(false);
-  const [error, setError]               = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState("");
 
   // Tenta carregar lista real de bancos da Polp
   useEffect(() => {
     getConnectors()
-      .then((data) => { if (data?.length) setBanks(data); })
+      .then((data) => {
+        if (data?.length) setBanks(data);
+      })
       .catch(() => {}); // Mantém o fallback silenciosamente
   }, []);
 
   const filtered = banks.filter((b) =>
-    b.name.toLowerCase().includes(search.toLowerCase())
+    b.name.toLowerCase().includes(search.toLowerCase()),
   );
 
   const handleSelectBank = async (bank) => {
@@ -168,12 +244,22 @@ export default function OnboardingPage() {
   return (
     <div className="onboarding-page">
       <div className="onboarding-card">
-        <img src={logoappfinance} alt="Control Finance" className="onboarding-logo" />
+        <img
+          src={logoappfinance}
+          alt="Control Finance"
+          className="onboarding-logo"
+        />
 
         <div className="onboarding-header">
           <h2 className="onboarding-title">Escolha seu banco</h2>
           <p className="onboarding-subtitle">
-            <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
@@ -182,7 +268,13 @@ export default function OnboardingPage() {
         </div>
 
         <div className="onboarding-search">
-          <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
@@ -194,7 +286,14 @@ export default function OnboardingPage() {
         </div>
 
         {error && (
-          <p style={{ color: "#e84520", fontSize: "12px", textAlign: "center", margin: "0 0 12px" }}>
+          <p
+            style={{
+              color: "#e84520",
+              fontSize: "12px",
+              textAlign: "center",
+              margin: "0 0 12px",
+            }}
+          >
             {error}
           </p>
         )}
@@ -208,16 +307,31 @@ export default function OnboardingPage() {
                 key={bank.id}
                 className="bank-item"
                 onClick={() => handleSelectBank(bank)}
-                style={{ background: "none", width: "100%", textAlign: "left", fontFamily: "inherit" }}
+                style={{
+                  background: "none",
+                  width: "100%",
+                  textAlign: "left",
+                  fontFamily: "inherit",
+                }}
               >
                 <div
                   className="bank-item-icon"
-                  style={{ background: bank.color, color: bank.textColor || "#fff" }}
+                  style={{
+                    background: bank.color,
+                    color: bank.textColor || "#fff",
+                  }}
                 >
                   {bank.initials || bank.name?.slice(0, 2)}
                 </div>
                 <span className="bank-item-name">{bank.name}</span>
-                <svg className="bank-item-arrow" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  className="bank-item-arrow"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M9 18l6-6-6-6" />
                 </svg>
               </button>
@@ -226,7 +340,13 @@ export default function OnboardingPage() {
         </div>
 
         <div className="onboarding-footer">
-          <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
