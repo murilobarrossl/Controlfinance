@@ -4,6 +4,7 @@ import graficologo from "../../assets/images/graficologo.png";
 import logoappfinance from "../../assets/images/logoappfinance.png";
 import { register } from "../../api/auth.js";
 import "./register.css";
+import Footer from "../../components/login-footer/loginfooter.jsx";
 
 const applyMask = (value, mask, prev) => {
   const isDeleting = prev && value.length < prev.length;
@@ -80,6 +81,7 @@ export default function RegisterPage() {
   };
 
   return (
+    <>
     <div className="register-page">
       <div className="register-left">
         <span className="register-brand-label">Control Finance</span>
@@ -236,5 +238,7 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+    <Footer />
+    </>
   );
 }
