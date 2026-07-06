@@ -1,0 +1,55 @@
+@font-face {
+  font-family: "Prompt";
+  src: url("/src/assets/fonts/Prompt-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.navbar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 2.5rem;
+  background-color: #1F1F1F;
+  font-family: "Prompt", sans-serif;
+}
+
+.navbar__logo {
+  display: flex;
+  align-items: center;
+}
+
+.navbar__logo img {
+  height: 40px;
+  width: 40px;
+}
+
+.navbar__login {
+  color: #ffffff;
+  font-size: 0.95rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.navbar__login:hover {
+  color: #ffffff;
+}
+
+.navbar__links {
+  display: flex;
+  align-items: center;
+  gap: 1.75rem;
+  margin-left: auto;
+}
+
+.navbar__link {
+  color: #ffffff;
+  font-size: 0.95rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.navbar__link:hover {
+  color: #ffffff;
+}
