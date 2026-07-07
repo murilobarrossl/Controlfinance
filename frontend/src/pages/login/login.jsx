@@ -74,7 +74,7 @@ export default function LoginPage({ mode = "email" }) {
         localStorage.setItem("token", data.token);
       }
 
-      navigate("/dashboard");
+      navigate("/conectar-banco");
     } catch (err) {
       setError(err.message || "Não foi possível entrar. Tente novamente.");
     } finally {

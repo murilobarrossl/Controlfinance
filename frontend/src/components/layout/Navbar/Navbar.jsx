@@ -9,7 +9,6 @@ const NAV_LINKS = [
   { label: "Funcionalidades", href: "#funcionalidades" },
   { label: "Planos", href: "#planos" },
   { label: "Agente de IA", href: "#agente-ia" },
-  { label: "Blog", href: "#blog" },
   { label: "Tire suas dúvidas", href: "#faq" },
 ];
 

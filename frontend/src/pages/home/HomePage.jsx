@@ -13,12 +13,12 @@ export default function HomePage() {
     <>
       <Navbar />
       <Hero />
-      <AgenteIA />
-      <FAQ /> 
-      <Funcionalidades />
       <SobreNos />
       <Time />
+      <Funcionalidades />
       <Planos />
+      <AgenteIA />
+      <FAQ /> 
     </>
   );
 }
