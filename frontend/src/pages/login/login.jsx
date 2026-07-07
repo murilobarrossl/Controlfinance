@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/ui/Button/Button.jsx";
+import { login } from "../../api/auth.js";
 import "./login.css";
 
 const applyMask = (value, mask, prev) => {
@@ -25,9 +26,12 @@ const CNPJ_MASK = "##.###.###/####-##";
 const getCpfCnpjMask = (digits) => (digits.length <= 11 ? CPF_MASK : CNPJ_MASK);
 
 export default function LoginPage({ mode = "email" }) {
+  const navigate = useNavigate();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const isCpf = mode === "cpf";
 
@@ -57,17 +61,25 @@ export default function LoginPage({ mode = "email" }) {
     setIdentifier(masked);
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
+    setError("");
+    setSubmitting(true);
 
-    const data = {
-      identifier,
-      password,
-    };
+    try {
+      const cleanIdentifier = isCpf ? identifier.replace(/\D/g, "") : identifier;
+      const data = await login(cleanIdentifier, password);
 
-    console.log(data);
+      if (data?.token) {
+        localStorage.setItem("token", data.token);
+      }
 
-    // TODO: chamar API de autenticação
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Não foi possível entrar. Tente novamente.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -185,13 +197,16 @@ export default function LoginPage({ mode = "email" }) {
             Esqueceu a senha?
           </Link>
 
+          {error && <p className="login__error">{error}</p>}
+
           <Button
             as="button"
             type="submit"
             variant="secondary"
             className="login__submit"
+            disabled={submitting}
           >
-            Entrar
+            {submitting ? "Entrando..." : "Entrar"}
           </Button>
 
           <Button

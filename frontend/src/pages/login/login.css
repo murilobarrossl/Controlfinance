@@ -160,6 +160,17 @@
   height: 20px;
 }
 
+.login__error {
+  color: #ed4a31;
+  font-size: 0.85rem;
+  margin: -0.75rem 0 1.25rem;
+}
+
+.login__submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .login__forgot {
   align-self: flex-end;
   font-style: italic;
