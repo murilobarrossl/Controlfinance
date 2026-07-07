@@ -32,12 +32,38 @@ public class PolpIntegrationDto
     [JsonPropertyName("tax_id")] public string? TaxId { get; set; }
     [JsonPropertyName("status")] public string Status { get; set; } = string.Empty;
     [JsonPropertyName("execution_status")] public string? ExecutionStatus { get; set; }
-    [JsonPropertyName("error")] public string? Error { get; set; }
+    // A Polp às vezes retorna "error": null, e às vezes "error": { ... } (objeto),
+    // dependendo do tipo de falha. JsonElement aceita os dois formatos sem quebrar.
+    [JsonPropertyName("error")] public JsonElement? Error { get; set; }
     [JsonPropertyName("user_action")] public string? UserAction { get; set; }
     [JsonPropertyName("url_to_authenticate")] public string? UrlToAuthenticate { get; set; }
     [JsonPropertyName("url_to_authenticate_expires_at")] public DateTime? UrlToAuthenticateExpiresAt { get; set; }
     [JsonPropertyName("created_at")] public DateTime CreatedAt { get; set; }
     [JsonPropertyName("updated_at")] public DateTime UpdatedAt { get; set; }
+
+    /// <summary>Extrai uma mensagem de erro legível, seja "error" string, objeto ou null.</summary>
+    [JsonIgnore]
+    public string? ErrorMessage
+    {
+        get
+        {
+            if (Error is not { } el || el.ValueKind == JsonValueKind.Null || el.ValueKind == JsonValueKind.Undefined)
+                return null;
+
+            if (el.ValueKind == JsonValueKind.String) return el.GetString();
+
+            if (el.ValueKind == JsonValueKind.Object)
+            {
+                if (el.TryGetProperty("message", out var msg) && msg.ValueKind == JsonValueKind.String)
+                    return msg.GetString();
+                if (el.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String)
+                    return code.GetString();
+                return el.GetRawText();
+            }
+
+            return el.GetRawText();
+        }
+    }
 }
 
 public class PolpAccountDto

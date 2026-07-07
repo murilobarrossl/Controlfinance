@@ -140,7 +140,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ControllerBase
         {
             status = mappedStatus,
             rawStatus = remote.Status,
-            error = remote.Error,
+            error = remote.ErrorMessage,
             urlToAuthenticate = remote.UrlToAuthenticate
         });
     }
