@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import Button from "../ui/Button/Button.jsx";
+import Button from "../../ui/Button/Button.jsx";
 import logo from "../../../assets/images/control-finance-transparente-branco.svg";
 import "./Navbar.css";
 
