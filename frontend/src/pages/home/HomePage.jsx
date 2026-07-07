@@ -5,6 +5,7 @@ import FAQ from "./sections/FAQ/FAQ.jsx";
 import Funcionalidades from "./sections/Funcionalidades/Funcionalidades.jsx";
 import SobreNos from "./sections/SobreNos/SobreNos.jsx";
 import Time from "./sections/Time/Time.jsx";
+import Planos from "./sections/Planos/Planos.jsx";
 
 
 export default function HomePage() {
@@ -17,6 +18,7 @@ export default function HomePage() {
       <Funcionalidades />
       <SobreNos />
       <Time />
+      <Planos />
     </>
   );
 }
