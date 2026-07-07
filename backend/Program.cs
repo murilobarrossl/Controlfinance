@@ -69,7 +69,9 @@ builder.Services.AddCors(options =>
 // ──────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddHttpClient<IPolpService, PolpService>();
 builder.Services.AddSwaggerGen(c =>
+
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {

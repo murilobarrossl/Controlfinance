@@ -13,7 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<CreditCard> CreditCards => Set<CreditCard>();
     public DbSet<Installment> Installments => Set<Installment>();
-
+    public DbSet<PolpIntegration> PolpIntegrations => Set<PolpIntegration>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // USER

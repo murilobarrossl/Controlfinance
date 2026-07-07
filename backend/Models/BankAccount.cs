@@ -11,5 +11,11 @@ public class BankAccount
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>ID da conta (account) na Polp, usado para buscar transações reais.</summary>
+    public int? PolpAccountId { get; set; }
+
+    /// <summary>ID da integração na Polp à qual esta conta pertence.</summary>
+    public int? PolpIntegrationId { get; set; }
+
     public ICollection<Transaction> Transactions { get; set; } = [];
 }
