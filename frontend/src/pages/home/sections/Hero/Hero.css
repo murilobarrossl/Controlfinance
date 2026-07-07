@@ -1,0 +1,115 @@
+@font-face {
+  font-family: "Prompt";
+  src: url("/src/assets/fonts/Prompt-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.hero {
+  position: relative;
+  min-height: 90vh;
+  padding: 3rem 2.5rem;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  font-family: "Prompt", sans-serif;
+}
+
+.hero__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.15) 0%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+}
+
+.hero__content {
+  position: relative;
+  z-index: 1;
+  max-width: 640px;
+}
+
+.hero__badge {
+  display: inline-block;
+  background-color: #ffffff;
+  opacity: 0.9;
+  color: #000000;
+  padding: 0.5rem 1rem;
+  border-radius: 9px;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.hero__title {
+  font-style: italic;
+  font-size: 2.75rem;
+  line-height: 1.25;
+  color: #ffffff;
+  margin: 0 0 1.25rem;
+}
+
+.hero__subtitle {
+  font-style: italic;
+  font-size: 1.15rem;
+  line-height: 1.5;
+  color: #ffffff;
+  margin: 0 0 2rem;
+}
+
+.hero__actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.hero__cta {
+  opacity: 0.9;
+}
+
+.hero__cards {
+  position: absolute;
+  right: 2.5rem;
+  bottom: 3rem;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 320px;
+}
+
+.hero__card {
+  background-color: #3D3D3D;
+  opacity: 0.9;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+}
+
+.hero__card-title {
+  display: block;
+  font-style: italic;
+  color: #e8562f;
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+
+.hero__card-text {
+  color: #ffffff;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  margin: 0 0 0.75rem;
+}
+
+.hero__card-link {
+  font-style: italic;
+  color: #ffffff;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.hero__card-link:hover {
+  color: #ffffff;
+}
