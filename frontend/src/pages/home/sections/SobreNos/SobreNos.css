@@ -1,0 +1,43 @@
+.sobre-nos {
+  background-color: #1f1f1f;
+  padding: 3rem 2.5rem;
+  font-family: "Prompt", sans-serif;
+  color: #ffffff;
+}
+
+.sobre-nos__title {
+  text-align: center;
+  font-style: italic;
+  font-size: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.sobre-nos__block {
+  max-width: 720px;
+  margin: 0 auto 2rem auto;
+}
+
+.sobre-nos__subtitle {
+  font-style: italic;
+  font-size: 1.1rem;
+  margin-bottom: 0.75rem;
+}
+
+.sobre-nos__text {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #e0e0e0;
+  margin-bottom: 0.75rem;
+}
+
+.sobre-nos__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sobre-nos__list-item {
+  font-size: 0.95rem;
+  line-height: 1.9;
+  color: #e0e0e0;
+}

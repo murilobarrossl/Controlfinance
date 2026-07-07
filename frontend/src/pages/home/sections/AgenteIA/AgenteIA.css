@@ -1,0 +1,51 @@
+.agente-ia {
+  background-color: #1f1f1f;
+  padding: 3rem 2.5rem;
+  font-family: "Prompt", sans-serif;
+  color: #ffffff;
+}
+
+.agente-ia__title {
+  text-align: center;
+  font-style: italic;
+  font-size: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.agente-ia__block {
+  max-width: 720px;
+  margin: 0 auto 2rem auto;
+}
+
+.agente-ia__subtitle {
+  font-style: italic;
+  font-size: 1.1rem;
+  margin-bottom: 0.75rem;
+}
+
+.agente-ia__list {
+  padding-left: 1.2rem;
+  margin: 0;
+}
+
+.agente-ia__list-item {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #e0e0e0;
+  margin-bottom: 0.5rem;
+}
+
+.agente-ia__text {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #e0e0e0;
+  margin-bottom: 0.75rem;
+}
+
+.agente-ia__text--highlight {
+  color: #e0e0e0;
+}
+
+.agente-ia__highlight-label {
+  color: #ff5c5c;
+}
