@@ -244,8 +244,8 @@ public class PolpController(AppDbContext db, IPolpService polp) : ControllerBase
                     Type = rt.Amount >= 0 ? TransactionType.Income : TransactionType.Expense,
                     Status = rt.Status == "PENDING" ? TransactionStatus.Pending : TransactionStatus.Paid,
                     Amount = Math.Abs(rt.Amount),
-                    DueDate = DateTime.TryParse(rt.Date, out var dt) ? dt : DateTime.UtcNow,
-                    PaidAt = rt.Status == "PENDING" ? null : (DateTime.TryParse(rt.Date, out var pd) ? pd : DateTime.UtcNow)
+                    DueDate = ParseDateAsUtc(rt.Date),
+                    PaidAt = rt.Status == "PENDING" ? null : ParseDateAsUtc(rt.Date)
                 });
             }
         }
@@ -255,6 +255,21 @@ public class PolpController(AppDbContext db, IPolpService polp) : ControllerBase
         await db.SaveChangesAsync(ct);
 
         return Ok(new { status = "synced", accountsCount = createdAccounts.Count });
+    }
+
+    // O Npgsql exige DateTimeKind.Utc para colunas timestamptz; DateTime.TryParse sozinho
+    // devolve Kind=Unspecified (ou Local), o que derruba o SaveChangesAsync com uma exceção
+    // não tratada — e por consequência a resposta perde os headers de CORS.
+    private static DateTime ParseDateAsUtc(string? dateStr)
+    {
+        if (DateTime.TryParse(
+                dateStr,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                out var parsed))
+            return parsed;
+
+        return DateTime.UtcNow;
     }
 
     private async Task<Guid?> ResolveCategoryId(string? categoryName)

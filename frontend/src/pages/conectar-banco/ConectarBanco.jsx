@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getConnectors, createIntegration, getIntegrationStatus } from "../../api/polp.js";
 import { groupConnectorsByType } from "../../utils/bankSorting.js";
+import { setPendingIntegrationId, watchPolpConnection } from "../../services/polpConnection.js";
 import "./ConectarBanco.css";
 
 const POLL_MAX_ATTEMPTS = 10;
@@ -11,6 +13,7 @@ function wait(ms) {
 }
 
 export default function ConnectBankPage() {
+  const navigate = useNavigate();
   const [step, setStep] = useState("intro"); // "intro" | "choosing"
   const [connectors, setConnectors] = useState([]);
   const [personType, setPersonType] = useState("personal"); // "personal" | "business"
@@ -45,15 +48,37 @@ export default function ConnectBankPage() {
     setError("");
     setConnectingId(connectorId);
     setConnectingStage("creating");
+
+    // Precisa ser chamado de forma síncrona, antes de qualquer await, senão o navegador
+    // perde o "gesto do usuário" do clique e bloqueia a aba como pop-up.
+    const authWindow = window.open("", "_blank");
+    if (!authWindow) {
+      setError("Não foi possível abrir a aba de autenticação. Verifique o bloqueador de pop-ups do navegador.");
+      setConnectingId(null);
+      setConnectingStage(null);
+      return;
+    }
+
+    authWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head><title>Conectando ao banco...</title></head>
+        <body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#0d0d0d;color:#b8b8b8;font-family:sans-serif;">
+          <p>Preparando a conexão com o banco, só um instante...</p>
+        </body>
+      </html>
+    `);
+    authWindow.document.close();
+
     try {
       const data = await createIntegration(connectorId);
       if (data?.urlToAuthenticate) {
-        localStorage.setItem("pendingPolpIntegrationId", data.integrationId);
-        window.location.href = data.urlToAuthenticate;
-        return;
+        await openAuthAndWait(data.integrationId, data.urlToAuthenticate, authWindow);
+      } else {
+        await pollForAuthUrl(data.integrationId, authWindow);
       }
-      await pollIntegrationStatus(data.integrationId);
     } catch (err) {
+      authWindow.close();
       setError(err.message || "Não foi possível conectar ao banco. Tente novamente.");
     } finally {
       setConnectingId(null);
@@ -61,7 +86,7 @@ export default function ConnectBankPage() {
     }
   }
 
-  async function pollIntegrationStatus(integrationId) {
+  async function pollForAuthUrl(integrationId, authWindow) {
     setConnectingStage("waiting");
 
     for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
@@ -69,18 +94,35 @@ export default function ConnectBankPage() {
       const status = await getIntegrationStatus(integrationId);
 
       if (status?.urlToAuthenticate) {
-        localStorage.setItem("pendingPolpIntegrationId", integrationId);
-        window.location.href = status.urlToAuthenticate;
+        await openAuthAndWait(integrationId, status.urlToAuthenticate, authWindow);
         return;
       }
 
       if (status?.status === "login_error") {
+        authWindow.close();
         setError(status.error || "Não foi possível autenticar com o banco. Tente novamente.");
         return;
       }
     }
 
+    authWindow.close();
     setError("A conexão demorou para responder. Tente novamente em instantes.");
+  }
+
+  async function openAuthAndWait(integrationId, authUrl, authWindow) {
+    setPendingIntegrationId(integrationId);
+    authWindow.location.href = authUrl;
+    setConnectingStage("waiting");
+
+    const result = await watchPolpConnection(integrationId);
+
+    if (result === "active") {
+      navigate("/dashboard");
+    } else if (result === "login_error") {
+      setError("Não foi possível autenticar com o banco. Tente novamente.");
+    } else {
+      setError("A conexão demorou para responder. Tente novamente em instantes.");
+    }
   }
 
   return (
@@ -90,6 +132,14 @@ export default function ConnectBankPage() {
         <p className="connect-bank__subtitle">
           Para continuar, vincule seu banco via Open Finance.
         </p>
+
+        {connectingStage === "waiting" && (
+          <p className="connect-bank__notice">
+            Abrimos a autenticação em outra aba. Conclua por lá — depois de confirmar, o banco
+            ainda precisa sincronizar suas contas, o que pode levar alguns minutos. Você será
+            levado automaticamente para o dashboard aqui assim que terminar.
+          </p>
+        )}
 
         {error && <p className="connect-bank__error">{error}</p>}
 
