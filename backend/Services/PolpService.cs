@@ -166,11 +166,25 @@ public class PolpService : IPolpService
 
     public async Task<List<PolpInstitutionDto>> GetInstitutionsAsync(CancellationToken ct = default)
     {
-        var resp = await _http.GetAsync("institutions", ct);
-        await EnsureSuccess(resp, "listar instituições");
+        var institutions = new List<PolpInstitutionDto>();
+        var page = 1;
+        int lastPage;
 
-        var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpInstitutionDto>>(JsonOptions, ct);
-        return envelope?.Data ?? [];
+        do
+        {
+            var resp = await _http.GetAsync($"institutions?page={page}", ct);
+            await EnsureSuccess(resp, "listar instituições");
+
+            var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpInstitutionDto>>(JsonOptions, ct);
+            if (envelope?.Data is null || envelope.Data.Count == 0) break;
+
+            institutions.AddRange(envelope.Data);
+            lastPage = envelope.Meta?.LastPage ?? page;
+            page++;
+
+        } while (page <= lastPage);
+
+        return institutions;
     }
 
     public async Task<PolpIntegrationDto> CreateIntegrationAsync(int institutionId, string document, CancellationToken ct = default)

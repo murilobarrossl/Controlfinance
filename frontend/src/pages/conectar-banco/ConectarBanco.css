@@ -91,6 +91,12 @@
   text-align: left;
 }
 
+.connect-bank__empty {
+  color: #b8b8b8;
+  font-size: 0.9rem;
+  margin: 0.5rem 0 0;
+}
+
 .connect-bank__connector-list {
   list-style: none;
   margin: 0;
@@ -128,16 +134,28 @@
   cursor: not-allowed;
 }
 
+.connect-bank__connector-stripe {
+  width: 4px;
+  height: 28px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
 .connect-bank__connector-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   flex-shrink: 0;
   object-fit: contain;
+  background-color: #ffffff;
+  padding: 3px;
+}
+
+.connect-bank__connector-name {
+  flex: 1;
 }
 
 .connect-bank__connector-status {
-  margin-left: auto;
   color: #b8b8b8;
   font-size: 0.85rem;
 }
