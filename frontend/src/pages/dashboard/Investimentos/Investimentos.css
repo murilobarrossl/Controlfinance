@@ -1,0 +1,117 @@
+.investimentos {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.investimentos__hint {
+  color: #b8b8b8;
+  font-size: 0.9rem;
+}
+
+.investimentos__form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.investimentos__form input {
+  background-color: #3a3a3a;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.investimentos__form button {
+  border: none;
+  background-color: #ed4a31;
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.investimentos__form button:hover {
+  background-color: #d43f28;
+}
+
+.investimentos__goals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.investimentos__goal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.investimentos__goal-name {
+  color: #ffffff;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.investimentos__goal-header button {
+  border: none;
+  background: transparent;
+  color: #808080;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.investimentos__goal-header button:hover {
+  color: #ed4a31;
+}
+
+.investimentos__progress {
+  width: 100%;
+  height: 8px;
+  background-color: #2a2a2a;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.investimentos__progress-fill {
+  height: 100%;
+  background-color: #4ecdc4;
+  border-radius: 999px;
+}
+
+.investimentos__goal-meta {
+  display: block;
+  color: #808080;
+  font-size: 0.78rem;
+  margin-top: 0.4rem;
+}
+
+.investimentos__simulation p {
+  color: #b8b8b8;
+  font-size: 0.88rem;
+  margin: 0 0 0.5rem;
+}
+
+.investimentos__simulation strong {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.investimentos__ai-notice p {
+  color: #b8b8b8;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  margin: 0;
+}

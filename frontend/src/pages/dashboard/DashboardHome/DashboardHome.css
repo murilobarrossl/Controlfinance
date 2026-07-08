@@ -1,0 +1,140 @@
+.dashboard-home {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.dashboard-home__hint {
+  color: #b8b8b8;
+  font-size: 0.9rem;
+}
+
+.dashboard-home__error {
+  color: #ed4a31;
+  font-size: 0.9rem;
+}
+
+.dashboard-home__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  color: #b8b8b8;
+}
+
+.dashboard-home__empty-link {
+  color: #ffffff;
+  background-color: #ed4a31;
+  border-radius: 999px;
+  padding: 0.6rem 1.4rem;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.dashboard-home__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+.dashboard-home__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dashboard-home__stat-label {
+  color: #b8b8b8;
+  font-size: 0.8rem;
+}
+
+.dashboard-home__stat-value {
+  color: #ffffff;
+  font-size: 1.4rem;
+  font-weight: 500;
+}
+
+.dashboard-home__stat-value--income {
+  color: #4ecdc4;
+}
+
+.dashboard-home__stat-value--expense {
+  color: #ed4a31;
+}
+
+.dashboard-home__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.dashboard-home__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.dashboard-home__list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dashboard-home__list-name {
+  display: block;
+  color: #ffffff;
+  font-size: 0.9rem;
+}
+
+.dashboard-home__list-meta {
+  display: block;
+  color: #808080;
+  font-size: 0.78rem;
+  margin-top: 0.15rem;
+}
+
+.dashboard-home__list-amount {
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.dashboard-home__card-line {
+  color: #b8b8b8;
+  font-size: 0.88rem;
+  margin: 0 0 0.5rem;
+}
+
+.dashboard-home__card-line strong {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.dashboard-home__progress {
+  width: 100%;
+  height: 8px;
+  background-color: #2a2a2a;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.75rem;
+}
+
+.dashboard-home__progress-fill {
+  height: 100%;
+  background-color: #ed4a31;
+  border-radius: 999px;
+}
+
+@media (max-width: 900px) {
+  .dashboard-home__stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-home__grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,79 @@
+@font-face {
+  font-family: "Prompt";
+  src: url("/src/assets/fonts/Prompt-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.dashboard-layout {
+  min-height: 100vh;
+  background-color: #0d0d0d;
+  font-family: "Prompt", sans-serif;
+}
+
+.dashboard-nav {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 1rem 2.5rem;
+  background-color: #1f1f1f;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.dashboard-nav__logo {
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.dashboard-nav__tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  overflow-x: auto;
+}
+
+.dashboard-nav__tab {
+  color: #b8b8b8;
+  text-decoration: none;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.dashboard-nav__tab:hover {
+  color: #ffffff;
+  background-color: #242424;
+}
+
+.dashboard-nav__tab--active {
+  color: #ffffff;
+  background-color: #ed4a31;
+}
+
+.dashboard-nav__logout {
+  border: 1px solid #3a3a3a;
+  background-color: transparent;
+  color: #b8b8b8;
+  border-radius: 8px;
+  padding: 0.55rem 1rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.dashboard-nav__logout:hover {
+  background-color: #242424;
+  color: #ffffff;
+}
+
+.dashboard-content {
+  padding: 2rem 2.5rem;
+  max-width: 1280px;
+  margin: 0 auto;
+}

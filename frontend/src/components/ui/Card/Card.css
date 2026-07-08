@@ -1,0 +1,21 @@
+.card {
+  background-color: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 16px;
+  padding: 1.5rem;
+}
+
+.card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 1.25rem;
+}
+
+.card__title {
+  color: #ffffff;
+  font-size: 1.05rem;
+  font-weight: 500;
+  margin: 0;
+}

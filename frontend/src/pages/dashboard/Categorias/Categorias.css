@@ -1,0 +1,130 @@
+.categorias {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.categorias__hint {
+  color: #b8b8b8;
+  font-size: 0.9rem;
+}
+
+.categorias__error {
+  color: #ed4a31;
+  font-size: 0.9rem;
+}
+
+.categorias__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.categorias__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.categorias__list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  border: 1px solid transparent;
+  background-color: transparent;
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.categorias__list-item:hover {
+  background-color: #242424;
+}
+
+.categorias__list-item--active {
+  background-color: #242424;
+  border-color: #3a3a3a;
+}
+
+.categorias__list-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.categorias__list-name {
+  flex: 1;
+  color: #ffffff;
+  font-size: 0.88rem;
+}
+
+.categorias__list-percentage {
+  color: #b8b8b8;
+  font-size: 0.8rem;
+  width: 48px;
+}
+
+.categorias__list-amount {
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 500;
+  width: 100px;
+  text-align: right;
+}
+
+.categorias__drilldown {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.categorias__drilldown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.categorias__drilldown-name {
+  display: block;
+  color: #ffffff;
+  font-size: 0.88rem;
+}
+
+.categorias__drilldown-date {
+  display: block;
+  color: #808080;
+  font-size: 0.78rem;
+  margin-top: 0.15rem;
+}
+
+.categorias__amount--income {
+  color: #4ecdc4;
+  font-weight: 500;
+}
+
+.categorias__amount--expense {
+  color: #ed4a31;
+  font-weight: 500;
+}
+
+@media (max-width: 900px) {
+  .categorias__grid {
+    grid-template-columns: 1fr;
+  }
+}

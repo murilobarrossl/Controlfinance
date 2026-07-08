@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/ui/Button/Button.jsx";
 import { login } from "../../api/auth.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 import "./login.css";
 
 const applyMask = (value, mask, prev) => {
@@ -27,6 +28,7 @@ const getCpfCnpjMask = (digits) => (digits.length <= 11 ? CPF_MASK : CNPJ_MASK);
 
 export default function LoginPage({ mode = "email" }) {
   const navigate = useNavigate();
+  const { login: setAuthToken } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -71,7 +73,7 @@ export default function LoginPage({ mode = "email" }) {
       const data = await login(cleanIdentifier, password);
 
       if (data?.token) {
-        localStorage.setItem("token", data.token);
+        setAuthToken(data.token);
       }
 
       navigate("/conectar-banco");

@@ -7,6 +7,8 @@ const MAIN_BANKS = [
   "Caixa Econômica Federal",
   "Banco Inter",
   "C6 Bank",
+  "XP Banking",
+  "Mercado Pago"
 ];
 
 function priorityIndex(name) {

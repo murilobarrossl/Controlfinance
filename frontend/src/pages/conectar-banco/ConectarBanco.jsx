@@ -48,6 +48,7 @@ export default function ConnectBankPage() {
     try {
       const data = await createIntegration(connectorId);
       if (data?.urlToAuthenticate) {
+        localStorage.setItem("pendingPolpIntegrationId", data.integrationId);
         window.location.href = data.urlToAuthenticate;
         return;
       }
@@ -68,6 +69,7 @@ export default function ConnectBankPage() {
       const status = await getIntegrationStatus(integrationId);
 
       if (status?.urlToAuthenticate) {
+        localStorage.setItem("pendingPolpIntegrationId", integrationId);
         window.location.href = status.urlToAuthenticate;
         return;
       }

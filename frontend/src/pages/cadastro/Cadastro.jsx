@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/ui/Button/Button.jsx";
 import { register } from "../../api/auth.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 import "./Cadastro.css";
 
 const applyMask = (value, mask, prev) => {
@@ -88,6 +89,7 @@ function EyeSlashIcon() {
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const { login: setAuthToken } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -135,7 +137,7 @@ export default function RegisterPage() {
         password,
       });
       if (data?.token) {
-        localStorage.setItem("token", data.token);
+        setAuthToken(data.token);
       }
       navigate("/loginemail");
     } catch (err) {
