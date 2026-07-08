@@ -24,3 +24,4 @@ export const syncIntegration = async (integrationId) =>
 // Lista os bancos/conectores disponíveis
 export const getConnectors = async () =>
   apiFetch("/polp/connectors");
+

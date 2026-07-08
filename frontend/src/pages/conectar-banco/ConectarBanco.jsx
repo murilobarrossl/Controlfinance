@@ -1,13 +1,30 @@
-import { useState } from "react";
-import { getConnectors, createIntegration } from "../../api/polp.js";
+import { useMemo, useState } from "react";
+import { getConnectors, createIntegration, getIntegrationStatus } from "../../api/polp.js";
+import { groupConnectorsByType } from "../../utils/bankSorting.js";
 import "./ConectarBanco.css";
+
+const POLL_MAX_ATTEMPTS = 10;
+const POLL_INTERVAL_MS = 1000;
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export default function ConnectBankPage() {
   const [step, setStep] = useState("intro"); // "intro" | "choosing"
   const [connectors, setConnectors] = useState([]);
+  const [personType, setPersonType] = useState("personal"); // "personal" | "business"
   const [loadingConnectors, setLoadingConnectors] = useState(false);
   const [connectingId, setConnectingId] = useState(null);
+  const [connectingStage, setConnectingStage] = useState(null); // "creating" | "waiting"
   const [error, setError] = useState("");
+
+  const { personal, business } = useMemo(
+    () => groupConnectorsByType(connectors),
+    [connectors]
+  );
+
+  const visibleConnectors = personType === "personal" ? personal : business;
 
   async function handleStart() {
     setError("");
@@ -27,18 +44,41 @@ export default function ConnectBankPage() {
   async function handleSelectConnector(connectorId) {
     setError("");
     setConnectingId(connectorId);
+    setConnectingStage("creating");
     try {
       const data = await createIntegration(connectorId);
-      if (data?.url_to_authenticate) {
-        window.location.href = data.url_to_authenticate;
-      } else {
-        setError("Não foi possível iniciar a conexão. Tente novamente.");
+      if (data?.urlToAuthenticate) {
+        window.location.href = data.urlToAuthenticate;
+        return;
       }
+      await pollIntegrationStatus(data.integrationId);
     } catch (err) {
       setError(err.message || "Não foi possível conectar ao banco. Tente novamente.");
     } finally {
       setConnectingId(null);
+      setConnectingStage(null);
     }
+  }
+
+  async function pollIntegrationStatus(integrationId) {
+    setConnectingStage("waiting");
+
+    for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+      await wait(POLL_INTERVAL_MS);
+      const status = await getIntegrationStatus(integrationId);
+
+      if (status?.urlToAuthenticate) {
+        window.location.href = status.urlToAuthenticate;
+        return;
+      }
+
+      if (status?.status === "login_error") {
+        setError(status.error || "Não foi possível autenticar com o banco. Tente novamente.");
+        return;
+      }
+    }
+
+    setError("A conexão demorou para responder. Tente novamente em instantes.");
   }
 
   return (
@@ -65,18 +105,35 @@ export default function ConnectBankPage() {
 
         {step === "choosing" && (
           <>
-            {connectors.length === 0 ? (
-              <p className="connect-bank__empty">
-                Nenhum banco disponível no momento.
-              </p>
+            <div className="connect-bank__tabs" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={personType === "personal"}
+                className={`connect-bank__tab ${personType === "personal" ? "connect-bank__tab--active" : ""}`}
+                onClick={() => setPersonType("personal")}
+              >
+                Pessoa física
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={personType === "business"}
+                className={`connect-bank__tab ${personType === "business" ? "connect-bank__tab--active" : ""}`}
+                onClick={() => setPersonType("business")}
+              >
+                Pessoa jurídica
+              </button>
+            </div>
+
+            {visibleConnectors.length === 0 ? (
+              <p className="connect-bank__empty">Nenhum banco disponível nessa categoria.</p>
             ) : (
               <ul className="connect-bank__connector-list">
-                {connectors.map((connector) => {
-                  const logoUrl = connector.logo_url || connector.logoUrl;
+                {visibleConnectors.map((connector) => {
+                  const logoUrl = connector.logoUrl;
                   const rawColor = connector.color || "3a3a3a";
-                  const stripeColor = rawColor.startsWith("#")
-                    ? rawColor
-                    : `#${rawColor}`;
+                  const stripeColor = rawColor.startsWith("#") ? rawColor : `#${rawColor}`;
 
                   return (
                     <li key={connector.id}>
@@ -91,18 +148,15 @@ export default function ConnectBankPage() {
                           style={{ backgroundColor: stripeColor }}
                         />
                         {logoUrl && (
-                          <img
-                            src={logoUrl}
-                            alt=""
-                            className="connect-bank__connector-icon"
-                          />
+                          <img src={logoUrl} alt="" className="connect-bank__connector-icon" />
                         )}
-                        <span className="connect-bank__connector-name">
-                          {connector.name}
-                        </span>
+                        <span className="connect-bank__connector-name">{connector.name}</span>
                         {connectingId === connector.id && (
                           <span className="connect-bank__connector-status">
-                            Conectando...
+                            <span className="connect-bank__spinner" />
+                            {connectingStage === "waiting"
+                              ? "Aguardando confirmação do banco..."
+                              : "Conectando..."}
                           </span>
                         )}
                       </button>
@@ -114,9 +168,7 @@ export default function ConnectBankPage() {
           </>
         )}
 
-        <p className="connect-bank__footer">
-          Seguro via Open Finance · Banco Central
-        </p>
+        <p className="connect-bank__footer">Seguro via Open Finance · Banco Central</p>
       </div>
     </div>
   );
