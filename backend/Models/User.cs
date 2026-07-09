@@ -8,9 +8,16 @@ public class User
     public string PhoneNumber { get; set; } = string.Empty;
 
     /// <summary>
-    /// Pode ser CPF (11 dígitos) ou CNPJ (14 dígitos), armazenado apenas números.
+    /// Pode ser CPF (11 dígitos) ou CNPJ (14 dígitos). Guardado criptografado (AES-GCM) —
+    /// o valor em memória (fora do banco) sempre é o texto puro, a conversão é transparente.
     /// </summary>
     public string Document { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Hash determinístico do documento (HMAC-SHA256), usado só para busca/unicidade,
+    /// já que o valor criptografado muda a cada gravação e não permite comparação direta.
+    /// </summary>
+    public string DocumentHash { get; set; } = string.Empty;
 
     public string PasswordHash { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

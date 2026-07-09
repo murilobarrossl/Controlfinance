@@ -8,6 +8,10 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Segredos reais ficam em appsettings.Local.json (gitignorado) ou em variáveis de
+// ambiente — appsettings.json versionado no git só tem placeholders.
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
 // ──────────────────────────────────────────
 //  BANCO DE DADOS
 // ──────────────────────────────────────────
@@ -19,7 +23,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // ──────────────────────────────────────────
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddSingleton<EncryptionService>();
+builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 builder.Services.AddSingleton<RateLimitService>();
 builder.Services.AddHttpClient<EmailService>();
 

@@ -17,14 +17,16 @@ public class AuthService : IAuthService
     private readonly ITokenService _tokenService;
     private readonly EmailService _emailService;
     private readonly RateLimitService _rateLimit;
+    private readonly IEncryptionService _encryption;
 
     public AuthService(AppDbContext db, ITokenService tokenService,
-        EmailService emailService, RateLimitService rateLimit)
+        EmailService emailService, RateLimitService rateLimit, IEncryptionService encryption)
     {
         _db = db;
         _tokenService = tokenService;
         _emailService = emailService;
         _rateLimit = rateLimit;
+        _encryption = encryption;
     }
 
     public async Task<(bool Success, string Error, AuthResponseDto? Data)> RegisterAsync(RegisterRequestDto dto)
@@ -34,7 +36,8 @@ public class AuthService : IAuthService
             return (false, "E-mail já cadastrado.", null);
 
         var cleanDocument = CleanDocument(dto.Document);
-        var docExists = await _db.Users.AnyAsync(u => u.Document == cleanDocument);
+        var documentHash = _encryption.ComputeLookupHash(cleanDocument);
+        var docExists = await _db.Users.AnyAsync(u => u.DocumentHash == documentHash);
         if (docExists)
             return (false, "CPF/CNPJ já cadastrado.", null);
 
@@ -44,6 +47,7 @@ public class AuthService : IAuthService
             Email = dto.Email.ToLower().Trim(),
             PhoneNumber = CleanPhone(dto.PhoneNumber),
             Document = cleanDocument,
+            DocumentHash = documentHash,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
         };
 
@@ -66,10 +70,11 @@ public class AuthService : IAuthService
         if (_rateLimit.IsBlocked(identifier))
             return (false, "Muitas tentativas. Tente novamente em 15 minutos.", null);
 
+        var identifierDocumentHash = _encryption.ComputeLookupHash(CleanDocument(identifier));
         var user = await _db.Users
             .FirstOrDefaultAsync(u =>
                 u.Email == identifier.ToLower() ||
-                u.Document == CleanDocument(identifier));
+                u.DocumentHash == identifierDocumentHash);
 
         if (user is null || !user.IsActive)
         {

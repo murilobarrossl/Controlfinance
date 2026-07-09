@@ -31,12 +31,12 @@ public class TokenService : ITokenService
         var key   = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+        // Só o essencial pra autenticação vai no token — nome e CPF/CNPJ são PII que
+        // nenhuma rota lê a partir do JWT (sempre consultam o banco quando precisam).
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub,   user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim("name",                        user.Name),
-            new Claim("document",                    user.Document),
             new Claim(JwtRegisteredClaimNames.Jti,   Guid.NewGuid().ToString()),
         };
 
