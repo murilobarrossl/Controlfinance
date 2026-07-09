@@ -52,6 +52,9 @@ public class TransactionsController(AppDbContext db) : ControllerBase
         if (!Enum.TryParse<TransactionStatus>(dto.Status, true, out var status))
             return BadRequest(new { message = "Status inválido. Use 'Pending', 'Paid' ou 'Overdue'." });
 
+        if (!await OwnsReferencesAsync(dto.BankAccountId, dto.CategoryId))
+            return BadRequest(new { message = "Conta bancária ou categoria inválida." });
+
         var transaction = new Transaction
         {
             UserId = UserId,
@@ -89,6 +92,9 @@ public class TransactionsController(AppDbContext db) : ControllerBase
         if (!Enum.TryParse<TransactionStatus>(dto.Status, true, out var status))
             return BadRequest(new { message = "Status inválido." });
 
+        if (!await OwnsReferencesAsync(dto.BankAccountId, dto.CategoryId))
+            return BadRequest(new { message = "Conta bancária ou categoria inválida." });
+
         transaction.Name = dto.Name;
         transaction.Description = dto.Description;
         transaction.Type = type;
@@ -112,5 +118,20 @@ public class TransactionsController(AppDbContext db) : ControllerBase
         db.Transactions.Remove(transaction);
         await db.SaveChangesAsync();
         return NoContent();
+    }
+
+    // Impede que um usuário associe a transação a uma conta bancária ou categoria de outra pessoa
+    // (BOLA/IDOR) — os ids vêm do corpo da requisição e não podiam ser confiados sem essa checagem.
+    private async Task<bool> OwnsReferencesAsync(Guid? bankAccountId, Guid? categoryId)
+    {
+        if (bankAccountId.HasValue &&
+            !await db.BankAccounts.AnyAsync(b => b.Id == bankAccountId && b.UserId == UserId))
+            return false;
+
+        if (categoryId.HasValue &&
+            !await db.Categories.AnyAsync(c => c.Id == categoryId && c.UserId == UserId))
+            return false;
+
+        return true;
     }
 }

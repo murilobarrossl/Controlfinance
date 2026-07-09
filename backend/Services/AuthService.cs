@@ -8,7 +8,7 @@ namespace ControlFinance.API.Services;
 public interface IAuthService
 {
     Task<(bool Success, string Error, AuthResponseDto? Data)> RegisterAsync(RegisterRequestDto dto);
-    Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto);
+    Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto, string ipAddress);
 }
 
 public class AuthService : IAuthService
@@ -62,12 +62,13 @@ public class AuthService : IAuthService
         return (true, string.Empty, BuildResponse(user, token));
     }
 
-    public async Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto)
+    public async Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto, string ipAddress)
     {
         var identifier = dto.Identifier.Trim();
 
-        // Rate limiting por identificador
-        if (_rateLimit.IsBlocked(identifier))
+        // Rate limiting por identificador E por IP — só por identificador permitiria testar
+        // senha em várias contas diferentes do mesmo IP sem nunca travar.
+        if (_rateLimit.IsBlocked(identifier, ipAddress))
             return (false, "Muitas tentativas. Tente novamente em 15 minutos.", null);
 
         var identifierDocumentHash = _encryption.ComputeLookupHash(CleanDocument(identifier));
@@ -78,18 +79,18 @@ public class AuthService : IAuthService
 
         if (user is null || !user.IsActive)
         {
-            _rateLimit.RegisterFailure(identifier);
+            _rateLimit.RegisterFailure(identifier, ipAddress);
             return (false, "Credenciais inválidas.", null);
         }
 
         var passwordValid = BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash);
         if (!passwordValid)
         {
-            _rateLimit.RegisterFailure(identifier);
+            _rateLimit.RegisterFailure(identifier, ipAddress);
             return (false, $"Credenciais inválidas. {_rateLimit.RemainingAttempts(identifier)} tentativas restantes.", null);
         }
 
-        _rateLimit.RegisterSuccess(identifier);
+        _rateLimit.RegisterSuccess(identifier, ipAddress);
         var token = _tokenService.GenerateToken(user);
         return (true, string.Empty, BuildResponse(user, token));
     }

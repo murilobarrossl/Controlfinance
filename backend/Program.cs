@@ -1,7 +1,10 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 using ControlFinance.API.Data;
 using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -23,6 +26,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // ──────────────────────────────────────────
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ITokenRevocationService, TokenRevocationService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 builder.Services.AddSingleton<RateLimitService>();
 builder.Services.AddHttpClient<EmailService>();
@@ -47,6 +51,25 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
             ClockSkew                = TimeSpan.Zero
         };
+
+        // Rejeita tokens revogados (logout) mesmo que ainda não tenham expirado —
+        // JWT é stateless por padrão, então essa checagem extra é o que torna o logout real.
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var jti = context.Principal?.FindFirstValue(JwtRegisteredClaimNames.Jti);
+                if (string.IsNullOrEmpty(jti))
+                {
+                    context.Fail("Token sem identificador.");
+                    return;
+                }
+
+                var revocation = context.HttpContext.RequestServices.GetRequiredService<ITokenRevocationService>();
+                if (await revocation.IsRevokedAsync(jti))
+                    context.Fail("Token revogado.");
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
@@ -54,15 +77,17 @@ builder.Services.AddAuthorization();
 // ──────────────────────────────────────────
 //  CORS
 // ──────────────────────────────────────────
+// Origens liberadas vêm de config (Cors:AllowedOrigins) — em produção, adicionar o domínio
+// real do frontend em appsettings.Local.json ou variável de ambiente, sem tocar no código.
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? ["http://localhost:5173", "http://localhost:3000"];
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendPolicy", policy =>
     {
         policy
-            .WithOrigins(
-                "http://localhost:5173",
-                "http://localhost:3000"
-            )
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -119,6 +144,29 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 }
+
+// Confia nos headers X-Forwarded-* do proxy (Cloudflare/DigitalOcean) na frente da aplicação —
+// sem isso, UseHttpsRedirection/UseHsts não enxergam que a conexão já chegou em HTTPS na borda
+// e podem causar loop de redirecionamento.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
+app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
+// Headers de segurança básicos — ASP.NET Core não adiciona nada disso por padrão.
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+    await next();
+});
 
 app.UseCors("FrontendPolicy");
 

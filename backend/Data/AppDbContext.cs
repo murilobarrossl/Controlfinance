@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<CreditCard> CreditCards => Set<CreditCard>();
     public DbSet<Installment> Installments => Set<Installment>();
     public DbSet<PolpIntegration> PolpIntegrations => Set<PolpIntegration>();
+    public DbSet<RevokedToken> RevokedTokens => Set<RevokedToken>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Conversores usados nas colunas que guardam dados sensíveis criptografados (AES-GCM).
@@ -120,6 +121,12 @@ public class AppDbContext : DbContext
              .WithMany(c => c.Installments)
              .HasForeignKey(i => i.CreditCardId)
              .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // REVOKED TOKEN
+        modelBuilder.Entity<RevokedToken>(e =>
+        {
+            e.HasKey(r => r.Jti);
         });
     }
 }
