@@ -7,7 +7,6 @@ namespace ControlFinance.API.Services;
 public interface IEmailService
 {
     Task SendWelcomeEmailAsync(string toEmail, string userName);
-    Task SendPasswordResetEmailAsync(string toEmail, string userName, string resetLink);
     Task SendTransactionAlertEmailAsync(string toEmail, string userName, string transactionName, decimal amount, DateTime dueDate);
     Task SendMonthlySummaryEmailAsync(string toEmail, string userName, decimal totalIncome, decimal totalExpense, decimal balance);
 }
@@ -40,14 +39,11 @@ public class EmailService : IEmailService
     public Task SendWelcomeEmailAsync(string toEmail, string userName) =>
         SendAsync(toEmail, $"Bem-vindo ao Control Finance, {userName}!", WelcomeHtml(userName));
 
-    public Task SendPasswordResetEmailAsync(string toEmail, string userName, string resetLink) =>
-        SendAsync(toEmail, "Redefinição de senha — Control Finance", PasswordResetHtml(userName, resetLink));
-
     public Task SendTransactionAlertEmailAsync(string toEmail, string userName, string transactionName, decimal amount, DateTime dueDate) =>
         SendAsync(toEmail, $"Lembrete: {transactionName} vence em breve", TransactionAlertHtml(userName, transactionName, amount, dueDate));
 
     public Task SendMonthlySummaryEmailAsync(string toEmail, string userName, decimal totalIncome, decimal totalExpense, decimal balance) =>
-        SendAsync(toEmail, $"Seu resumo financeiro de {DateTime.UtcNow:MMMM}", MonthlySummaryHtml(userName, totalIncome, totalExpense, balance));
+        SendAsync(toEmail, $"Seu resumo financeiro de {DateTime.UtcNow.AddMonths(-1):MMMM}", MonthlySummaryHtml(userName, totalIncome, totalExpense, balance));
 
     // ──────────────────────────────────────────
     //  CORE
@@ -130,23 +126,6 @@ public class EmailService : IEmailService
         </ul>
         <p style="color:#444;">Qualquer dúvida, estamos aqui.</p>
         <p style="color:#444;">Equipe Control Finance 🚀</p>
-        """);
-
-    private static string PasswordResetHtml(string name, string link) => BaseHtml("Redefinição de senha", $"""
-        <h2 style="color:#1a1a2e;margin-top:0;">Olá, {name}!</h2>
-        <p style="color:#444;line-height:1.6;">
-          Recebemos uma solicitação para redefinir sua senha.
-          Clique no botão abaixo para criar uma nova senha.
-        </p>
-        <div style="text-align:center;margin:32px 0;">
-          <a href="{link}" style="background:#1a1a2e;color:#fff;text-decoration:none;
-             padding:14px 32px;border-radius:6px;font-weight:700;font-size:16px;">
-            Redefinir senha
-          </a>
-        </div>
-        <p style="color:#999;font-size:13px;">
-          Este link expira em 1 hora. Se você não solicitou, ignore este e-mail.
-        </p>
         """);
 
     private static string TransactionAlertHtml(string name, string txName, decimal amount, DateTime due) =>

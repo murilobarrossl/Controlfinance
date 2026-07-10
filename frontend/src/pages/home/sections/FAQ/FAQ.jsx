@@ -7,7 +7,6 @@ const PERGUNTAS = [
   "Quais bancos são suportados pela sincronização?",
   "Como funciona a cobrança nos planos trimestral e anual?",
   "Preciso instalar alguma coisa ou é tudo online?",
-  "Preciso instalar alguma coisa ou é tudo online?",
   "Como entro em contato com o suporte?",
 ];
 

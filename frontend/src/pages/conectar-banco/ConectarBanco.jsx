@@ -2,15 +2,11 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getConnectors, createIntegration, getIntegrationStatus } from "../../api/polp.js";
 import { groupConnectorsByType } from "../../utils/bankSorting.js";
-import { setPendingIntegrationId, watchPolpConnection } from "../../services/polpConnection.js";
+import { setPendingIntegrationId, watchPolpConnection, wait } from "../../services/polpConnection.js";
 import "./ConectarBanco.css";
 
 const POLL_MAX_ATTEMPTS = 10;
 const POLL_INTERVAL_MS = 1000;
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export default function ConnectBankPage() {
   const navigate = useNavigate();

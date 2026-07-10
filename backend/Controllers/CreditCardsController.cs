@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
 using ControlFinance.API.Models;
@@ -11,10 +10,8 @@ namespace ControlFinance.API.Controllers;
 [ApiController]
 [Route("api/credit-cards")]
 [Authorize]
-public class CreditCardsController(AppDbContext db) : ControllerBase
+public class CreditCardsController(AppDbContext db) : ApiControllerBase
 {
-    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -34,8 +31,7 @@ public class CreditCardsController(AppDbContext db) : ControllerBase
     [HttpGet("{id}/installments")]
     public async Task<IActionResult> GetInstallments(Guid id)
     {
-        var card = await db.CreditCards.FirstOrDefaultAsync(c => c.Id == id && c.UserId == UserId);
-        if (card is null) return NotFound();
+        if (!await db.CreditCards.AnyAsync(c => c.Id == id && c.UserId == UserId)) return NotFound();
 
         var installments = await db.Installments
             .Where(i => i.CreditCardId == id)
@@ -66,8 +62,7 @@ public class CreditCardsController(AppDbContext db) : ControllerBase
         db.CreditCards.Add(card);
         await db.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetAll), new { id = card.Id },
-            new CreditCardDto(card.Id, card.Name, card.Brand, card.CreditLimit, card.UsedLimit, card.CreditLimit, card.ClosingDay, card.DueDay));
+        return CreatedAtAction(nameof(GetAll), new { id = card.Id }, CreditCardDto.FromEntity(card));
     }
 
     [HttpPost("{id}/installments")]
@@ -93,9 +88,7 @@ public class CreditCardsController(AppDbContext db) : ControllerBase
         db.Installments.Add(installment);
         await db.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetInstallments), new { id },
-            new InstallmentDto(installment.Id, installment.Description, installment.InstallmentAmount,
-                installment.CurrentInstallment, installment.TotalInstallments, installment.NextDueDate));
+        return CreatedAtAction(nameof(GetInstallments), new { id }, InstallmentDto.FromEntity(installment));
     }
 
     [HttpDelete("{id}")]

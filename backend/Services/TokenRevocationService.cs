@@ -23,8 +23,7 @@ public class TokenRevocationService : ITokenRevocationService
     {
         // Aproveita a escrita pra descartar entradas já expiradas (evita crescimento indefinido
         // da tabela) — o próprio ValidateLifetime do JWT já rejeitaria esses tokens de qualquer forma.
-        var stale = _db.RevokedTokens.Where(t => t.ExpiresAt < DateTime.UtcNow);
-        _db.RevokedTokens.RemoveRange(stale);
+        await _db.RevokedTokens.Where(t => t.ExpiresAt < DateTime.UtcNow).ExecuteDeleteAsync();
 
         if (!await _db.RevokedTokens.AnyAsync(t => t.Jti == jti))
             _db.RevokedTokens.Add(new RevokedToken { Jti = jti, ExpiresAt = expiresAt });

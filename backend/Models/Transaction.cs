@@ -21,4 +21,7 @@ public class Transaction
     public DateTime DueDate { get; set; }
     public DateTime? PaidAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Quando o lembrete de vencimento por e-mail foi enviado (null = ainda não enviado).</summary>
+    public DateTime? ReminderSentAt { get; set; }
 }

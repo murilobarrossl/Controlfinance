@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
 using ControlFinance.API.Models;
@@ -11,10 +10,8 @@ namespace ControlFinance.API.Controllers;
 [ApiController]
 [Route("api/categories")]
 [Authorize]
-public class CategoriesController(AppDbContext db) : ControllerBase
+public class CategoriesController(AppDbContext db) : ApiControllerBase
 {
-    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {

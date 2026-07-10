@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
 using ControlFinance.API.Models;
@@ -11,10 +10,8 @@ namespace ControlFinance.API.Controllers;
 [ApiController]
 [Route("api/dashboard")]
 [Authorize]
-public class DashboardController(AppDbContext db) : ControllerBase
+public class DashboardController(AppDbContext db) : ApiControllerBase
 {
-    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
     [HttpGet]
     public async Task<IActionResult> GetSummary([FromQuery] Guid? bankAccountId)
     {
@@ -58,12 +55,12 @@ public class DashboardController(AppDbContext db) : ControllerBase
 
         var pending = allTransactions
             .Where(t => t.Status == TransactionStatus.Pending || t.Status == TransactionStatus.Overdue)
-            .Select(t => MapTransaction(t))
+            .Select(TransactionDto.FromEntity)
             .ToList();
 
         var paid = allTransactions
             .Where(t => t.Status == TransactionStatus.Paid)
-            .Select(t => MapTransaction(t))
+            .Select(TransactionDto.FromEntity)
             .ToList();
 
         // gastos por categoria (mês atual, só despesas)
@@ -98,12 +95,7 @@ public class DashboardController(AppDbContext db) : ControllerBase
         CreditCardDashboardDto? cardDto = null;
         if (card is not null)
         {
-            var cardInfo = new CreditCardDto(
-                card.Id, card.Name, card.Brand,
-                card.CreditLimit, card.UsedLimit,
-                card.CreditLimit - card.UsedLimit,
-                card.ClosingDay, card.DueDay
-            );
+            var cardInfo = CreditCardDto.FromEntity(card);
 
             var currentInvoice = card.Installments.Sum(i => i.InstallmentAmount);
 
@@ -114,10 +106,8 @@ public class DashboardController(AppDbContext db) : ControllerBase
 
             var installments = card.Installments
                 .OrderBy(i => i.NextDueDate)
-                .Select(i => new InstallmentDto(
-                    i.Id, i.Description, i.InstallmentAmount,
-                    i.CurrentInstallment, i.TotalInstallments, i.NextDueDate
-                )).ToList();
+                .Select(InstallmentDto.FromEntity)
+                .ToList();
 
             cardDto = new CreditCardDashboardDto(cardInfo, currentInvoice, dueDate, installments);
         }
@@ -134,12 +124,4 @@ public class DashboardController(AppDbContext db) : ControllerBase
 
         return Ok(summary);
     }
-
-    private static TransactionDto MapTransaction(Transaction t) => new(
-        t.Id, t.Name, t.Description,
-        t.Type.ToString(), t.Status.ToString(),
-        t.Amount, t.DueDate, t.PaidAt,
-        t.Category?.Name,
-        t.BankAccount?.Name
-    );
 }

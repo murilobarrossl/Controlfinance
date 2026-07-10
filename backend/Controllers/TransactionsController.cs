@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
 using ControlFinance.API.Models;
@@ -11,10 +10,8 @@ namespace ControlFinance.API.Controllers;
 [ApiController]
 [Route("api/transactions")]
 [Authorize]
-public class TransactionsController(AppDbContext db) : ControllerBase
+public class TransactionsController(AppDbContext db) : ApiControllerBase
 {
-    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? status, [FromQuery] string? type)
     {
@@ -72,12 +69,7 @@ public class TransactionsController(AppDbContext db) : ControllerBase
         db.Transactions.Add(transaction);
         await db.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetAll), new { id = transaction.Id }, new TransactionDto(
-            transaction.Id, transaction.Name, transaction.Description,
-            transaction.Type.ToString(), transaction.Status.ToString(),
-            transaction.Amount, transaction.DueDate, transaction.PaidAt,
-            null, null
-        ));
+        return CreatedAtAction(nameof(GetAll), new { id = transaction.Id }, TransactionDto.FromEntity(transaction));
     }
 
     [HttpPut("{id}")]

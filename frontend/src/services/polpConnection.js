@@ -6,7 +6,7 @@ const PENDING_KEY = "pendingPolpIntegrationId";
 const POLL_MAX_ATTEMPTS = 100;
 const POLL_INTERVAL_MS = 3000;
 
-function wait(ms) {
+export function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 

@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using ControlFinance.API.Data;
 using ControlFinance.API.Models;
 using ControlFinance.API.Services;
@@ -11,10 +10,8 @@ namespace ControlFinance.API.Controllers;
 [ApiController]
 [Route("api/polp")]
 [Authorize]
-public class PolpController(AppDbContext db, IPolpService polp) : ControllerBase
+public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerBase
 {
-    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
     // ──────────────────────────────────────────
     //  GET /api/polp/connectors
     //  Lista as instituições disponíveis (estado "seleção de banco")
@@ -168,7 +165,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ControllerBase
             return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível buscar as contas.", detail = ex.Message });
         }
 
-        if (!db.Categories.Any(c => c.UserId == UserId))
+        if (!await db.Categories.AnyAsync(c => c.UserId == UserId, ct))
         {
             db.Categories.AddRange(
                 new Category { UserId = UserId, Name = "Alimentação", Color = "#FF6B6B" },

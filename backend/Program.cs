@@ -30,6 +30,7 @@ builder.Services.AddScoped<ITokenRevocationService, TokenRevocationService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 builder.Services.AddSingleton<RateLimitService>();
 builder.Services.AddHttpClient<EmailService>();
+builder.Services.AddHostedService<ScheduledEmailService>();
 
 // ──────────────────────────────────────────
 //  JWT

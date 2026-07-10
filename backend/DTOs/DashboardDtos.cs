@@ -1,3 +1,5 @@
+using ControlFinance.API.Models;
+
 namespace ControlFinance.API.DTOs;
 
 // ── BANK ACCOUNT ──────────────────────────────────────
@@ -31,7 +33,16 @@ public record TransactionDto(
     DateTime? PaidAt,
     string? CategoryName,
     string? BankAccountName
-);
+)
+{
+    public static TransactionDto FromEntity(Transaction t) => new(
+        t.Id, t.Name, t.Description,
+        t.Type.ToString(), t.Status.ToString(),
+        t.Amount, t.DueDate, t.PaidAt,
+        t.Category?.Name,
+        t.BankAccount?.Name
+    );
+}
 
 // ── CREDIT CARD ───────────────────────────────────────
 public record CreateCreditCardDto(
@@ -51,7 +62,15 @@ public record CreditCardDto(
     decimal AvailableLimit,
     int ClosingDay,
     int DueDay
-);
+)
+{
+    public static CreditCardDto FromEntity(CreditCard c) => new(
+        c.Id, c.Name, c.Brand,
+        c.CreditLimit, c.UsedLimit,
+        c.CreditLimit - c.UsedLimit,
+        c.ClosingDay, c.DueDay
+    );
+}
 
 // ── INSTALLMENT ───────────────────────────────────────
 public record CreateInstallmentDto(
@@ -71,7 +90,13 @@ public record InstallmentDto(
     int CurrentInstallment,
     int TotalInstallments,
     DateTime NextDueDate
-);
+)
+{
+    public static InstallmentDto FromEntity(Installment i) => new(
+        i.Id, i.Description, i.InstallmentAmount,
+        i.CurrentInstallment, i.TotalInstallments, i.NextDueDate
+    );
+}
 
 // ── DASHBOARD ─────────────────────────────────────────
 public record DashboardSummaryDto(

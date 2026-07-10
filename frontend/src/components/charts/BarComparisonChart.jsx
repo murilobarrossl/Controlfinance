@@ -1,11 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ResponsiveContainer } from "recharts";
-
-const TOOLTIP_STYLE = {
-  backgroundColor: "#1a1a1a",
-  border: "1px solid #2a2a2a",
-  borderRadius: 8,
-  color: "#ffffff",
-};
+import { TOOLTIP_STYLE } from "./chartTheme.js";
 
 export default function BarComparisonChart({ data, height = 220, layout = "horizontal", formatValue }) {
   const isVertical = layout === "vertical";
