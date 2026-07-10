@@ -47,36 +47,52 @@ export default function Investimentos() {
   return (
     <div className="investimentos">
       <Card title="Metas de economia">
+        <p className="investimentos__section-hint">
+          Defina quanto quer juntar, quanto já tem guardado e o prazo (se houver) — depois é só acompanhar a barra de
+          progresso conforme for guardando mais.
+        </p>
         <form className="investimentos__form" onSubmit={handleCreateGoal}>
-          <input
-            type="text"
-            placeholder="Nome da meta"
-            value={goalForm.name}
-            onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })}
-            required
-          />
-          <input
-            type="number"
-            placeholder="Valor alvo"
-            min="0"
-            step="0.01"
-            value={goalForm.targetAmount}
-            onChange={(e) => setGoalForm({ ...goalForm, targetAmount: e.target.value })}
-            required
-          />
-          <input
-            type="number"
-            placeholder="Valor já guardado"
-            min="0"
-            step="0.01"
-            value={goalForm.currentAmount}
-            onChange={(e) => setGoalForm({ ...goalForm, currentAmount: e.target.value })}
-          />
-          <input
-            type="date"
-            value={goalForm.deadline}
-            onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })}
-          />
+          <label className="investimentos__field">
+            <span className="investimentos__field-label">Nome da meta</span>
+            <input
+              type="text"
+              placeholder="Ex: Viagem pra praia"
+              value={goalForm.name}
+              onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })}
+              required
+            />
+          </label>
+          <label className="investimentos__field">
+            <span className="investimentos__field-label">Valor alvo (R$)</span>
+            <input
+              type="number"
+              placeholder="Ex: 5000"
+              min="0"
+              step="0.01"
+              value={goalForm.targetAmount}
+              onChange={(e) => setGoalForm({ ...goalForm, targetAmount: e.target.value })}
+              required
+            />
+          </label>
+          <label className="investimentos__field">
+            <span className="investimentos__field-label">Já guardado (R$, opcional)</span>
+            <input
+              type="number"
+              placeholder="Ex: 1200"
+              min="0"
+              step="0.01"
+              value={goalForm.currentAmount}
+              onChange={(e) => setGoalForm({ ...goalForm, currentAmount: e.target.value })}
+            />
+          </label>
+          <label className="investimentos__field">
+            <span className="investimentos__field-label">Prazo (opcional)</span>
+            <input
+              type="date"
+              value={goalForm.deadline}
+              onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })}
+            />
+          </label>
           <button type="submit">Criar meta</button>
         </form>
 
@@ -109,41 +125,57 @@ export default function Investimentos() {
       </Card>
 
       <Card title="Simulador de financiamento e consórcio">
+        <p className="investimentos__section-hint">
+          Preencha os dados da proposta que você recebeu (do banco, loja ou administradora de consórcio) pra ver o
+          valor da parcela e quanto vai pagar de juros no total, antes de fechar.
+        </p>
         <form className="investimentos__form" onSubmit={handleSimulate}>
-          <input
-            type="number"
-            placeholder="Valor total"
-            min="0"
-            step="0.01"
-            value={simulationForm.totalValue}
-            onChange={(e) => setSimulationForm({ ...simulationForm, totalValue: e.target.value })}
-            required
-          />
-          <input
-            type="number"
-            placeholder="Entrada"
-            min="0"
-            step="0.01"
-            value={simulationForm.downPayment}
-            onChange={(e) => setSimulationForm({ ...simulationForm, downPayment: e.target.value })}
-          />
-          <input
-            type="number"
-            placeholder="Taxa de juros mensal (%)"
-            min="0"
-            step="0.01"
-            value={simulationForm.monthlyRate}
-            onChange={(e) => setSimulationForm({ ...simulationForm, monthlyRate: e.target.value })}
-          />
-          <input
-            type="number"
-            placeholder="Número de parcelas"
-            min="1"
-            step="1"
-            value={simulationForm.installmentsCount}
-            onChange={(e) => setSimulationForm({ ...simulationForm, installmentsCount: e.target.value })}
-            required
-          />
+          <label className="investimentos__field">
+            <span className="investimentos__field-label">Valor total (R$)</span>
+            <input
+              type="number"
+              placeholder="Ex: 30000"
+              min="0"
+              step="0.01"
+              value={simulationForm.totalValue}
+              onChange={(e) => setSimulationForm({ ...simulationForm, totalValue: e.target.value })}
+              required
+            />
+          </label>
+          <label className="investimentos__field">
+            <span className="investimentos__field-label">Entrada (R$, opcional)</span>
+            <input
+              type="number"
+              placeholder="Ex: 5000"
+              min="0"
+              step="0.01"
+              value={simulationForm.downPayment}
+              onChange={(e) => setSimulationForm({ ...simulationForm, downPayment: e.target.value })}
+            />
+          </label>
+          <label className="investimentos__field">
+            <span className="investimentos__field-label">Juros ao mês (%)</span>
+            <input
+              type="number"
+              placeholder="Ex: 1.5 (=1,5% ao mês)"
+              min="0"
+              step="0.01"
+              value={simulationForm.monthlyRate}
+              onChange={(e) => setSimulationForm({ ...simulationForm, monthlyRate: e.target.value })}
+            />
+          </label>
+          <label className="investimentos__field">
+            <span className="investimentos__field-label">Número de parcelas</span>
+            <input
+              type="number"
+              placeholder="Ex: 12"
+              min="1"
+              step="1"
+              value={simulationForm.installmentsCount}
+              onChange={(e) => setSimulationForm({ ...simulationForm, installmentsCount: e.target.value })}
+              required
+            />
+          </label>
           <button type="submit">Simular</button>
         </form>
 

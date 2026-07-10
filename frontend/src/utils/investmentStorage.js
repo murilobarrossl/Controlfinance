@@ -1,8 +1,22 @@
-const STORAGE_KEY = "investmentGoals";
+import { getCurrentUserId } from "./authToken.js";
+
+const LEGACY_KEY = "investmentGoals";
+
+// Versão antiga guardava tudo numa chave só, compartilhada entre qualquer conta
+// logada no mesmo navegador — descarta esse resquício uma vez.
+try {
+  localStorage.removeItem(LEGACY_KEY);
+} catch {
+  // localStorage indisponível — nada a fazer
+}
+
+function storageKey() {
+  return `${LEGACY_KEY}:${getCurrentUserId() ?? "anonymous"}`;
+}
 
 export function getGoals() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey());
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -10,7 +24,7 @@ export function getGoals() {
 }
 
 function persist(goals) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(goals));
+  localStorage.setItem(storageKey(), JSON.stringify(goals));
 }
 
 export function saveGoal({ name, targetAmount, currentAmount, deadline }) {

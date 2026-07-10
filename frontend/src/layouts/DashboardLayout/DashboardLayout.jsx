@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { logout as logoutRequest } from "../../api/auth.js";
 import logo from "../../assets/images/control-finance-transparente-branco.svg";
 import "./DashboardLayout.css";
 
@@ -15,9 +16,14 @@ export default function DashboardLayout() {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
-  function handleLogout() {
+  async function handleLogout() {
+    try {
+      await logoutRequest();
+    } catch {
+      // mesmo se a revogação falhar (ex: token já expirado), ainda limpamos a sessão local
+    }
     logout();
-    navigate("/loginemail");
+    navigate("/loginemail", { replace: true });
   }
 
   return (

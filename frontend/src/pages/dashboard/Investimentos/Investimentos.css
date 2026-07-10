@@ -9,11 +9,31 @@
   font-size: 0.9rem;
 }
 
+.investimentos__section-hint {
+  color: #b8b8b8;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: -0.5rem 0 1.25rem;
+}
+
 .investimentos__form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.75rem;
+  align-items: end;
   margin-bottom: 1.5rem;
+}
+
+.investimentos__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.investimentos__field-label {
+  color: #b8b8b8;
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
 .investimentos__form input {

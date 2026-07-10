@@ -136,10 +136,13 @@ export default function RegisterPage() {
         document: document.replace(/\D/g, ""),
         password,
       });
+
       if (data?.token) {
         setAuthToken(data.token);
+        navigate("/conectar-banco");
+      } else {
+        navigate("/loginemail");
       }
-      navigate("/loginemail");
     } catch (err) {
       setError(err.message || "Não foi possível criar a conta. Tente novamente.");
     } finally {
