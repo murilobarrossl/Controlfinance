@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Card from "../../../components/ui/Card/Card.jsx";
+import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
 import { getGoals, saveGoal, deleteGoal } from "../../../utils/investmentStorage.js";
 import { calculateInstallment, formatCurrency } from "../../../utils/financeMath.js";
 import "./Investimentos.css";
@@ -63,24 +64,18 @@ export default function Investimentos() {
             />
           </label>
           <label className="investimentos__field">
-            <span className="investimentos__field-label">Valor alvo (R$)</span>
-            <input
-              type="number"
+            <span className="investimentos__field-label">Valor alvo</span>
+            <CurrencyInput
               placeholder="Ex: 5000"
-              min="0"
-              step="0.01"
               value={goalForm.targetAmount}
               onChange={(e) => setGoalForm({ ...goalForm, targetAmount: e.target.value })}
               required
             />
           </label>
           <label className="investimentos__field">
-            <span className="investimentos__field-label">Já guardado (R$, opcional)</span>
-            <input
-              type="number"
+            <span className="investimentos__field-label">Já guardado (opcional)</span>
+            <CurrencyInput
               placeholder="Ex: 1200"
-              min="0"
-              step="0.01"
               value={goalForm.currentAmount}
               onChange={(e) => setGoalForm({ ...goalForm, currentAmount: e.target.value })}
             />
@@ -131,24 +126,18 @@ export default function Investimentos() {
         </p>
         <form className="investimentos__form" onSubmit={handleSimulate}>
           <label className="investimentos__field">
-            <span className="investimentos__field-label">Valor total (R$)</span>
-            <input
-              type="number"
+            <span className="investimentos__field-label">Valor total</span>
+            <CurrencyInput
               placeholder="Ex: 30000"
-              min="0"
-              step="0.01"
               value={simulationForm.totalValue}
               onChange={(e) => setSimulationForm({ ...simulationForm, totalValue: e.target.value })}
               required
             />
           </label>
           <label className="investimentos__field">
-            <span className="investimentos__field-label">Entrada (R$, opcional)</span>
-            <input
-              type="number"
+            <span className="investimentos__field-label">Entrada (opcional)</span>
+            <CurrencyInput
               placeholder="Ex: 5000"
-              min="0"
-              step="0.01"
               value={simulationForm.downPayment}
               onChange={(e) => setSimulationForm({ ...simulationForm, downPayment: e.target.value })}
             />

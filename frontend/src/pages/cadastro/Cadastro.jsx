@@ -266,6 +266,9 @@ export default function RegisterPage() {
                 {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
               </button>
             </div>
+            <span className="register__field-hint">
+              Mínimo de 8 caracteres, incluindo letras e números.
+            </span>
           </label>
 
           <label className="register__field">

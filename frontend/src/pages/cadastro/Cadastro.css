@@ -149,6 +149,12 @@
   margin-bottom: 0.5rem;
 }
 
+.register__field-hint {
+  color: #808080;
+  font-size: 0.75rem;
+  margin-top: 0.4rem;
+}
+
 .register__input {
   background-color: #3a3a3a;
   border: none;

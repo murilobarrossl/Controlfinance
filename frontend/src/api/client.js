@@ -14,12 +14,17 @@ export const apiFetch = async (endpoint, options = {}) => {
 
   const text = await response.text();
   let data = {};
-  try { data = text ? JSON.parse(text) : {}; } catch (_) {}
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    // resposta não é JSON válido — segue com data = {}
+  }
 
   if (!response.ok) {
-    const msg = data.message || data.title || data.errors
-      ? (data.message ?? data.title ?? Object.values(data.errors ?? {}).flat().join(", "))
-      : `Erro ${response.status}`;
+    // Erros de validação (ex: ModelState do ASP.NET) trazem a causa específica em "errors" —
+    // isso é mais útil pro usuário do que o "title" genérico ("One or more validation errors...").
+    const fieldErrors = data.errors ? Object.values(data.errors).flat().join(" ") : "";
+    const msg = fieldErrors || data.message || data.title || `Erro ${response.status}`;
     throw new Error(msg);
   }
 
