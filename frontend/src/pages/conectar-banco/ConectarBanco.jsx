@@ -1,8 +1,11 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Button from "../../components/ui/Button/Button.jsx";
+import { ShieldIcon } from "../../components/ui/icons/FeatureIcons.jsx";
 import { getConnectors, createIntegration, getIntegrationStatus } from "../../api/polp.js";
 import { groupConnectorsByType } from "../../utils/bankSorting.js";
 import { setPendingIntegrationId, watchPolpConnection, wait } from "../../services/polpConnection.js";
+import logo from "../../assets/images/control-finance-transparente-branco.svg";
 import "./ConectarBanco.css";
 
 const POLL_MAX_ATTEMPTS = 10;
@@ -53,6 +56,17 @@ export default function ConnectBankPage() {
       setConnectingId(null);
       setConnectingStage(null);
       return;
+    }
+    authWindow.focus();
+
+    // Corta a referência window.opener da aba de autenticação (que logo vai navegar pra uma
+    // página de terceiro — o banco/Polp) sem perder o handle que este script usa pra
+    // escrever, navegar e fechar a aba. Sem isso, a página do banco poderia redirecionar
+    // esta aba original via window.opener.location ("reverse tabnabbing").
+    try {
+      authWindow.opener = null;
+    } catch {
+      // navegadores mais antigos podem não permitir — não é bloqueante
     }
 
     authWindow.document.write(`
@@ -108,6 +122,7 @@ export default function ConnectBankPage() {
   async function openAuthAndWait(integrationId, authUrl, authWindow) {
     setPendingIntegrationId(integrationId);
     authWindow.location.href = authUrl;
+    authWindow.focus();
     setConnectingStage("waiting");
 
     const result = await watchPolpConnection(integrationId);
@@ -124,6 +139,8 @@ export default function ConnectBankPage() {
   return (
     <div className="connect-bank">
       <div className="connect-bank__card">
+        <img src={logo} alt="Control Finance" className="connect-bank__logo" />
+
         <h1 className="connect-bank__title">Conecte sua conta</h1>
         <p className="connect-bank__subtitle">
           Para continuar, vincule seu banco via Open Finance.
@@ -140,15 +157,17 @@ export default function ConnectBankPage() {
         {error && <p className="connect-bank__error">{error}</p>}
 
         {step === "intro" && (
-          <button
+          <Button
+            as="button"
             type="button"
+            variant="primary"
+            size="md"
             className="connect-bank__button"
             onClick={handleStart}
             disabled={loadingConnectors}
           >
-            <span className="connect-bank__button-dot" />
             {loadingConnectors ? "Carregando bancos..." : "Conectar banco"}
-          </button>
+          </Button>
         )}
 
         {step === "choosing" && (
@@ -216,7 +235,10 @@ export default function ConnectBankPage() {
           </>
         )}
 
-        <p className="connect-bank__footer">Seguro via Open Finance · Banco Central</p>
+        <p className="connect-bank__footer">
+          <ShieldIcon />
+          Seguro via Open Finance · Banco Central
+        </p>
       </div>
     </div>
   );

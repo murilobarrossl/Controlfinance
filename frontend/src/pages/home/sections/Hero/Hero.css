@@ -1,20 +1,14 @@
-@font-face {
-  font-family: "Prompt";
-  src: url("/src/assets/fonts/Prompt-Regular.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 .hero {
   position: relative;
-  min-height: 90vh;
+  min-height: 78vh;
   padding: 3rem 2.5rem;
   background-size: cover;
   background-position: center;
   display: flex;
   align-items: flex-end;
   overflow: hidden;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
   font-family: "Prompt", sans-serif;
 }
 
@@ -40,24 +34,23 @@
   opacity: 0.9;
   color: #000000;
   padding: 0.5rem 1rem;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   font-size: 0.9rem;
   margin-bottom: 1.5rem;
 }
 
 .hero__title {
-  font-style: italic;
+  font-weight: 600;
   font-size: 2.75rem;
   line-height: 1.25;
-  color: #ffffff;
+  color: var(--color-text-primary);
   margin: 0 0 1.25rem;
 }
 
 .hero__subtitle {
-  font-style: italic;
   font-size: 1.15rem;
   line-height: 1.5;
-  color: #ffffff;
+  color: var(--color-text-primary);
   margin: 0 0 2rem;
 }
 
@@ -82,34 +75,35 @@
 }
 
 .hero__card {
-  background-color: #3D3D3D;
+  background-color: var(--color-surface-hover);
   opacity: 0.9;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
   padding: 1.25rem 1.5rem;
 }
 
 .hero__card-title {
   display: block;
-  font-style: italic;
-  color: #ed4a31;
+  font-weight: 600;
+  color: var(--color-accent);
   font-size: 0.95rem;
   margin-bottom: 0.5rem;
 }
 
 .hero__card-text {
-  color: #ffffff;
+  color: var(--color-text-primary);
   font-size: 0.95rem;
   line-height: 1.4;
   margin: 0 0 0.75rem;
 }
 
 .hero__card-link {
-  font-style: italic;
-  color: #ffffff;
+  color: var(--color-text-primary);
   font-size: 0.9rem;
   text-decoration: none;
+  transition: color 0.15s ease;
 }
 
 .hero__card-link:hover {
-  color: #ffffff;
+  color: var(--color-text-secondary);
 }

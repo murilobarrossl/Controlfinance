@@ -1,5 +1,6 @@
+import { Link } from "react-router-dom";
 import Button from "../../../../components/ui/Button/Button.jsx";
-import heroBg from "../../../../assets/images/hero-bg.png";
+import heroBg from "../../../../assets/images/hero-bg.webp";
 import "./Hero.css";
 
 export default function Hero() {
@@ -26,10 +27,10 @@ export default function Hero() {
         </p>
 
         <div className="hero__actions">
-          <Button variant="primary" className="hero__cta">
+          <Button as={Link} to="/register" variant="primary" className="hero__cta">
             Comece grátis
           </Button>
-          <Button variant="secondary" className="hero__cta">
+          <Button as="a" href="#planos" variant="secondary" className="hero__cta">
             Ver planos
           </Button>
         </div>

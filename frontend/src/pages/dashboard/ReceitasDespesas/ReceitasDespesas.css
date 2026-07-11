@@ -5,39 +5,49 @@
 }
 
 .receitas-despesas__hint {
-  color: #b8b8b8;
+  color: var(--color-text-secondary);
   font-size: 0.9rem;
 }
 
 .receitas-despesas__error {
-  color: #ed4a31;
+  color: var(--color-accent);
   font-size: 0.9rem;
 }
 
-.receitas-despesas__month-picker {
+.receitas-despesas__window-picker {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 1.25rem;
-  color: #ffffff;
+  color: var(--color-text-primary);
   font-size: 0.95rem;
-  text-transform: capitalize;
 }
 
-.receitas-despesas__month-picker button {
-  border: 1px solid #3a3a3a;
+.receitas-despesas__window-picker button {
+  border: 1px solid var(--color-border-strong);
   background-color: transparent;
-  color: #ffffff;
-  border-radius: 999px;
+  color: var(--color-text-primary);
+  border-radius: var(--radius-sm);
   width: 32px;
   height: 32px;
   cursor: pointer;
   font-size: 1.1rem;
   line-height: 1;
+  transition: background-color 0.15s ease;
 }
 
-.receitas-despesas__month-picker button:hover {
-  background-color: #242424;
+.receitas-despesas__window-picker button:hover:not(:disabled) {
+  background-color: var(--color-surface-hover);
+}
+
+.receitas-despesas__window-picker button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.receitas-despesas__window-picker button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .receitas-despesas__grid {
@@ -47,13 +57,13 @@
 }
 
 .receitas-despesas__highlight {
-  color: #b8b8b8;
+  color: var(--color-text-secondary);
   font-size: 0.85rem;
   margin: 1rem 0 0;
 }
 
 .receitas-despesas__highlight strong {
-  color: #ffffff;
+  color: var(--color-text-primary);
   font-weight: 500;
 }
 

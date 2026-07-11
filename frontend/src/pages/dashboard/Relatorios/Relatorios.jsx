@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getTransactions } from "../../../api/transactions.js";
 import Card from "../../../components/ui/Card/Card.jsx";
+import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import { formatCurrency } from "../../../utils/financeMath.js";
 import "./Relatorios.css";
 
@@ -68,6 +69,8 @@ export default function Relatorios() {
 
   return (
     <div className="relatorios">
+      <SectionHeading kicker="Histórico completo" title="Relatórios" align="left" />
+
       <Card>
         <div className="relatorios__filters">
           <input

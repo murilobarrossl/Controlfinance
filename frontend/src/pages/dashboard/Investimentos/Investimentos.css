@@ -5,12 +5,12 @@
 }
 
 .investimentos__hint {
-  color: #b8b8b8;
+  color: var(--color-text-secondary);
   font-size: 0.9rem;
 }
 
 .investimentos__section-hint {
-  color: #b8b8b8;
+  color: var(--color-text-secondary);
   font-size: 0.85rem;
   line-height: 1.5;
   margin: -0.5rem 0 1.25rem;
@@ -31,35 +31,19 @@
 }
 
 .investimentos__field-label {
-  color: #b8b8b8;
+  color: var(--color-text-secondary);
   font-size: 0.75rem;
   font-weight: 500;
 }
 
 .investimentos__form input {
-  background-color: #3a3a3a;
-  border: 1px solid #3a3a3a;
-  border-radius: 8px;
+  background-color: var(--color-border-strong);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
   padding: 0.65rem 0.85rem;
-  color: #ffffff;
+  color: var(--color-text-primary);
   font-family: inherit;
   font-size: 0.85rem;
-}
-
-.investimentos__form button {
-  border: none;
-  background-color: #ed4a31;
-  color: #ffffff;
-  border-radius: 8px;
-  padding: 0.65rem 1rem;
-  font-family: inherit;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.investimentos__form button:hover {
-  background-color: #d43f28;
 }
 
 .investimentos__goals {
@@ -79,7 +63,7 @@
 }
 
 .investimentos__goal-name {
-  color: #ffffff;
+  color: var(--color-text-primary);
   font-size: 0.92rem;
   font-weight: 500;
 }
@@ -87,50 +71,49 @@
 .investimentos__goal-header button {
   border: none;
   background: transparent;
-  color: #808080;
+  color: var(--color-text-tertiary);
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
 }
 
 .investimentos__goal-header button:hover {
-  color: #ed4a31;
+  color: var(--color-accent);
 }
 
 .investimentos__progress {
   width: 100%;
-  height: 8px;
-  background-color: #2a2a2a;
-  border-radius: 999px;
+  height: 6px;
+  background-color: var(--color-border);
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
 .investimentos__progress-fill {
   height: 100%;
-  background-color: #4ecdc4;
-  border-radius: 999px;
+  background-color: var(--color-income);
 }
 
 .investimentos__goal-meta {
   display: block;
-  color: #808080;
+  color: var(--color-text-tertiary);
   font-size: 0.78rem;
   margin-top: 0.4rem;
 }
 
 .investimentos__simulation p {
-  color: #b8b8b8;
+  color: var(--color-text-secondary);
   font-size: 0.88rem;
   margin: 0 0 0.5rem;
 }
 
 .investimentos__simulation strong {
-  color: #ffffff;
+  color: var(--color-text-primary);
   font-weight: 500;
 }
 
 .investimentos__ai-notice p {
-  color: #b8b8b8;
+  color: var(--color-text-secondary);
   font-size: 0.88rem;
   line-height: 1.6;
   margin: 0;

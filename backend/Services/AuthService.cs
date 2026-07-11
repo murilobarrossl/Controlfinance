@@ -7,7 +7,7 @@ namespace ControlFinance.API.Services;
 
 public interface IAuthService
 {
-    Task<(bool Success, string Error, AuthResponseDto? Data)> RegisterAsync(RegisterRequestDto dto);
+    Task<(bool Success, string Error, AuthResponseDto? Data)> RegisterAsync(RegisterRequestDto dto, string ipAddress);
     Task<(bool Success, string Error, AuthResponseDto? Data)> LoginAsync(LoginRequestDto dto, string ipAddress);
 }
 
@@ -18,28 +18,44 @@ public class AuthService : IAuthService
     private readonly EmailService _emailService;
     private readonly RateLimitService _rateLimit;
     private readonly IEncryptionService _encryption;
+    private readonly ILogger<AuthService> _logger;
 
     public AuthService(AppDbContext db, ITokenService tokenService,
-        EmailService emailService, RateLimitService rateLimit, IEncryptionService encryption)
+        EmailService emailService, RateLimitService rateLimit, IEncryptionService encryption,
+        ILogger<AuthService> logger)
     {
         _db = db;
         _tokenService = tokenService;
         _emailService = emailService;
         _rateLimit = rateLimit;
         _encryption = encryption;
+        _logger = logger;
     }
 
-    public async Task<(bool Success, string Error, AuthResponseDto? Data)> RegisterAsync(RegisterRequestDto dto)
+    public async Task<(bool Success, string Error, AuthResponseDto? Data)> RegisterAsync(RegisterRequestDto dto, string ipAddress)
     {
+        // Mesmo limiter do login, com chaves próprias — evita criação em massa de contas
+        // (ou abuso do envio de e-mail de boas-vindas) sem travar tentativas de login legítimas.
+        var registerIdentifier = $"register:{dto.Email.ToLower()}";
+        var registerIp = $"register:{ipAddress}";
+        if (_rateLimit.IsBlocked(registerIdentifier, registerIp))
+            return (false, "Muitas tentativas de cadastro. Tente novamente em 15 minutos.", null);
+
         var emailExists = await _db.Users.AnyAsync(u => u.Email == dto.Email.ToLower());
         if (emailExists)
+        {
+            _rateLimit.RegisterFailure(registerIdentifier, registerIp);
             return (false, "E-mail já cadastrado.", null);
+        }
 
         var cleanDocument = CleanDocument(dto.Document);
         var documentHash = _encryption.ComputeLookupHash(cleanDocument);
         var docExists = await _db.Users.AnyAsync(u => u.DocumentHash == documentHash);
         if (docExists)
+        {
+            _rateLimit.RegisterFailure(registerIdentifier, registerIp);
             return (false, "CPF/CNPJ já cadastrado.", null);
+        }
 
         var user = new User
         {
@@ -54,11 +70,12 @@ public class AuthService : IAuthService
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
+        _rateLimit.RegisterSuccess(registerIdentifier, registerIp);
         var token = _tokenService.GenerateToken(user);
 
         // Envia email de boas-vindas (não bloqueia o cadastro se falhar)
         try { await _emailService.SendWelcomeEmailAsync(user.Email, user.Name); }
-        catch (Exception ex) { Console.WriteLine($"EMAIL ERROR: {ex.Message}"); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Falha ao enviar e-mail de boas-vindas para {Email}", user.Email); }
         return (true, string.Empty, BuildResponse(user, token));
     }
 

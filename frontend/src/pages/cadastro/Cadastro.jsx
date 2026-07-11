@@ -5,6 +5,7 @@ import { EyeIcon, EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
 import { register } from "../../api/auth.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { applyMask, CNPJ_MASK, getCpfCnpjMask, PHONE_MASK_MOBILE, getPhoneMask } from "../../utils/masks.js";
+import logo from "../../assets/images/control-finance-transparente-branco.svg";
 import "./Cadastro.css";
 
 const STEPS = [
@@ -92,6 +93,10 @@ export default function RegisterPage() {
   return (
     <div className="register">
       <aside className="register__intro">
+        <Link to="/" className="register__logo">
+          <img src={logo} alt="Control Finance" />
+        </Link>
+
         <span className="register__badge">Novo — comece hoje mesmo</span>
         <h1 className="register__title">
           Crie sua conta e
@@ -262,7 +267,8 @@ export default function RegisterPage() {
           <Button
             as="button"
             type="submit"
-            variant="secondary"
+            variant="primary"
+            size="md"
             className="register__submit"
             disabled={submitting}
           >

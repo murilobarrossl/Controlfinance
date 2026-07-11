@@ -1,51 +1,96 @@
 .agente-ia {
-  background-color: #121212;
-  padding: 3rem 2.5rem;
+  background-color: var(--color-bg-alt);
+  padding: 4.5rem 2.5rem;
   font-family: "Prompt", sans-serif;
-  color: #ffffff;
+  color: var(--color-text-primary);
 }
 
-.agente-ia__title {
-  text-align: center;
-  font-style: italic;
-  font-size: 1.5rem;
-  margin-bottom: 2rem;
-}
-
-.agente-ia__block {
-  max-width: 720px;
-  margin: 0 auto 2rem auto;
+.agente-ia__grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 2.5rem;
+  max-width: 1080px;
+  margin: 0 auto;
+  align-items: start;
 }
 
 .agente-ia__subtitle {
-  font-style: italic;
+  font-weight: 600;
   font-size: 1.1rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .agente-ia__list {
-  padding-left: 1.2rem;
+  list-style: none;
+  padding: 0;
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .agente-ia__list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
   font-size: 0.9rem;
-  line-height: 1.6;
+  line-height: 1.55;
   color: #e0e0e0;
-  margin-bottom: 0.5rem;
+}
+
+.agente-ia__check {
+  flex-shrink: 0;
+  color: var(--color-income);
+  font-weight: 700;
+}
+
+.agente-ia__panel {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+}
+
+.agente-ia__panel-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent);
+  margin-bottom: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.agente-ia__panel-icon svg {
+  width: 20px;
+  height: 20px;
+  margin-right: auto;
+}
+
+.agente-ia__panel-title {
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin-bottom: 0.85rem;
 }
 
 .agente-ia__text {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   line-height: 1.6;
-  color: #e0e0e0;
-  margin-bottom: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.85rem;
 }
 
 .agente-ia__text--highlight {
-  color: #e0e0e0;
+  color: var(--color-text-secondary);
+  margin-bottom: 0;
 }
 
 .agente-ia__highlight-label {
-  color: #ed4a31;
+  color: var(--color-accent);
+}
+
+@media (max-width: 860px) {
+  .agente-ia__grid {
+    grid-template-columns: 1fr;
+  }
 }

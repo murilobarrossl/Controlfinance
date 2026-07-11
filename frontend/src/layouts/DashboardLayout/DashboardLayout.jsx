@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { logout as logoutRequest } from "../../api/auth.js";
+import ErrorBoundary from "../../components/ErrorBoundary/ErrorBoundary.jsx";
 import logo from "../../assets/images/control-finance-transparente-branco.svg";
 import "./DashboardLayout.css";
 
@@ -52,7 +53,9 @@ export default function DashboardLayout() {
       </header>
 
       <main className="dashboard-content">
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );

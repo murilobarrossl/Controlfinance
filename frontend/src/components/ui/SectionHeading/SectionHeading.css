@@ -1,0 +1,39 @@
+.section-heading {
+  margin-bottom: 2.75rem;
+}
+
+.section-heading--center {
+  text-align: center;
+}
+
+.section-heading--left {
+  text-align: left;
+}
+
+.section-heading__kicker {
+  display: inline-block;
+  color: var(--color-accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 0.65rem;
+}
+
+.section-heading__title {
+  color: var(--color-text-primary);
+  font-size: 1.85rem;
+  font-weight: 600;
+  margin: 0 0 0.9rem;
+}
+
+.section-heading__bar {
+  display: block;
+  width: 40px;
+  height: 2px;
+  background-color: var(--color-accent);
+}
+
+.section-heading--center .section-heading__bar {
+  margin: 0 auto;
+}

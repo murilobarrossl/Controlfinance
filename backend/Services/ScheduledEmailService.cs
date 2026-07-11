@@ -84,13 +84,22 @@ public class ScheduledEmailService(IServiceScopeFactory scopeFactory, ILogger<Sc
             .Where(u => u.IsActive && (u.LastMonthlySummarySentAt == null || u.LastMonthlySummarySentAt < currentMonthStart))
             .ToListAsync(ct);
 
+        if (users.Count == 0) return;
+
+        // Uma query pra todo mundo em vez de uma por usuário — os valores estão criptografados
+        // no banco, então a soma por tipo é feita em memória depois de trazer as linhas do mês.
+        var userIds = users.Select(u => u.Id).ToList();
+        var monthlyTransactionsByUser = (await db.Transactions
+                .Where(t => userIds.Contains(t.UserId) && t.DueDate >= previousMonthStart && t.DueDate < currentMonthStart)
+                .Select(t => new { t.UserId, t.Type, t.Amount })
+                .ToListAsync(ct))
+            .GroupBy(t => t.UserId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         foreach (var user in users)
         {
-            var monthlyTransactions = await db.Transactions
-                .Where(t => t.UserId == user.Id && t.DueDate >= previousMonthStart && t.DueDate < currentMonthStart)
-                .ToListAsync(ct);
-
-            if (monthlyTransactions.Count == 0) continue; // nada a resumir, não manda e-mail vazio
+            if (!monthlyTransactionsByUser.TryGetValue(user.Id, out var monthlyTransactions))
+                continue; // nada a resumir, não manda e-mail vazio
 
             var income = monthlyTransactions.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
             var expense = monthlyTransactions.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);

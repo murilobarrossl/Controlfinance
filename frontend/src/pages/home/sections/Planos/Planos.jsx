@@ -1,9 +1,10 @@
+import SectionHeading from "../../../../components/ui/SectionHeading/SectionHeading.jsx";
 import "./Planos.css";
 
 export default function Planos() {
   return (
     <section id="planos" className="planos">
-      <h2 className="planos__title">Planos</h2>
+      <SectionHeading kicker="Assinatura" title="Planos" />
 
       <div className="planos__grid">
         {/* Mensal */}
@@ -16,12 +17,12 @@ export default function Planos() {
           <p className="planos__billing-note">cobrado mensalmente</p>
 
           <ul className="planos__benefits">
-            <li>✓ Relatórios e dashboards.</li>
-            <li>✓ Agente de IA financeiro.</li>
-            <li>✓ Planejamentos e metas.</li>
-            <li>✓ Sincronização bancária.</li>
-            <li>✓ Suporte a PF e PJ</li>
-            <li>✓ Gestão de receitas e despesas.</li>
+            <li><span className="planos__check">✓</span> Relatórios e dashboards.</li>
+            <li><span className="planos__check">✓</span> Agente de IA financeiro.</li>
+            <li><span className="planos__check">✓</span> Planejamentos e metas.</li>
+            <li><span className="planos__check">✓</span> Sincronização bancária.</li>
+            <li><span className="planos__check">✓</span> Suporte a PF e PJ</li>
+            <li><span className="planos__check">✓</span> Gestão de receitas e despesas.</li>
           </ul>
 
           <button className="planos__cta">Assine agora mensal</button>
@@ -42,8 +43,8 @@ export default function Planos() {
             Todos os benefícios do mensal e mais:
           </p>
           <ul className="planos__benefits">
-            <li>✓ 10% de economia</li>
-            <li>✓ suporte prioritário</li>
+            <li><span className="planos__check">✓</span> 10% de economia</li>
+            <li><span className="planos__check">✓</span> suporte prioritário</li>
           </ul>
 
           <ul className="planos__extra-notes">
@@ -68,10 +69,10 @@ export default function Planos() {
           </p>
           <ul className="planos__benefits">
             <li>
-              ✓ 20% de economia{" "}
+              <span className="planos__check">✓</span> 20% de economia{" "}
               <span className="planos__highlight-text">— 2 meses grátis</span>
             </li>
-            <li>✓ suporte prioritário com respostas mais rápidas</li>
+            <li><span className="planos__check">✓</span> suporte prioritário com respostas mais rápidas</li>
           </ul>
 
           <ul className="planos__extra-notes">

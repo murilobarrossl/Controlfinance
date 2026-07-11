@@ -1,5 +1,7 @@
 import { useState } from "react";
 import Card from "../../../components/ui/Card/Card.jsx";
+import Button from "../../../components/ui/Button/Button.jsx";
+import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
 import { getGoals, saveGoal, deleteGoal } from "../../../utils/investmentStorage.js";
 import { calculateInstallment, formatCurrency } from "../../../utils/financeMath.js";
@@ -47,6 +49,8 @@ export default function Investimentos() {
 
   return (
     <div className="investimentos">
+      <SectionHeading kicker="Planeje o futuro" title="Investimentos" align="left" />
+
       <Card title="Metas de economia">
         <p className="investimentos__section-hint">
           Defina quanto quer juntar, quanto já tem guardado e o prazo (se houver) — depois é só acompanhar a barra de
@@ -88,7 +92,9 @@ export default function Investimentos() {
               onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })}
             />
           </label>
-          <button type="submit">Criar meta</button>
+          <Button as="button" type="submit" variant="primary" size="md">
+            Criar meta
+          </Button>
         </form>
 
         {goals.length === 0 ? (
@@ -165,7 +171,9 @@ export default function Investimentos() {
               required
             />
           </label>
-          <button type="submit">Simular</button>
+          <Button as="button" type="submit" variant="primary" size="md">
+            Simular
+          </Button>
         </form>
 
         {simulation && (

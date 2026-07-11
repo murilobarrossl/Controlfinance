@@ -95,6 +95,11 @@ public class AppDbContext : DbContext
              .WithMany(c => c.Transactions)
              .HasForeignKey(t => t.CategoryId)
              .OnDelete(DeleteBehavior.SetNull);
+
+            // Cobre o filtro (usuário + intervalo de datas) usado no dashboard, em receitas x
+            // despesas e nos relatórios — sem esse índice composto essas consultas caem num
+            // scan por UserId seguido de ordenação em memória por DueDate.
+            e.HasIndex(t => new { t.UserId, t.DueDate });
         });
 
         // CREDIT CARD

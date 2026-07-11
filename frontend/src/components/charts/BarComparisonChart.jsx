@@ -1,5 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ResponsiveContainer } from "recharts";
-import { TOOLTIP_STYLE } from "./chartTheme.js";
+import { TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE } from "./chartTheme.js";
 
 export default function BarComparisonChart({ data, height = 220, layout = "horizontal", formatValue }) {
   const isVertical = layout === "vertical";
@@ -9,7 +9,7 @@ export default function BarComparisonChart({ data, height = 220, layout = "horiz
       <BarChart
         data={data}
         layout={isVertical ? "vertical" : "horizontal"}
-        margin={{ top: 8, right: 8, left: 0, bottom: 8 }}
+        margin={isVertical ? { top: 8, right: 24, left: 0, bottom: 8 } : { top: 8, right: 8, left: 0, bottom: 8 }}
       >
         <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" vertical={isVertical} horizontal={!isVertical} />
         {isVertical ? (
@@ -27,9 +27,10 @@ export default function BarComparisonChart({ data, height = 220, layout = "horiz
           formatter={(value) => (formatValue ? formatValue(value) : value)}
           contentStyle={TOOLTIP_STYLE}
           labelStyle={{ color: "#b8b8b8" }}
+          itemStyle={TOOLTIP_ITEM_STYLE}
           cursor={{ fill: "#242424" }}
         />
-        <Bar dataKey="value" radius={[6, 6, 6, 6]}>
+        <Bar dataKey="value" radius={[6, 6, 6, 6]} maxBarSize={isVertical ? 22 : 40} barGap={4}>
           {data.map((entry, index) => (
             <Cell key={entry.name ?? index} fill={entry.color || "#ED4A31"} />
           ))}

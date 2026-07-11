@@ -5,12 +5,12 @@
 }
 
 .relatorios__hint {
-  color: #b8b8b8;
+  color: var(--color-text-secondary);
   font-size: 0.9rem;
 }
 
 .relatorios__error {
-  color: #ed4a31;
+  color: var(--color-accent);
   font-size: 0.9rem;
 }
 
@@ -24,72 +24,83 @@
 .relatorios__search {
   flex: 1;
   min-width: 200px;
-  background-color: #3a3a3a;
-  border: 1px solid #3a3a3a;
-  border-radius: 8px;
+  background-color: var(--color-border-strong);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
   padding: 0.6rem 0.9rem;
-  color: #ffffff;
+  color: var(--color-text-primary);
   font-family: inherit;
   font-size: 0.85rem;
 }
 
 .relatorios__select {
-  background-color: #3a3a3a;
-  border: 1px solid #3a3a3a;
-  border-radius: 8px;
+  background-color: var(--color-border-strong);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
   padding: 0.6rem 0.9rem;
-  color: #ffffff;
+  color: var(--color-text-primary);
   font-family: inherit;
   font-size: 0.85rem;
 }
 
 .relatorios__table-wrapper {
   overflow-x: auto;
+  border-radius: var(--radius-md);
 }
 
 .relatorios__table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .relatorios__table th {
   text-align: left;
-  color: #b8b8b8;
+  color: var(--color-text-secondary);
   font-weight: 500;
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #2a2a2a;
+  background-color: var(--color-surface-hover);
+  border-bottom: 1px solid var(--color-border);
   cursor: pointer;
   white-space: nowrap;
 }
 
+.relatorios__table th:first-child {
+  border-top-left-radius: var(--radius-md);
+}
+
+.relatorios__table th:last-child {
+  border-top-right-radius: var(--radius-md);
+}
+
 .relatorios__table th:hover {
-  color: #ffffff;
+  color: var(--color-text-primary);
 }
 
 .relatorios__table td {
-  color: #ffffff;
+  color: var(--color-text-primary);
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #2a2a2a;
+  border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
 }
 
 .relatorios__table tfoot td {
   border-bottom: none;
-  border-top: 1px solid #2a2a2a;
-  color: #b8b8b8;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
 .relatorios__amount--income {
-  color: #4ecdc4;
+  color: var(--color-income);
 }
 
 .relatorios__amount--expense {
-  color: #ed4a31;
+  color: var(--color-accent);
 }
 
 .relatorios__empty {
   text-align: center;
-  color: #808080;
+  color: var(--color-text-tertiary);
 }

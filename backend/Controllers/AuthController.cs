@@ -30,7 +30,8 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto dto)
     {
-        var (success, error, data) = await _authService.RegisterAsync(dto);
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var (success, error, data) = await _authService.RegisterAsync(dto, ipAddress);
 
         if (!success)
         {

@@ -45,23 +45,19 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             .Where(t => t.Type == TransactionType.Expense)
             .Sum(t => t.Amount);
 
-        // contas pendentes e pagas
-        var allTransactions = await db.Transactions
+        // contas pendentes — filtra e ordena no banco em vez de trazer o histórico inteiro da
+        // conta pra memória; PaidTransactions nunca foi consumido pelo frontend, então saiu do DTO.
+        var pendingEntities = await db.Transactions
             .Include(t => t.Category)
             .Include(t => t.BankAccount)
-            .Where(t => t.UserId == UserId && t.BankAccountId == account.Id)
-            .OrderByDescending(t => t.DueDate)
+            .Where(t => t.UserId == UserId
+                     && t.BankAccountId == account.Id
+                     && (t.Status == TransactionStatus.Pending || t.Status == TransactionStatus.Overdue))
+            .OrderBy(t => t.DueDate)
+            .Take(100)
             .ToListAsync();
 
-        var pending = allTransactions
-            .Where(t => t.Status == TransactionStatus.Pending || t.Status == TransactionStatus.Overdue)
-            .Select(TransactionDto.FromEntity)
-            .ToList();
-
-        var paid = allTransactions
-            .Where(t => t.Status == TransactionStatus.Paid)
-            .Select(TransactionDto.FromEntity)
-            .ToList();
+        var pending = pendingEntities.Select(TransactionDto.FromEntity).ToList();
 
         // gastos por categoria (mês atual, só despesas)
         var expensesByCategory = monthlyTransactions
@@ -99,9 +95,11 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
             var currentInvoice = card.Installments.Sum(i => i.InstallmentAmount);
 
-            // próximo vencimento da fatura
+            // próximo vencimento da fatura — clampa pro último dia válido do mês (ex.: DueDay=31
+            // em fevereiro derrubaria o dashboard inteiro com ArgumentOutOfRangeException).
             var today = DateTime.UtcNow;
-            var dueDate = new DateTime(today.Year, today.Month, card.DueDay, 0, 0, 0, DateTimeKind.Utc);
+            var safeDueDay = Math.Min(card.DueDay, DateTime.DaysInMonth(today.Year, today.Month));
+            var dueDate = new DateTime(today.Year, today.Month, safeDueDay, 0, 0, 0, DateTimeKind.Utc);
             if (dueDate < today) dueDate = dueDate.AddMonths(1);
 
             var installments = card.Installments
@@ -117,7 +115,6 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             totalIncome,
             totalExpense,
             pending,
-            paid,
             categoryExpenses,
             cardDto
         );

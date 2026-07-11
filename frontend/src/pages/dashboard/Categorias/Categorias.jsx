@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { getCategories } from "../../../api/categories.js";
 import { getTransactions } from "../../../api/transactions.js";
 import Card from "../../../components/ui/Card/Card.jsx";
+import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
+import CategorySpendBarsChart from "../../../components/charts/CategorySpendBarsChart.jsx";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import "./Categorias.css";
 
@@ -47,6 +49,8 @@ export default function Categorias() {
       .sort((a, b) => b.value - a.value);
   }, [transactions, categories]);
 
+  const totalExpense = useMemo(() => breakdown.reduce((sum, c) => sum + c.value, 0), [breakdown]);
+
   const drillDownTransactions = useMemo(() => {
     if (!selectedCategory) return [];
     return transactions
@@ -59,6 +63,8 @@ export default function Categorias() {
 
   return (
     <div className="categorias">
+      <SectionHeading kicker="Onde seu dinheiro vai" title="Categorias" align="left" />
+
       <div className="categorias__grid">
         <Card title="Despesas por categoria">
           {breakdown.length === 0 ? (
@@ -69,6 +75,8 @@ export default function Categorias() {
               formatValue={formatCurrency}
               data={breakdown}
               onSliceClick={setSelectedCategory}
+              centerLabel={formatCurrency(totalExpense)}
+              showLegend={false}
             />
           )}
         </Card>
@@ -94,6 +102,23 @@ export default function Categorias() {
           </ul>
         </Card>
       </div>
+
+      <Card title="Comparativo por categoria">
+        {breakdown.length === 0 ? (
+          <p className="categorias__hint">Nenhuma despesa categorizada ainda.</p>
+        ) : (
+          <>
+            <p className="categorias__section-hint">
+              Categorias em ordem alfabética — clique numa barra para ver as transações.
+            </p>
+            <CategorySpendBarsChart
+              data={breakdown}
+              formatValue={formatCurrency}
+              onBarClick={setSelectedCategory}
+            />
+          </>
+        )}
+      </Card>
 
       {selectedCategory && (
         <Card title={`Transações — ${selectedCategory}`}>

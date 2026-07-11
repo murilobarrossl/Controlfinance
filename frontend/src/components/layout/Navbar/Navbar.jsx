@@ -23,7 +23,7 @@ export default function Navbar() {
         as={Link}
         to="/register"
         variant="primary"
-        size="md"
+        size="sm"
         className="navbar__cta"
       >
         Abrir conta

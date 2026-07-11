@@ -1,14 +1,6 @@
-@font-face {
-  font-family: "Prompt";
-  src: url("/src/assets/fonts/Prompt-Regular.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 .dashboard-layout {
   min-height: 100vh;
-  background-color: #0d0d0d;
+  background-color: var(--color-bg);
   font-family: "Prompt", sans-serif;
 }
 
@@ -17,8 +9,9 @@
   align-items: center;
   gap: 2rem;
   padding: 1rem 2.5rem;
-  background-color: #1f1f1f;
-  border-bottom: 1px solid #2a2a2a;
+  background-color: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow-nav);
 }
 
 .dashboard-nav__logo {
@@ -35,30 +28,36 @@
 }
 
 .dashboard-nav__tab {
-  color: #b8b8b8;
+  color: var(--color-text-secondary);
   text-decoration: none;
   font-size: 0.9rem;
   white-space: nowrap;
   padding: 0.5rem 0.9rem;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .dashboard-nav__tab:hover {
-  color: #ffffff;
-  background-color: #242424;
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-hover);
+}
+
+.dashboard-nav__tab:focus-visible,
+.dashboard-nav__logout:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .dashboard-nav__tab--active {
-  color: #ffffff;
-  background-color: #ed4a31;
+  color: var(--color-text-primary);
+  background-color: var(--color-accent);
 }
 
 .dashboard-nav__logout {
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--color-border-strong);
   background-color: transparent;
-  color: #b8b8b8;
-  border-radius: 8px;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
   padding: 0.55rem 1rem;
   font-size: 0.85rem;
   font-family: inherit;
@@ -68,8 +67,8 @@
 }
 
 .dashboard-nav__logout:hover {
-  background-color: #242424;
-  color: #ffffff;
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
 }
 
 .dashboard-content {

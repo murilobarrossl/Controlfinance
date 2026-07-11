@@ -1,10 +1,45 @@
+:root {
+  --color-bg: #0d0d0d;
+  --color-bg-alt: #121212;
+  --color-surface: #1a1a1a;
+  --color-surface-alt: #1f1f1f;
+  --color-surface-hover: #242424;
+  --color-border: #2a2a2a;
+  --color-border-strong: #3a3a3a;
+  --color-accent: #ed4a31;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #b8b8b8;
+  --color-text-tertiary: #808080;
+  --color-income: #4ecdc4;
+  --radius-pill: 999px;
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --shadow-panel: none;
+  --shadow-nav: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 84px;
+}
+
 html, body {
   width: 100%;
-  background-color: #121212;
+  background-color: var(--color-bg-alt);
+}
+
+/* Declarado uma única vez aqui — estava repetido de forma idêntica em 6 arquivos CSS diferentes. */
+@font-face {
+  font-family: "Prompt";
+  src: url("/src/assets/fonts/Prompt-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }

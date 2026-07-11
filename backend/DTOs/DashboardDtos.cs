@@ -1,22 +1,30 @@
+using System.ComponentModel.DataAnnotations;
 using ControlFinance.API.Models;
 
 namespace ControlFinance.API.DTOs;
 
 // ── BANK ACCOUNT ──────────────────────────────────────
-public record CreateBankAccountDto(string Name, string? BankCode, decimal Balance);
+public record CreateBankAccountDto(
+    [property: Required(ErrorMessage = "Nome é obrigatório."), MaxLength(100)] string Name,
+    string? BankCode,
+    decimal Balance
+);
 public record BankAccountDto(Guid Id, string Name, string? BankCode, decimal Balance, bool IsActive);
 
 // ── CATEGORY ──────────────────────────────────────────
-public record CreateCategoryDto(string Name, string? Color);
+public record CreateCategoryDto(
+    [property: Required(ErrorMessage = "Nome é obrigatório."), MaxLength(80)] string Name,
+    string? Color
+);
 public record CategoryDto(Guid Id, string Name, string? Color);
 
 // ── TRANSACTION ───────────────────────────────────────
 public record CreateTransactionDto(
-    string Name,
+    [property: Required(ErrorMessage = "Nome é obrigatório."), MaxLength(150)] string Name,
     string? Description,
     string Type,         // "Income" | "Expense"
     string Status,       // "Pending" | "Paid" | "Overdue"
-    decimal Amount,
+    [property: Range(0.01, double.MaxValue, ErrorMessage = "Valor deve ser maior que zero.")] decimal Amount,
     DateTime DueDate,
     Guid? BankAccountId,
     Guid? CategoryId
@@ -46,11 +54,11 @@ public record TransactionDto(
 
 // ── CREDIT CARD ───────────────────────────────────────
 public record CreateCreditCardDto(
-    string Name,
+    [property: Required(ErrorMessage = "Nome é obrigatório."), MaxLength(80)] string Name,
     string? Brand,
-    decimal CreditLimit,
-    int ClosingDay,
-    int DueDay
+    [property: Range(0, double.MaxValue, ErrorMessage = "Limite não pode ser negativo.")] decimal CreditLimit,
+    [property: Range(1, 31, ErrorMessage = "Dia de fechamento deve ser entre 1 e 31.")] int ClosingDay,
+    [property: Range(1, 31, ErrorMessage = "Dia de vencimento deve ser entre 1 e 31.")] int DueDay
 );
 
 public record CreditCardDto(
@@ -75,11 +83,11 @@ public record CreditCardDto(
 // ── INSTALLMENT ───────────────────────────────────────
 public record CreateInstallmentDto(
     Guid CreditCardId,
-    string Description,
-    decimal TotalAmount,
-    int TotalInstallments,
-    int CurrentInstallment,
-    decimal InstallmentAmount,
+    [property: Required(ErrorMessage = "Descrição é obrigatória."), MaxLength(150)] string Description,
+    [property: Range(0.01, double.MaxValue, ErrorMessage = "Valor total deve ser maior que zero.")] decimal TotalAmount,
+    [property: Range(1, int.MaxValue, ErrorMessage = "Total de parcelas deve ser maior que zero.")] int TotalInstallments,
+    [property: Range(1, int.MaxValue, ErrorMessage = "Parcela atual deve ser maior que zero.")] int CurrentInstallment,
+    [property: Range(0.01, double.MaxValue, ErrorMessage = "Valor da parcela deve ser maior que zero.")] decimal InstallmentAmount,
     DateTime NextDueDate
 );
 
@@ -104,7 +112,6 @@ public record DashboardSummaryDto(
     decimal TotalIncome,
     decimal TotalExpense,
     IEnumerable<TransactionDto> PendingTransactions,
-    IEnumerable<TransactionDto> PaidTransactions,
     IEnumerable<CategoryExpenseDto> CategoryExpenses,
     CreditCardDashboardDto? ActiveCard
 );

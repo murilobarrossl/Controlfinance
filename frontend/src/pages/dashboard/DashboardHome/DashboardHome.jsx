@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getDashboardSummary } from "../../../api/dashboard.js";
 import Card from "../../../components/ui/Card/Card.jsx";
+import Button from "../../../components/ui/Button/Button.jsx";
+import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import BarComparisonChart from "../../../components/charts/BarComparisonChart.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
+import { WalletIcon, TrendUpIcon, TrendDownIcon, TargetIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency } from "../../../utils/financeMath.js";
 import "./DashboardHome.css";
 
@@ -44,9 +47,9 @@ export default function DashboardHome() {
     return (
       <Card className="dashboard-home__empty">
         <p>{summary?.message || "Nenhuma conta bancária cadastrada."}</p>
-        <Link to="/conectar-banco" className="dashboard-home__empty-link">
+        <Button as={Link} to="/conectar-banco" variant="primary" size="md">
           Conectar banco
-        </Link>
+        </Button>
       </Card>
     );
   }
@@ -60,25 +63,51 @@ export default function DashboardHome() {
 
   return (
     <div className="dashboard-home">
+      <SectionHeading kicker="Visão geral" title="Dashboard inteligente" align="left" />
+
       <div className="dashboard-home__stats">
         <Card className="dashboard-home__stat">
-          <span className="dashboard-home__stat-label">Saldo da conta</span>
+          <div className="dashboard-home__stat-header">
+            <span className="dashboard-home__stat-icon">
+              <WalletIcon />
+            </span>
+            <span className="dashboard-home__stat-label">Saldo da conta</span>
+          </div>
           <span className="dashboard-home__stat-value">{formatCurrency(activeAccount.balance)}</span>
         </Card>
         <Card className="dashboard-home__stat">
-          <span className="dashboard-home__stat-label">Receitas do mês</span>
+          <div className="dashboard-home__stat-header">
+            <span className="dashboard-home__stat-icon dashboard-home__stat-icon--income">
+              <TrendUpIcon />
+            </span>
+            <span className="dashboard-home__stat-label">Receitas do mês</span>
+          </div>
           <span className="dashboard-home__stat-value dashboard-home__stat-value--income">
             {formatCurrency(totalIncome)}
           </span>
         </Card>
         <Card className="dashboard-home__stat">
-          <span className="dashboard-home__stat-label">Despesas do mês</span>
+          <div className="dashboard-home__stat-header">
+            <span className="dashboard-home__stat-icon dashboard-home__stat-icon--expense">
+              <TrendDownIcon />
+            </span>
+            <span className="dashboard-home__stat-label">Despesas do mês</span>
+          </div>
           <span className="dashboard-home__stat-value dashboard-home__stat-value--expense">
             {formatCurrency(totalExpense)}
           </span>
         </Card>
         <Card className="dashboard-home__stat">
-          <span className="dashboard-home__stat-label">Saldo do mês</span>
+          <div className="dashboard-home__stat-header">
+            <span
+              className={`dashboard-home__stat-icon ${
+                monthlyBalance >= 0 ? "dashboard-home__stat-icon--income" : "dashboard-home__stat-icon--expense"
+              }`}
+            >
+              <TargetIcon />
+            </span>
+            <span className="dashboard-home__stat-label">Saldo do mês</span>
+          </div>
           <span
             className={`dashboard-home__stat-value ${
               monthlyBalance >= 0 ? "dashboard-home__stat-value--income" : "dashboard-home__stat-value--expense"

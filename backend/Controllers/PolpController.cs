@@ -177,14 +177,21 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
             await db.SaveChangesAsync(ct);
         }
 
+        // Carrega as contas já existentes do usuário de uma vez (por PolpAccountId) em vez de
+        // uma query por conta remota — evita N+1 quando a integração tem várias contas.
+        var existingAccounts = await db.BankAccounts
+            .Where(b => b.UserId == UserId && b.PolpAccountId != null)
+            .ToDictionaryAsync(b => b.PolpAccountId!.Value, b => b, ct);
+
         var createdAccounts = new List<BankAccount>();
 
         foreach (var remoteAccount in remoteAccounts)
         {
-            var account = await db.BankAccounts.FirstOrDefaultAsync(
-                b => b.UserId == UserId && b.PolpAccountId == remoteAccount.Id, ct);
-
-            if (account is null)
+            if (existingAccounts.TryGetValue(remoteAccount.Id, out var account))
+            {
+                account.Balance = remoteAccount.Balance;
+            }
+            else
             {
                 account = new BankAccount
                 {
@@ -197,15 +204,25 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
                 };
                 db.BankAccounts.Add(account);
             }
-            else
-            {
-                account.Balance = remoteAccount.Balance;
-            }
 
             createdAccounts.Add(account);
         }
 
         await db.SaveChangesAsync(ct);
+
+        // Categorias do usuário carregadas uma única vez; novas categorias entram no mesmo
+        // dicionário conforme são criadas, sem round-trip ao banco por transação.
+        var categoryByName = await db.Categories
+            .Where(c => c.UserId == UserId)
+            .ToDictionaryAsync(c => c.Name, c => c.Id, ct);
+
+        var accountIds = createdAccounts.Select(a => a.Id).ToList();
+        var existingTransactionKeys = (await db.Transactions
+                .Where(t => t.UserId == UserId && t.BankAccountId != null && accountIds.Contains(t.BankAccountId.Value))
+                .Select(t => new { t.BankAccountId, t.Description })
+                .ToListAsync(ct))
+            .Select(t => (t.BankAccountId!.Value, t.Description))
+            .ToHashSet();
 
         // Busca e persiste as transações de cada conta (apenas a 1ª página por conta,
         // suficiente para o sprint atual; pode paginar depois se necessário)
@@ -225,11 +242,11 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
 
             foreach (var rt in remoteTransactions)
             {
-                var exists = await db.Transactions.AnyAsync(
-                    t => t.UserId == UserId && t.BankAccountId == account.Id && t.Description == rt.Id.ToString(), ct);
-                if (exists) continue;
+                var polpTransactionId = rt.Id.ToString();
+                if (!existingTransactionKeys.Add((account.Id, polpTransactionId)))
+                    continue; // já sincronizada em uma execução anterior
 
-                var categoryId = await ResolveCategoryId(rt.Category?.Description);
+                var categoryId = ResolveCategoryId(categoryByName, rt.Category?.Description);
 
                 db.Transactions.Add(new Transaction
                 {
@@ -237,7 +254,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
                     BankAccountId = account.Id,
                     CategoryId = categoryId,
                     Name = rt.Merchant?.Name ?? rt.Description ?? "Transação",
-                    Description = rt.Id.ToString(), // guarda o id da Polp para evitar duplicar em re-syncs
+                    Description = polpTransactionId, // guarda o id da Polp para evitar duplicar em re-syncs
                     Type = rt.Amount >= 0 ? TransactionType.Income : TransactionType.Expense,
                     Status = rt.Status == "PENDING" ? TransactionStatus.Pending : TransactionStatus.Paid,
                     Amount = Math.Abs(rt.Amount),
@@ -269,17 +286,15 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         return DateTime.UtcNow;
     }
 
-    private async Task<Guid?> ResolveCategoryId(string? categoryName)
+    private Guid? ResolveCategoryId(Dictionary<string, Guid> categoryByName, string? categoryName)
     {
         if (string.IsNullOrWhiteSpace(categoryName)) return null;
 
-        var existing = await db.Categories.FirstOrDefaultAsync(
-            c => c.UserId == UserId && c.Name == categoryName);
-        if (existing is not null) return existing.Id;
+        if (categoryByName.TryGetValue(categoryName, out var existingId)) return existingId;
 
         var created = new Category { UserId = UserId, Name = categoryName, Color = "#999999" };
         db.Categories.Add(created);
-        await db.SaveChangesAsync();
+        categoryByName[categoryName] = created.Id;
         return created.Id;
     }
 

@@ -160,6 +160,23 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// Captura qualquer exceção não tratada antes que ela vaze stack trace na resposta —
+// precisa vir cedo no pipeline pra cobrir os middlewares seguintes também.
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        var feature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+        if (feature?.Error is { } ex)
+            logger.LogError(ex, "Exceção não tratada em {Path}", context.Request.Path);
+
+        context.Response.ContentType = "application/json";
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        await context.Response.WriteAsJsonAsync(new { message = "Ocorreu um erro inesperado. Tente novamente." });
+    });
+});
+
 // Headers de segurança básicos — ASP.NET Core não adiciona nada disso por padrão.
 app.Use(async (context, next) =>
 {
@@ -171,8 +188,11 @@ app.Use(async (context, next) =>
 
 app.UseCors("FrontendPolicy");
 
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

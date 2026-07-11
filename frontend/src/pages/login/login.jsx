@@ -2,10 +2,18 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/ui/Button/Button.jsx";
 import { EyeIcon, EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
+import { ShieldIcon, SyncIcon, SparkleIcon } from "../../components/ui/icons/FeatureIcons.jsx";
 import { login } from "../../api/auth.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { applyMask, CNPJ_MASK, getCpfCnpjMask } from "../../utils/masks.js";
-import "./login.css";
+import logo from "../../assets/images/control-finance-transparente-branco.svg";
+import "./Login.css";
+
+const DESTAQUES = [
+  { Icon: ShieldIcon, texto: "Dados protegidos com criptografia" },
+  { Icon: SyncIcon, texto: "Sincronização via Open Finance" },
+  { Icon: SparkleIcon, texto: "Agente de IA incluso" },
+];
 
 export default function LoginPage({ mode = "email" }) {
   const navigate = useNavigate();
@@ -68,6 +76,10 @@ export default function LoginPage({ mode = "email" }) {
   return (
     <div className="login">
       <aside className="login__intro">
+        <Link to="/" className="login__logo">
+          <img src={logo} alt="Control Finance" />
+        </Link>
+
         <span className="login__badge">Entrar na sua conta</span>
 
         <h1 className="login__title">
@@ -84,6 +96,17 @@ export default function LoginPage({ mode = "email" }) {
         <p className="login__welcome-back">
           Entrar em sua conta — Que bom te ver novamente!
         </p>
+
+        <ul className="login__highlights">
+          {DESTAQUES.map(({ Icon, texto }) => (
+            <li key={texto} className="login__highlight">
+              <span className="login__highlight-icon">
+                <Icon />
+              </span>
+              {texto}
+            </li>
+          ))}
+        </ul>
       </aside>
 
       <div className="login__panel">
@@ -140,30 +163,25 @@ export default function LoginPage({ mode = "email" }) {
             </div>
           </label>
 
-          <Link to="/esqueci-senha" className="login__forgot">
-            Esqueceu a senha?
-          </Link>
-
           {error && <p className="login__error">{error}</p>}
 
           <Button
             as="button"
             type="submit"
-            variant="secondary"
+            variant="primary"
+            size="md"
             className="login__submit"
             disabled={submitting}
           >
             {submitting ? "Entrando..." : "Entrar"}
           </Button>
 
-          <Button
-            as={Link}
+          <Link
             to={isCpf ? "/loginemail" : "/logincpf-cnpj"}
-            variant="secondary"
             className="login__mode-toggle"
           >
             {isCpf ? "Entrar com e-mail" : "Entrar com CPF/CNPJ"}
-          </Button>
+          </Link>
         </form>
       </div>
     </div>

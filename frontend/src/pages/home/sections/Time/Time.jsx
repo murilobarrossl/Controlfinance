@@ -1,14 +1,15 @@
+import SectionHeading from "../../../../components/ui/SectionHeading/SectionHeading.jsx";
 import "./Time.css";
 
 const MEMBROS = [
   { nome: "Murilo Barros", cargo: "Fundador & Desenvolvedor" },
-  { nome: "Igor Accioly Lins", cargo: "Cofundador & Desenvolvedor." },
+  { nome: "Igor Accioly Lins", cargo: "Cofundador & Desenvolvedor" },
 ];
 
 export default function Time() {
   return (
     <section id="time" className="time">
-      <h2 className="time__title">Time</h2>
+      <SectionHeading title="Time" />
 
       <p className="time__text">
         Dois desenvolvedores. Uma ideia. Um produto construído do zero com o
