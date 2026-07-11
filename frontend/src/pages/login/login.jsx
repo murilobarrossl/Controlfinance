@@ -4,6 +4,7 @@ import Button from "../../components/ui/Button/Button.jsx";
 import { EyeIcon, EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
 import { ShieldIcon, SyncIcon, SparkleIcon } from "../../components/ui/icons/FeatureIcons.jsx";
 import { login } from "../../api/auth.js";
+import { getIntegrations } from "../../api/polp.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { applyMask, CNPJ_MASK, getCpfCnpjMask } from "../../utils/masks.js";
 import logo from "../../assets/images/control-finance-transparente-branco.svg";
@@ -65,7 +66,20 @@ export default function LoginPage({ mode = "email" }) {
         setAuthToken(data.token);
       }
 
-      navigate("/conectar-banco");
+      // Só manda pro fluxo de conexão quem ainda não tem banco conectado — mandar todo mundo
+      // pra lá incondicionalmente forçava reconexão a cada login, e cada reconexão podia gerar
+      // uma nova conta local (a Polp às vezes emite um novo id de conta por integração), o que
+      // duplicava transações nas somas de receitas/despesas.
+      let hasAccount = false;
+      try {
+        const accounts = await getIntegrations();
+        hasAccount = Array.isArray(accounts) && accounts.length > 0;
+      } catch {
+        // se a checagem falhar, cai no comportamento antigo (manda conectar) — mais seguro
+        // do que assumir que já tem conta e esconder o fluxo de conexão de quem precisa dele
+      }
+
+      navigate(hasAccount ? "/dashboard" : "/conectar-banco");
     } catch (err) {
       setError(err.message || "Não foi possível entrar. Tente novamente.");
     } finally {

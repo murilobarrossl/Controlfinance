@@ -18,7 +18,11 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         var query = db.Transactions
             .Include(t => t.Category)
             .Include(t => t.BankAccount)
-            .Where(t => t.UserId == UserId);
+            .Where(t => t.UserId == UserId)
+            // Sem isso, transações de uma conta desativada (ex.: duplicada por uma reconexão
+            // com a Polp, ou removida manualmente em BankAccountsController) continuavam entrando
+            // nas somas de receitas/despesas mesmo depois de "desconectada".
+            .Where(t => t.BankAccount == null || t.BankAccount.IsActive);
 
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<TransactionStatus>(status, true, out var s))
             query = query.Where(t => t.Status == s);
