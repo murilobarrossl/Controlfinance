@@ -1,23 +1,27 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
 using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ControlFinance.API.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController : ControllerBase
+public class AuthController : ApiControllerBase
 {
     private readonly IAuthService _authService;
     private readonly ITokenRevocationService _tokenRevocation;
+    private readonly AppDbContext _db;
 
-    public AuthController(IAuthService authService, ITokenRevocationService tokenRevocation)
+    public AuthController(IAuthService authService, ITokenRevocationService tokenRevocation, AppDbContext db)
     {
         _authService = authService;
         _tokenRevocation = tokenRevocation;
+        _db = db;
     }
 
     /// <summary>
@@ -62,6 +66,26 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = error });
 
         return Ok(data);
+    }
+
+    /// <summary>
+    /// Dados do usuário autenticado — usado pra exibir nome/e-mail em telas que não
+    /// vieram de um login/cadastro recente (ex.: sessão já aberta antes, refresh de página).
+    /// </summary>
+    /// GET /api/auth/me
+    [Authorize]
+    [HttpGet("me")]
+    [ProducesResponseType(typeof(UserInfoDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Me(CancellationToken ct)
+    {
+        var user = await _db.Users
+            .Where(u => u.Id == UserId)
+            .Select(u => new UserInfoDto { Id = u.Id, Name = u.Name, Email = u.Email, Document = u.Document })
+            .FirstOrDefaultAsync(ct);
+
+        if (user is null) return NotFound();
+
+        return Ok(user);
     }
 
     /// <summary>

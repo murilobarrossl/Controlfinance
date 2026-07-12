@@ -88,7 +88,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
     {
         var accounts = await db.BankAccounts
             .Where(b => b.UserId == UserId && b.IsActive)
-            .Select(b => new { b.Id, b.Name, b.Balance })
+            .Select(b => new { b.Id, b.Name, b.Balance, b.BankCode })
             .ToListAsync(ct);
 
         return Ok(accounts);
