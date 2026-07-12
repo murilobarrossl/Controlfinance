@@ -4,6 +4,18 @@
   gap: 1.5rem;
 }
 
+.dashboard-home__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.dashboard-home__header .section-heading {
+  margin-bottom: 0;
+}
+
 .dashboard-home__hint {
   color: var(--color-text-secondary);
   font-size: 0.9rem;

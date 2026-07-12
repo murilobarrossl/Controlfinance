@@ -83,10 +83,12 @@ export default function Funcionalidades() {
       <div className="funcionalidades__grid">
         {FUNCIONALIDADES.map(({ titulo, descricao, Icon }) => (
           <div key={titulo} className="funcionalidades__card">
-            <span className="funcionalidades__icon">
-              <Icon />
-            </span>
-            <h3 className="funcionalidades__item-title">{titulo}</h3>
+            <div className="funcionalidades__card-head">
+              <span className="funcionalidades__icon">
+                <Icon />
+              </span>
+              <h3 className="funcionalidades__item-title">{titulo}</h3>
+            </div>
             <p className="funcionalidades__item-desc">{descricao}</p>
           </div>
         ))}

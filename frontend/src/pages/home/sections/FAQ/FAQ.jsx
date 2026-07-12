@@ -4,6 +4,21 @@ import "./FAQ.css";
 
 const PERGUNTAS = [
   {
+    pergunta: "Preciso instalar alguma coisa ou é tudo online?",
+    resposta:
+      "É tudo online. A Control Finance funciona direto no navegador, no computador ou no celular — não precisa baixar nem instalar nada.",
+  },
+  {
+    pergunta: "Como funciona a cobrança nos planos trimestral e anual?",
+    resposta:
+      "No trimestral, a cobrança é de R$134,70 a cada 3 meses (10% de desconto em relação ao mensal). No anual, R$478,80 uma vez por ano (20% de desconto, com 2 meses grátis). Em ambos, a cobrança é recorrente e automática, e você pode cancelar quando quiser — todo plano tem 14 dias grátis para testar antes de decidir.",
+  },
+  {
+    pergunta: "Quais bancos são suportados pela sincronização?",
+    resposta:
+      "A sincronização funciona com os bancos e instituições financeiras participantes do Open Finance no Brasil — a mesma estrutura usada pelos grandes bancos e fintechs para compartilhar dados com segurança.",
+  },
+  {
     pergunta: "Meus dados bancários estão seguros?",
     resposta:
       "Sim. Suas informações financeiras são criptografadas e a sincronização acontece via Open Finance, regulado pelo Banco Central — a Control Finance nunca tem acesso à senha do seu banco e não compartilha seus dados com terceiros.",
@@ -12,21 +27,6 @@ const PERGUNTAS = [
     pergunta: "O Agente de IA funciona para pequenos negócios?",
     resposta:
       "Sim. A plataforma foi pensada para pessoa física e jurídica — o Agente de IA analisa receitas, despesas e fluxo de caixa tanto de quem organiza as finanças pessoais quanto de quem administra um pequeno negócio.",
-  },
-  {
-    pergunta: "Quais bancos são suportados pela sincronização?",
-    resposta:
-      "A sincronização funciona com os bancos e instituições financeiras participantes do Open Finance no Brasil — a mesma estrutura usada pelos grandes bancos e fintechs para compartilhar dados com segurança.",
-  },
-  {
-    pergunta: "Como funciona a cobrança nos planos trimestral e anual?",
-    resposta:
-      "No trimestral, a cobrança é de R$134,70 a cada 3 meses (10% de desconto em relação ao mensal). No anual, R$478,80 uma vez por ano (20% de desconto, com 2 meses grátis). Em ambos, a cobrança é recorrente e automática, e você pode cancelar quando quiser — todo plano tem 14 dias grátis para testar antes de decidir.",
-  },
-  {
-    pergunta: "Preciso instalar alguma coisa ou é tudo online?",
-    resposta:
-      "É tudo online. A Control Finance funciona direto no navegador, no computador ou no celular — não precisa baixar nem instalar nada.",
   },
   {
     pergunta: "Como entro em contato com o suporte?",
@@ -75,10 +75,10 @@ export default function FAQ() {
                 aria-expanded={isOpen}
                 aria-controls={answerId}
               >
+                {pergunta}
                 <span className={`faq__chevron ${isOpen ? "faq__chevron--open" : ""}`}>
                   <ChevronIcon />
                 </span>
-                {pergunta}
               </button>
               <div
                 id={answerId}

@@ -1,14 +1,14 @@
 .currency-input {
   display: flex;
   align-items: center;
-  background-color: #3a3a3a;
-  border: 1px solid #3a3a3a;
-  border-radius: 8px;
+  background-color: var(--color-border-strong);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
   padding-left: 0.85rem;
 }
 
 .currency-input__prefix {
-  color: #b8b8b8;
+  color: var(--color-text-secondary);
   font-size: 0.85rem;
   flex-shrink: 0;
 }

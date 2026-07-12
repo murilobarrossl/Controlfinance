@@ -15,11 +15,18 @@ export default function SobreNos() {
 
       <div className="sobre-nos__grid">
         <div className="sobre-nos__narrative">
+          <div className="sobre-nos__stat">
+            <span className="sobre-nos__stat-number">70%</span>
+            <span className="sobre-nos__stat-label">
+              das famílias brasileiras estão endividadas — a Control Finance
+              existe para mudar essa estatística.
+            </span>
+          </div>
+
           <div className="sobre-nos__block">
             <h3 className="sobre-nos__subtitle">Nossa história</h3>
             <p className="sobre-nos__text">
-              O Brasil tem mais de 70% das famílias endividadas. Não por
-              falta de esforço, mas por falta de acesso a ferramentas
+              Não por falta de esforço, mas por falta de acesso a ferramentas
               financeiras inteligentes e acessíveis. Aplicativos complexos,
               preços altos e soluções fragmentadas sempre foram a realidade
               de quem tentava organizar as finanças — seja pessoa física ou

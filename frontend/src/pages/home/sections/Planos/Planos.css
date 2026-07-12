@@ -9,62 +9,47 @@
   display: flex;
   gap: 1.5rem;
   justify-content: center;
-  align-items: flex-start;
+  align-items: stretch;
   flex-wrap: wrap;
   max-width: 1040px;
   margin: 0 auto;
 }
 
 .planos__card {
-  background-color: #141414;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-panel);
-  padding: 1.75rem 1.5rem;
+  padding: 0 1.5rem 1.75rem;
   width: 290px;
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
 }
 
-.planos__card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  background-color: var(--color-border-strong);
+.planos__card-head {
+  margin: 0 -1.5rem 1.5rem;
+  padding: 1.85rem 1.5rem 1.35rem;
+  background-color: var(--color-surface-hover);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .planos__card--highlight {
-  background-color: var(--color-accent);
-  color: #ffffff;
-  transform: translateY(-0.5rem);
+  border-color: rgba(237, 74, 49, 0.35);
 }
 
-.planos__card--highlight::before {
-  display: none;
-}
-
-.planos__badge {
-  position: absolute;
-  top: -0.9rem;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: #ffffff;
-  color: var(--color-accent);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 0.3rem 0.85rem;
-  border-radius: var(--radius-sm);
+.planos__card--highlight .planos__card-head {
+  background-color: rgba(237, 74, 49, 0.06);
+  border-bottom-color: rgba(237, 74, 49, 0.2);
 }
 
 .planos__plan-name {
-  font-size: 1.1rem;
-  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 0;
 }
 
 .planos__price {
@@ -87,10 +72,6 @@
   font-size: 0.8rem;
   color: #b3b3b3;
   margin-bottom: 1.25rem;
-}
-
-.planos__card--highlight .planos__billing-note {
-  color: #ffe8e2;
 }
 
 .planos__benefits-title {
@@ -122,17 +103,8 @@
   font-weight: 700;
 }
 
-.planos__card--highlight .planos__check {
-  color: #ffffff;
-}
-
-.planos__card--highlight .planos__benefits li {
-  color: #ffffff;
-  font-weight: 600;
-}
-
 .planos__highlight-text {
-  color: #ffe8e2;
+  color: var(--color-accent);
 }
 
 .planos__extra-notes {
@@ -149,16 +121,12 @@
   color: #cfcfcf;
 }
 
-.planos__card--highlight .planos__extra-notes li {
-  color: #ffe8e2;
-}
-
 .planos__cta {
   margin-top: auto;
   background-color: var(--color-accent);
   color: #ffffff;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   padding: 0.75rem 1rem;
   font-family: "Prompt", sans-serif;
   font-weight: 600;
@@ -178,27 +146,10 @@
   outline-offset: 2px;
 }
 
-.planos__card--highlight .planos__cta {
-  background-color: #ffffff;
-  color: var(--color-accent);
-}
-
 .planos__footer-note {
   text-align: center;
   font-size: 0.85rem;
   color: #cfcfcf;
   margin-top: 2.5rem;
   margin-bottom: 0.5rem;
-}
-
-.planos__footer-link {
-  display: block;
-  text-align: center;
-  font-size: 0.85rem;
-  color: var(--color-accent);
-  text-decoration: none;
-}
-
-.planos__footer-link:hover {
-  text-decoration: underline;
 }

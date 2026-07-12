@@ -6,22 +6,11 @@
   align-items: center;
   gap: 1.5rem;
   padding: 1rem 2.5rem;
-  background-color: rgba(31, 31, 31, 0.82);
+  background-color: rgba(13, 13, 13, 0.9);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--color-border);
   font-family: "Prompt", sans-serif;
-}
-
-.navbar::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
-  opacity: 0.6;
 }
 
 .navbar__logo {
@@ -34,9 +23,18 @@
   width: 40px;
 }
 
+.navbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
 .navbar__login {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   color: var(--color-text-primary);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   text-decoration: none;
   white-space: nowrap;
   transition: color 0.15s ease;
@@ -60,30 +58,13 @@
 }
 
 .navbar__link {
-  position: relative;
-  color: var(--color-text-primary);
-  font-size: 0.95rem;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
   text-decoration: none;
   white-space: nowrap;
-  padding-bottom: 0.3rem;
   transition: color 0.15s ease;
 }
 
-.navbar__link::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 100%;
-  bottom: 0;
-  height: 2px;
-  background-color: var(--color-accent);
-  transition: right 0.2s ease;
-}
-
 .navbar__link:hover {
-  color: var(--color-text-secondary);
-}
-
-.navbar__link:hover::after {
-  right: 0;
+  color: var(--color-text-primary);
 }

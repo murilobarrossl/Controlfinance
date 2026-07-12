@@ -9,7 +9,10 @@ export default function Planos() {
       <div className="planos__grid">
         {/* Mensal */}
         <div className="planos__card">
-          <h3 className="planos__plan-name">Mensal</h3>
+          <div className="planos__card-head">
+            <h3 className="planos__plan-name">Mensal</h3>
+          </div>
+
           <p className="planos__price">
             R$49<span className="planos__price-cents">,90</span>
             <span className="planos__price-period">/mês</span>
@@ -28,11 +31,12 @@ export default function Planos() {
           <button className="planos__cta">Assine agora mensal</button>
         </div>
 
-        {/* Trimestral - destaque */}
+        {/* Trimestral */}
         <div className="planos__card planos__card--highlight">
-          <span className="planos__badge">Mais popular</span>
+          <div className="planos__card-head">
+            <h3 className="planos__plan-name">Trimestral</h3>
+          </div>
 
-          <h3 className="planos__plan-name">Trimestral</h3>
           <p className="planos__price">
             R$44<span className="planos__price-cents">,90</span>
             <span className="planos__price-period">/mês</span>
@@ -57,7 +61,10 @@ export default function Planos() {
 
         {/* Anual */}
         <div className="planos__card">
-          <h3 className="planos__plan-name">Anual</h3>
+          <div className="planos__card-head">
+            <h3 className="planos__plan-name">Anual</h3>
+          </div>
+
           <p className="planos__price">
             R$49<span className="planos__price-cents">,90</span>
             <span className="planos__price-period">/mês</span>
@@ -86,9 +93,6 @@ export default function Planos() {
       <p className="planos__footer-note">
         14 dias grátis em qualquer plano. Cancele quando quiser.
       </p>
-      <a href="#beneficios-assinatura" className="planos__footer-link">
-        clique aqui para entender os benefícios de assinar a control finance
-      </a>
     </section>
   );
 }

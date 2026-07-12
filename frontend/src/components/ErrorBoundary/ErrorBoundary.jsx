@@ -1,4 +1,5 @@
 import { Component } from "react";
+import Button from "../ui/Button/Button.jsx";
 import "./ErrorBoundary.css";
 
 export default class ErrorBoundary extends Component {
@@ -26,9 +27,9 @@ export default class ErrorBoundary extends Component {
             Não conseguimos carregar esta página. Tente recarregar — se o problema continuar,
             entre em contato com o suporte.
           </p>
-          <button type="button" className="error-boundary__button" onClick={this.handleReload}>
+          <Button as="button" type="button" variant="outline" size="sm" onClick={this.handleReload}>
             Recarregar página
-          </button>
+          </Button>
         </div>
       );
     }

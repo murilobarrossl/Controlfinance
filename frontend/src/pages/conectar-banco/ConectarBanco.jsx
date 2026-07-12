@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/ui/Button/Button.jsx";
-import { ShieldIcon } from "../../components/ui/icons/FeatureIcons.jsx";
+import { ShieldIcon, SyncIcon } from "../../components/ui/icons/FeatureIcons.jsx";
+import { EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
 import { getConnectors, createIntegration, getIntegrationStatus } from "../../api/polp.js";
 import { groupConnectorsByType } from "../../utils/bankSorting.js";
 import { setPendingIntegrationId, watchPolpConnection, wait } from "../../services/polpConnection.js";
@@ -235,11 +236,22 @@ export default function ConnectBankPage() {
           </>
         )}
 
-        <p className="connect-bank__footer">
-          <ShieldIcon />
-          Seguro via Open Finance · Banco Central
-        </p>
       </div>
+
+      <ul className="connect-bank__security">
+        <li>
+          <ShieldIcon />
+          Conexão via Open Finance, regulamentada pelo Banco Central
+        </li>
+        <li>
+          <EyeSlashIcon />
+          Nunca vemos nem guardamos a senha do seu banco
+        </li>
+        <li>
+          <SyncIcon />
+          Você pode desconectar sua conta quando quiser
+        </li>
+      </ul>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { logout as logoutRequest } from "../../api/auth.js";
 import ErrorBoundary from "../../components/ErrorBoundary/ErrorBoundary.jsx";
+import Button from "../../components/ui/Button/Button.jsx";
 import logo from "../../assets/images/control-finance-transparente-branco.svg";
 import "./DashboardLayout.css";
 
@@ -47,9 +48,9 @@ export default function DashboardLayout() {
           ))}
         </nav>
 
-        <button type="button" className="dashboard-nav__logout" onClick={handleLogout}>
+        <Button as="button" type="button" variant="outline" size="sm" onClick={handleLogout}>
           Sair
-        </button>
+        </Button>
       </header>
 
       <main className="dashboard-content">

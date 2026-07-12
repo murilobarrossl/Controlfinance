@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getDashboardSummary } from "../../../api/dashboard.js";
+import { getIntegrations, getConnectors } from "../../../api/polp.js";
+import { useAuth } from "../../../context/AuthContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import BarComparisonChart from "../../../components/charts/BarComparisonChart.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
+import AccountSwitcher from "../../../components/dashboard/AccountSwitcher/AccountSwitcher.jsx";
 import { WalletIcon, TrendUpIcon, TrendDownIcon, TargetIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency } from "../../../utils/financeMath.js";
 import "./DashboardHome.css";
@@ -29,16 +32,32 @@ function buildDonutData(categoryExpenses) {
 }
 
 export default function DashboardHome() {
+  const { user } = useAuth();
+  const [accounts, setAccounts] = useState([]);
+  const [connectors, setConnectors] = useState([]);
+  const [selectedAccountId, setSelectedAccountId] = useState(null);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    getDashboardSummary()
+    // Lista de contas e conectores são só pro seletor de banco — se falhar, o
+    // dashboard segue funcionando normalmente com a conta ativa padrão.
+    getIntegrations().then(setAccounts).catch(() => {});
+    getConnectors().then(setConnectors).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    getDashboardSummary(selectedAccountId)
       .then(setSummary)
       .catch((err) => setError(err.message || "Não foi possível carregar o dashboard."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [selectedAccountId]);
+
+  function handleSelectAccount(accountId) {
+    setLoading(true);
+    setSelectedAccountId(accountId);
+  }
 
   if (loading) return <p className="dashboard-home__hint">Carregando dashboard...</p>;
   if (error) return <p className="dashboard-home__error">{error}</p>;
@@ -60,10 +79,24 @@ export default function DashboardHome() {
     .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
     .slice(0, 5);
   const donutData = buildDonutData(categoryExpenses);
+  const firstName = user?.name?.split(" ")[0];
 
   return (
     <div className="dashboard-home">
-      <SectionHeading kicker="Visão geral" title="Dashboard inteligente" align="left" />
+      <div className="dashboard-home__header">
+        <SectionHeading
+          kicker="Visão geral"
+          title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"}
+          align="left"
+        />
+
+        <AccountSwitcher
+          accounts={accounts}
+          activeAccountId={activeAccount.id}
+          connectors={connectors}
+          onSelect={handleSelectAccount}
+        />
+      </div>
 
       <div className="dashboard-home__stats">
         <Card className="dashboard-home__stat">

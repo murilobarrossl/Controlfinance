@@ -1,7 +1,9 @@
 .connect-bank {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1.75rem;
   min-height: 100vh;
   padding: 2rem;
   background-color: var(--color-bg-alt);
@@ -54,20 +56,31 @@
   cursor: not-allowed;
 }
 
-.connect-bank__footer {
+.connect-bank__security {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  color: var(--color-text-tertiary);
-  font-size: 0.85rem;
-  margin: 1.5rem 0 0;
+  flex-direction: column;
+  gap: 0.7rem;
+  width: 100%;
+  max-width: 460px;
 }
 
-.connect-bank__footer svg {
-  width: 14px;
-  height: 14px;
+.connect-bank__security li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.83rem;
+  line-height: 1.4;
+}
+
+.connect-bank__security svg {
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
+  color: var(--color-income);
 }
 
 .connect-bank__error {
