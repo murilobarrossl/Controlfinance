@@ -6,7 +6,7 @@ export default function PoliticaDePrivacidade() {
       <p>
         Esta Política de Privacidade explica como o Control Finance coleta, usa, armazena e
         protege seus dados pessoais, em conformidade com a Lei Geral de Proteção de Dados
-        (Lei nº 13.709/2018 — LGPD).
+        (Lei nº 13.709/2018, LGPD).
       </p>
 
       <h2>1. Dados que coletamos</h2>
@@ -18,7 +18,7 @@ export default function PoliticaDePrivacidade() {
 
       <h2>2. Como protegemos seus dados</h2>
       <p>
-        Dados sensíveis — como CPF/CNPJ e valores financeiros — são armazenados de forma
+        Dados sensíveis (como CPF/CNPJ e valores financeiros) são armazenados de forma
         criptografada em nosso banco de dados. O CPF/CNPJ é adicionalmente protegido por um
         hash de busca que impede sua recuperação a partir do banco de dados. Senhas nunca
         são armazenadas em texto puro.

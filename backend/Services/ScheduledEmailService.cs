@@ -86,7 +86,7 @@ public class ScheduledEmailService(IServiceScopeFactory scopeFactory, ILogger<Sc
 
         if (users.Count == 0) return;
 
-        // Uma query pra todo mundo em vez de uma por usuário — os valores estão criptografados
+        // Uma query pra todo mundo em vez de uma por usuário: os valores estão criptografados
         // no banco, então a soma por tipo é feita em memória depois de trazer as linhas do mês.
         var userIds = users.Select(u => u.Id).ToList();
         var monthlyTransactionsByUser = (await db.Transactions

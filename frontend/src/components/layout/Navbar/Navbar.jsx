@@ -13,7 +13,7 @@ const NAV_LINKS = [
 ];
 
 export default function Navbar() {
-  // Clicar na logo já estando na home não navega pra lugar nenhum (mesma rota) — sem isso,
+  // Clicar na logo já estando na home não navega pra lugar nenhum (mesma rota): sem isso,
   // não tinha como voltar pro topo da página sem usar o scroll manual.
   function handleLogoClick() {
     window.scrollTo({ top: 0, behavior: "smooth" });

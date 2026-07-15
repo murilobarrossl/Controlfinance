@@ -4,7 +4,7 @@ import "./AgenteIA.css";
 
 const CAPACIDADES = [
   "Explicar termos e conceitos financeiros de forma simples",
-  "Simular qualquer modalidade de crédito e investimento — financiamentos, empréstimos, consórcios, parcelas e muito mais",
+  "Simular qualquer modalidade de crédito e investimento: financiamentos, empréstimos, consórcios, parcelas e muito mais",
   "Analisar sua situação financeira atual e sugerir melhorias",
   "Criar planejamentos personalizados de economia e investimento",
   "Pesquisar o mercado financeiro e indicar onde investir baseado no seu perfil",
@@ -39,15 +39,15 @@ export default function AgenteIA() {
             ambiente seguro e criptografado. Seus dados pessoais, saldo e
             transações nunca são compartilhados com terceiros. A
             inteligência artificial processa apenas o necessário para
-            responder sua pergunta — sem armazenar histórico de conversas
+            responder sua pergunta, sem armazenar histórico de conversas
             fora da plataforma.
           </p>
           <p className="agente-ia__text agente-ia__text--highlight">
             <span className="agente-ia__highlight-label">
               Como funciona na prática:
             </span>{" "}
-            O agente acessa os dados reais da sua conta — receitas,
-            despesas, saldo e histórico — e usa essas informações para dar
+            O agente acessa os dados reais da sua conta (receitas,
+            despesas, saldo e histórico) e usa essas informações para dar
             respostas personalizadas, não genéricas. Você não precisa
             explicar sua situação do zero.
           </p>

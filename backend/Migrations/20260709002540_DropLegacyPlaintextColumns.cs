@@ -11,7 +11,7 @@ namespace ControlFinance.API.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             // As colunas antigas em texto puro já foram zeradas pelo backfill da migration
-            // anterior (EncryptionBackfill) — os valores reais só existem nas colunas
+            // anterior (EncryptionBackfill); os valores reais só existem nas colunas
             // *Encrypted a partir daqui. Sem isso, INSERTs novos falham (NOT NULL órfão).
             migrationBuilder.DropColumn(name: "Balance", table: "BankAccounts");
             migrationBuilder.DropColumn(name: "Amount", table: "Transactions");

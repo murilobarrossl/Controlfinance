@@ -77,13 +77,13 @@ export default function Planos() {
           <ul className="planos__benefits">
             <li>
               <span className="planos__check">✓</span> 20% de economia{" "}
-              <span className="planos__highlight-text">— 2 meses grátis</span>
+              <span className="planos__highlight-text">(2 meses grátis)</span>
             </li>
             <li><span className="planos__check">✓</span> suporte prioritário com respostas mais rápidas</li>
           </ul>
 
           <ul className="planos__extra-notes">
-            <li>Economia: 20% off - 2 meses grátis</li>
+            <li>Economia: 20% off (2 meses grátis)</li>
           </ul>
 
           <button className="planos__cta">Assine agora anual</button>

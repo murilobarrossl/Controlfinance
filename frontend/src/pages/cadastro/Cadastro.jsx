@@ -97,7 +97,7 @@ export default function RegisterPage() {
           <img src={logo} alt="Control Finance" />
         </Link>
 
-        <span className="register__badge">Novo — comece hoje mesmo</span>
+        <span className="register__badge">Novo: comece hoje mesmo</span>
         <h1 className="register__title">
           Crie sua conta e
           <br />

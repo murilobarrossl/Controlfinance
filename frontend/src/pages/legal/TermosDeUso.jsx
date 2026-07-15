@@ -42,7 +42,7 @@ export default function TermosDeUso() {
 
       <h2>5. Limitação de responsabilidade</h2>
       <p>
-        O Control Finance é uma ferramenta de organização e visualização financeira — não
+        O Control Finance é uma ferramenta de organização e visualização financeira. Não
         somos uma instituição financeira, não custodiamos recursos e não realizamos
         transações em seu nome. Decisões financeiras tomadas com base nas informações da
         plataforma são de sua exclusiva responsabilidade.

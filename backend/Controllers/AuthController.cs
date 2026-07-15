@@ -69,7 +69,7 @@ public class AuthController : ApiControllerBase
     }
 
     /// <summary>
-    /// Dados do usuário autenticado — usado pra exibir nome/e-mail em telas que não
+    /// Dados do usuário autenticado, usado pra exibir nome/e-mail em telas que não
     /// vieram de um login/cadastro recente (ex.: sessão já aberta antes, refresh de página).
     /// </summary>
     /// GET /api/auth/me
@@ -89,7 +89,7 @@ public class AuthController : ApiControllerBase
     }
 
     /// <summary>
-    /// Revoga o token atual — sem isso, "sair" só apagava o token no navegador e ele
+    /// Revoga o token atual: sem isso, "sair" só apagava o token no navegador e ele
     /// continuava válido (JWT é stateless) até expirar sozinho.
     /// </summary>
     /// POST /api/auth/logout

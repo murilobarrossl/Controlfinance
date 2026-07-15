@@ -1,11 +1,11 @@
-# Control Finance — Backend API
+# Control Finance - Backend API
 
 ## Stack
-- **ASP.NET Core 8** — Web API
-- **PostgreSQL** — Banco de dados
-- **Entity Framework Core** — ORM + Migrations
-- **JWT** — Autenticação stateless
-- **BCrypt** — Hash de senhas
+- **ASP.NET Core 8** - Web API
+- **PostgreSQL** - Banco de dados
+- **Entity Framework Core** - ORM + Migrations
+- **JWT** - Autenticação stateless
+- **BCrypt** - Hash de senhas
 
 ---
 
@@ -34,7 +34,7 @@
      "SecretKey": "COLOQUE_UMA_CHAVE_FORTE_AQUI_COM_32_CHARS+"
    }
    ```
-   > ⚠️ Em produção, use variáveis de ambiente ou Azure Key Vault — nunca versione a chave real.
+   > ⚠️ Em produção, use variáveis de ambiente ou Azure Key Vault - nunca versione a chave real.
 
 4. **Restaure os pacotes:**
    ```bash
@@ -63,7 +63,7 @@
 | POST   | `/api/auth/register`  | `name, email, phoneNumber, document, password`          | `201` + JWT       |
 | POST   | `/api/auth/login`     | `identifier` (e-mail ou CPF/CNPJ), `password`           | `200` + JWT       |
 
-### Exemplo — Register
+### Exemplo - Register
 ```json
 POST /api/auth/register
 {
@@ -75,7 +75,7 @@ POST /api/auth/register
 }
 ```
 
-### Exemplo — Login (por e-mail ou documento)
+### Exemplo - Login (por e-mail ou documento)
 ```json
 POST /api/auth/login
 {

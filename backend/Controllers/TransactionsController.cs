@@ -16,8 +16,6 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
     public async Task<IActionResult> GetAll([FromQuery] string? status, [FromQuery] string? type)
     {
         var query = db.Transactions
-            .Include(t => t.Category)
-            .Include(t => t.BankAccount)
             .Where(t => t.UserId == UserId)
             // Sem isso, transações de uma conta desativada (ex.: duplicada por uma reconexão
             // com a Polp, ou removida manualmente em BankAccountsController) continuavam entrando
@@ -30,8 +28,15 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, true, out var tp))
             query = query.Where(t => t.Type == tp);
 
+        // Cap de segurança: Categorias/Relatórios/ReceitasDespesas hoje esperam a lista
+        // completa para agregar no cliente, então isso não pagina de verdade, só limita o pior
+        // caso (uma conta com muitos anos de histórico sincronizado da Polp). Paginação de
+        // verdade exige repensar esses três telas para agregar no backend, não só aqui.
+        const int MaxResults = 2000;
+
         var result = await query
             .OrderByDescending(t => t.DueDate)
+            .Take(MaxResults)
             .Select(t => new TransactionDto(
                 t.Id, t.Name, t.Description,
                 t.Type.ToString(), t.Status.ToString(),
@@ -117,7 +122,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
     }
 
     // Impede que um usuário associe a transação a uma conta bancária ou categoria de outra pessoa
-    // (BOLA/IDOR) — os ids vêm do corpo da requisição e não podiam ser confiados sem essa checagem.
+    // (BOLA/IDOR): os ids vêm do corpo da requisição e não podiam ser confiados sem essa checagem.
     private async Task<bool> OwnsReferencesAsync(Guid? bankAccountId, Guid? categoryId)
     {
         if (bankAccountId.HasValue &&

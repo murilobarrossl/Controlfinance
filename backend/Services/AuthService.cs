@@ -13,6 +13,11 @@ public interface IAuthService
 
 public class AuthService : IAuthService
 {
+    // Usado para rodar o BCrypt mesmo quando o usuário não existe: sem isso, a resposta
+    // volta mais rápido para identificadores inexistentes (não roda o Verify), o que vaza
+    // pelo tempo de resposta se aquele e-mail/CPF tem conta ou não.
+    private static readonly string DummyPasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString());
+
     private readonly AppDbContext _db;
     private readonly ITokenService _tokenService;
     private readonly EmailService _emailService;
@@ -34,14 +39,16 @@ public class AuthService : IAuthService
 
     public async Task<(bool Success, string Error, AuthResponseDto? Data)> RegisterAsync(RegisterRequestDto dto, string ipAddress)
     {
-        // Mesmo limiter do login, com chaves próprias — evita criação em massa de contas
+        var normalizedEmail = dto.Email.Trim().ToLower();
+
+        // Mesmo limiter do login, com chaves próprias: evita criação em massa de contas
         // (ou abuso do envio de e-mail de boas-vindas) sem travar tentativas de login legítimas.
-        var registerIdentifier = $"register:{dto.Email.ToLower()}";
+        var registerIdentifier = $"register:{normalizedEmail}";
         var registerIp = $"register:{ipAddress}";
         if (_rateLimit.IsBlocked(registerIdentifier, registerIp))
             return (false, "Muitas tentativas de cadastro. Tente novamente em 15 minutos.", null);
 
-        var emailExists = await _db.Users.AnyAsync(u => u.Email == dto.Email.ToLower());
+        var emailExists = await _db.Users.AnyAsync(u => u.Email == normalizedEmail);
         if (emailExists)
         {
             _rateLimit.RegisterFailure(registerIdentifier, registerIp);
@@ -60,7 +67,7 @@ public class AuthService : IAuthService
         var user = new User
         {
             Name = dto.Name.Trim(),
-            Email = dto.Email.ToLower().Trim(),
+            Email = normalizedEmail,
             PhoneNumber = CleanPhone(dto.PhoneNumber),
             Document = cleanDocument,
             DocumentHash = documentHash,
@@ -83,7 +90,7 @@ public class AuthService : IAuthService
     {
         var identifier = dto.Identifier.Trim();
 
-        // Rate limiting por identificador E por IP — só por identificador permitiria testar
+        // Rate limiting por identificador E por IP: só por identificador permitiria testar
         // senha em várias contas diferentes do mesmo IP sem nunca travar.
         if (_rateLimit.IsBlocked(identifier, ipAddress))
             return (false, "Muitas tentativas. Tente novamente em 15 minutos.", null);
@@ -94,14 +101,12 @@ public class AuthService : IAuthService
                 u.Email == identifier.ToLower() ||
                 u.DocumentHash == identifierDocumentHash);
 
-        if (user is null || !user.IsActive)
-        {
-            _rateLimit.RegisterFailure(identifier, ipAddress);
-            return (false, "Credenciais inválidas.", null);
-        }
+        // Roda o BCrypt mesmo quando o usuário não existe (contra o hash dummy), e usa a
+        // mesma mensagem de erro nos dois casos: senão dá pra descobrir se um e-mail/CPF
+        // tem conta só pelo texto da resposta (ou pelo tempo, se pulasse o Verify aqui).
+        var passwordValid = BCrypt.Net.BCrypt.Verify(dto.Password, user?.PasswordHash ?? DummyPasswordHash);
 
-        var passwordValid = BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash);
-        if (!passwordValid)
+        if (user is null || !user.IsActive || !passwordValid)
         {
             _rateLimit.RegisterFailure(identifier, ipAddress);
             return (false, $"Credenciais inválidas. {_rateLimit.RemainingAttempts(identifier)} tentativas restantes.", null);

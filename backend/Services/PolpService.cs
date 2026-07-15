@@ -237,7 +237,7 @@ public class PolpService : IPolpService
         if (resp.IsSuccessStatusCode) return;
 
         var content = await resp.Content.ReadAsStringAsync();
-        _logger.LogError("Polp API error ao {Action}: {Status} - {Body}", action, resp.StatusCode, content);
+        _logger.LogError("Polp API error ao {Action}: {Status}, {Body}", action, resp.StatusCode, content);
         throw new HttpRequestException($"Falha ao {action} na Polp ({(int)resp.StatusCode}): {content}");
     }
 }

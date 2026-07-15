@@ -1,7 +1,7 @@
 import { apiFetch } from "./client.js";
 
 // Categorias, Relatórios e Receitas x Despesas buscam a mesma lista completa de transações
-// de forma independente uma da outra e a filtram no cliente por mês — sem esse cache, trocar
+// de forma independente uma da outra e a filtram no cliente por mês. Sem esse cache, trocar
 // de aba refaz a mesma requisição de rede. TTL curto porque os dados mudam com frequência
 // (CRUD manual, sync do Polp) e ficam invalidados nas mutações abaixo.
 const CACHE_TTL_MS = 15_000;

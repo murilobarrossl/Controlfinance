@@ -5,7 +5,7 @@ const DIFERENCIAIS = [
   "Agente de IA financeiro integrado",
   "Sincronização bancária em tempo real",
   "Preço acessível comparado aos concorrentes",
-  "Tudo em um só lugar — PF e PJ",
+  "Tudo em um só lugar, PF e PJ",
 ];
 
 export default function SobreNos() {
@@ -15,21 +15,14 @@ export default function SobreNos() {
 
       <div className="sobre-nos__grid">
         <div className="sobre-nos__narrative">
-          <div className="sobre-nos__stat">
-            <span className="sobre-nos__stat-number">70%</span>
-            <span className="sobre-nos__stat-label">
-              das famílias brasileiras estão endividadas — a Control Finance
-              existe para mudar essa estatística.
-            </span>
-          </div>
-
           <div className="sobre-nos__block">
             <h3 className="sobre-nos__subtitle">Nossa história</h3>
             <p className="sobre-nos__text">
-              Não por falta de esforço, mas por falta de acesso a ferramentas
-              financeiras inteligentes e acessíveis. Aplicativos complexos,
-              preços altos e soluções fragmentadas sempre foram a realidade
-              de quem tentava organizar as finanças — seja pessoa física ou
+              70% das famílias brasileiras estão endividadas. A Control Finance existe
+              para mudar essa estatística. Isso acontece não por falta de esforço, mas por
+              falta de acesso a ferramentas financeiras inteligentes e acessíveis.
+              Aplicativos complexos, preços altos e soluções fragmentadas sempre foram a
+              realidade de quem tentava organizar as finanças, seja pessoa física ou
               pequeno empresário.
             </p>
             <p className="sobre-nos__text">
@@ -44,8 +37,8 @@ export default function SobreNos() {
             <h3 className="sobre-nos__subtitle">Nossa missão</h3>
             <p className="sobre-nos__text">
               Democratizar o acesso à inteligência financeira. Queremos que
-              qualquer pessoa — independente de quanto ganha ou quanto sabe
-              sobre finanças — consiga organizar, planejar e crescer
+              qualquer pessoa (independente de quanto ganha ou quanto sabe
+              sobre finanças) consiga organizar, planejar e crescer
               financeiramente com o apoio da tecnologia.
             </p>
           </div>

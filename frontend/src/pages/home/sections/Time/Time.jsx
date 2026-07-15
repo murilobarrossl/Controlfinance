@@ -19,7 +19,7 @@ export default function Time() {
       <ul className="time__list">
         {MEMBROS.map((membro) => (
           <li key={membro.nome} className="time__item">
-            <span className="time__nome">{membro.nome}</span> — {membro.cargo}
+            <span className="time__nome">{membro.nome}</span>, {membro.cargo}
           </li>
         ))}
       </ul>

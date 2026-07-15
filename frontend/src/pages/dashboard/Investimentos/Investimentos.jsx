@@ -53,7 +53,7 @@ export default function Investimentos() {
 
       <Card title="Metas de economia">
         <p className="investimentos__section-hint">
-          Defina quanto quer juntar, quanto já tem guardado e o prazo (se houver) — depois é só acompanhar a barra de
+          Defina quanto quer juntar, quanto já tem guardado e o prazo (se houver). Depois é só acompanhar a barra de
           progresso conforme for guardando mais.
         </p>
         <form className="investimentos__form" onSubmit={handleCreateGoal}>

@@ -10,7 +10,7 @@ namespace ControlFinance.API.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Só adiciona colunas novas (nullable) — as antigas em texto puro continuam
+            // Só adiciona colunas novas (nullable); as antigas em texto puro continuam
             // intactas até o backfill (Program.cs) criptografar e zerá-las explicitamente.
             // Isso evita qualquer ALTER COLUMN que possa mascarar dado não criptografado
             // como se já estivesse protegido.

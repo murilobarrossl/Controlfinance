@@ -1,6 +1,6 @@
 import { apiFetch } from "./client.js";
 
-// Inicia a conexão com um banco — retorna a URL de autenticação do Open Finance
+// Inicia a conexão com um banco: retorna a URL de autenticação do Open Finance
 export const createIntegration = async (connectorId) =>
   apiFetch("/polp/integrations", {
     method: "POST",

@@ -13,7 +13,7 @@ function ChevronIcon() {
   );
 }
 
-// Mesma cor usada na tarja ao lado de cada banco na tela de conectar-banco — nunca
+// Mesma cor usada na tarja ao lado de cada banco na tela de conectar-banco, nunca
 // escolhida à mão aqui, só repassada do conector correspondente (via bankCode).
 function resolveAccountColor(account, connectorsById) {
   const raw = connectorsById.get(account.bankCode)?.color;

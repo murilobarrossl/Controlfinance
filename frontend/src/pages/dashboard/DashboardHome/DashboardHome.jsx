@@ -41,7 +41,7 @@ export default function DashboardHome() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // Lista de contas e conectores são só pro seletor de banco — se falhar, o
+    // Lista de contas e conectores são só pro seletor de banco: se falhar, o
     // dashboard segue funcionando normalmente com a conta ativa padrão.
     getIntegrations().then(setAccounts).catch(() => {});
     getConnectors().then(setConnectors).catch(() => {});

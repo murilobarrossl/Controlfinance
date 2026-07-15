@@ -35,7 +35,7 @@ html, body {
   background-color: var(--color-bg-alt);
 }
 
-/* Declarado uma única vez aqui — estava repetido de forma idêntica em 6 arquivos CSS diferentes. */
+/* Declarado uma única vez aqui: estava repetido de forma idêntica em 6 arquivos CSS diferentes. */
 @font-face {
   font-family: "Prompt";
   src: url("/src/assets/fonts/Prompt-Regular.ttf") format("truetype");

@@ -113,7 +113,7 @@ export default function Relatorios() {
                   <td>{new Date(t.dueDate).toLocaleDateString("pt-BR")}</td>
                   <td>{t.name}</td>
                   <td>{t.categoryName || "Sem categoria"}</td>
-                  <td>{t.bankAccountName || "—"}</td>
+                  <td>{t.bankAccountName || "-"}</td>
                   <td>{TYPE_LABELS[t.type] || t.type}</td>
                   <td>{STATUS_LABELS[t.status] || t.status}</td>
                   <td className={t.type === "Income" ? "relatorios__amount--income" : "relatorios__amount--expense"}>

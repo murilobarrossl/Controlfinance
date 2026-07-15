@@ -6,7 +6,7 @@ export const TOOLTIP_STYLE = {
 };
 
 // Recharts colora cada linha do tooltip com a cor da série/célula por padrão, e cai pra preto
-// quando não consegue resolver isso (como no nosso caso, que usa <Cell> com cores por item) —
+// quando não consegue resolver isso (como no nosso caso, que usa <Cell> com cores por item) -
 // força branco pra sempre ficar legível no fundo escuro.
 export const TOOLTIP_ITEM_STYLE = {
   color: "#ffffff",

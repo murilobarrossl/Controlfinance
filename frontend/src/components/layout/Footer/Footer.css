@@ -7,7 +7,7 @@
   overflow: hidden;
 }
 
-/* Grão por cima do fundo — dá a sensação de tecido/veludo em vez de cor chapada, sem
+/* Grão por cima do fundo: dá a sensação de tecido/veludo em vez de cor chapada, sem
    depender de nenhuma imagem. "screen" clareia só os pontos mais claros do ruído contra
    o fundo escuro, em vez de escurecer ainda mais (era o que "overlay" fazia aqui). */
 .footer::before {

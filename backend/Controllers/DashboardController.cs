@@ -45,7 +45,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             .Where(t => t.Type == TransactionType.Expense)
             .Sum(t => t.Amount);
 
-        // contas pendentes — filtra e ordena no banco em vez de trazer o histórico inteiro da
+        // contas pendentes: filtra e ordena no banco em vez de trazer o histórico inteiro da
         // conta pra memória; PaidTransactions nunca foi consumido pelo frontend, então saiu do DTO.
         var pendingEntities = await db.Transactions
             .Include(t => t.Category)
@@ -95,7 +95,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
             var currentInvoice = card.Installments.Sum(i => i.InstallmentAmount);
 
-            // próximo vencimento da fatura — clampa pro último dia válido do mês (ex.: DueDay=31
+            // próximo vencimento da fatura: clampa pro último dia válido do mês (ex.: DueDay=31
             // em fevereiro derrubaria o dashboard inteiro com ArgumentOutOfRangeException).
             var today = DateTime.UtcNow;
             var safeDueDay = Math.Min(card.DueDay, DateTime.DaysInMonth(today.Year, today.Month));

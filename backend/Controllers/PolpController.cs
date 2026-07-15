@@ -178,7 +178,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         }
 
         // Carrega as contas já existentes do usuário de uma vez (por PolpAccountId) em vez de
-        // uma query por conta remota — evita N+1 quando a integração tem várias contas.
+        // uma query por conta remota: evita N+1 quando a integração tem várias contas.
         var existingAccounts = await db.BankAccounts
             .Where(b => b.UserId == UserId && b.PolpAccountId != null)
             .ToDictionaryAsync(b => b.PolpAccountId!.Value, b => b, ct);
@@ -273,7 +273,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
 
     // O Npgsql exige DateTimeKind.Utc para colunas timestamptz; DateTime.TryParse sozinho
     // devolve Kind=Unspecified (ou Local), o que derruba o SaveChangesAsync com uma exceção
-    // não tratada — e por consequência a resposta perde os headers de CORS.
+    // não tratada, e por consequência a resposta perde os headers de CORS.
     private static DateTime ParseDateAsUtc(string? dateStr)
     {
         if (DateTime.TryParse(

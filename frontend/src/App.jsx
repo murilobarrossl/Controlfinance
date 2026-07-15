@@ -5,7 +5,7 @@ import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import usePolpConnectionWatcher from "./hooks/usePolpConnectionWatcher.js";
 import HomePage from "./pages/home/HomePage.jsx";
 
-// Só a home entra no bundle inicial — o resto (auth, dashboard, páginas legais) é code-split
+// Só a home entra no bundle inicial: o resto (auth, dashboard, páginas legais) é code-split
 // por rota, então quem só visita a landing page não baixa o dashboard inteiro.
 const LoginPage = lazy(() => import("./pages/login/Login.jsx"));
 const RegisterPage = lazy(() => import("./pages/cadastro/Cadastro.jsx"));

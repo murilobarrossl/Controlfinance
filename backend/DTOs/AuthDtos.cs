@@ -21,7 +21,7 @@ public class RegisterRequestDto
     public string PhoneNumber { get; set; } = string.Empty;
 
     /// <summary>
-    /// CPF (11 dígitos) ou CNPJ (14 dígitos) — somente números.
+    /// CPF (11 dígitos) ou CNPJ (14 dígitos), somente números.
     /// </summary>
     [Required(ErrorMessage = "CPF ou CNPJ é obrigatório.")]
     [RegularExpression(@"^\d{11}(\d{3})?$", ErrorMessage = "Documento inválido. Informe CPF (11 dígitos) ou CNPJ (14 dígitos).")]

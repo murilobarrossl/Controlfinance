@@ -61,13 +61,13 @@ export default function ConnectBankPage() {
     authWindow.focus();
 
     // Corta a referência window.opener da aba de autenticação (que logo vai navegar pra uma
-    // página de terceiro — o banco/Polp) sem perder o handle que este script usa pra
+    // página de terceiro, o banco/Polp) sem perder o handle que este script usa pra
     // escrever, navegar e fechar a aba. Sem isso, a página do banco poderia redirecionar
     // esta aba original via window.opener.location ("reverse tabnabbing").
     try {
       authWindow.opener = null;
     } catch {
-      // navegadores mais antigos podem não permitir — não é bloqueante
+      // navegadores mais antigos podem não permitir, não é bloqueante
     }
 
     authWindow.document.write(`
@@ -149,7 +149,7 @@ export default function ConnectBankPage() {
 
         {connectingStage === "waiting" && (
           <p className="connect-bank__notice">
-            Abrimos a autenticação em outra aba. Conclua por lá — depois de confirmar, o banco
+            Abrimos a autenticação em outra aba. Conclua por lá: depois de confirmar, o banco
             ainda precisa sincronizar suas contas, o que pode levar alguns minutos. Você será
             levado automaticamente para o dashboard aqui assim que terminar.
           </p>

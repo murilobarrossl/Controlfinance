@@ -8,7 +8,7 @@ public class User
     public string PhoneNumber { get; set; } = string.Empty;
 
     /// <summary>
-    /// Pode ser CPF (11 dígitos) ou CNPJ (14 dígitos). Guardado criptografado (AES-GCM) —
+    /// Pode ser CPF (11 dígitos) ou CNPJ (14 dígitos). Guardado criptografado (AES-GCM) -
     /// o valor em memória (fora do banco) sempre é o texto puro, a conversão é transparente.
     /// </summary>
     public string Document { get; set; } = string.Empty;

@@ -109,7 +109,7 @@ export default function Categorias() {
         ) : (
           <>
             <p className="categorias__section-hint">
-              Categorias em ordem alfabética — clique numa barra para ver as transações.
+              Categorias em ordem alfabética. Clique numa barra para ver as transações.
             </p>
             <CategorySpendBarsChart
               data={breakdown}
@@ -121,7 +121,7 @@ export default function Categorias() {
       </Card>
 
       {selectedCategory && (
-        <Card title={`Transações — ${selectedCategory}`}>
+        <Card title={`Transações: ${selectedCategory}`}>
           {drillDownTransactions.length === 0 ? (
             <p className="categorias__hint">Nenhuma transação encontrada.</p>
           ) : (

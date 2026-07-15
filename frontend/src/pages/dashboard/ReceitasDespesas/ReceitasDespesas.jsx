@@ -114,7 +114,7 @@ export default function ReceitasDespesas() {
         </button>
       </div>
 
-      <Card title={`Receitas x despesas — ${rangeLabel}`}>
+      <Card title={`Receitas x despesas: ${rangeLabel}`}>
         <MonthlyTrendChart height={260} formatValue={formatCurrency} data={monthlyTrend} />
       </Card>
 

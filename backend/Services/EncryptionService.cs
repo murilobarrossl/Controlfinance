@@ -20,8 +20,8 @@ public interface IEncryptionService
 
 public class EncryptionService : IEncryptionService
 {
-    private const int NonceSize = 12; // 96 bits — tamanho recomendado de nonce para AES-GCM
-    private const int TagSize = 16;   // 128 bits — tamanho da tag de autenticação
+    private const int NonceSize = 12; // 96 bits, tamanho recomendado de nonce para AES-GCM
+    private const int TagSize = 16;   // 128 bits, tamanho da tag de autenticação
 
     private readonly byte[] _key;
     private readonly byte[] _hmacKey;
@@ -33,7 +33,7 @@ public class EncryptionService : IEncryptionService
 
         using var sha256 = SHA256.Create();
         _key = sha256.ComputeHash(Encoding.UTF8.GetBytes(keyString));
-        // Chave derivada com contexto separado, só para o hash de busca — nunca reaproveitar
+        // Chave derivada com contexto separado, só para o hash de busca: nunca reaproveitar
         // a mesma chave para dois propósitos criptográficos diferentes.
         _hmacKey = sha256.ComputeHash(Encoding.UTF8.GetBytes(keyString + "|lookup-hash"));
     }
@@ -56,7 +56,7 @@ public class EncryptionService : IEncryptionService
             aesGcm.Encrypt(nonce, plainBytes, cipherBytes, tag);
         }
 
-        // Formato: nonce (12) + tag (16) + ciphertext — tudo em Base64
+        // Formato: nonce (12) + tag (16) + ciphertext, tudo em Base64
         var result = new byte[NonceSize + TagSize + cipherBytes.Length];
         Buffer.BlockCopy(nonce, 0, result, 0, NonceSize);
         Buffer.BlockCopy(tag, 0, result, NonceSize, TagSize);

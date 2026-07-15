@@ -3,11 +3,11 @@ import { getCurrentUserId } from "./authToken.js";
 const LEGACY_KEY = "investmentGoals";
 
 // Versão antiga guardava tudo numa chave só, compartilhada entre qualquer conta
-// logada no mesmo navegador — descarta esse resquício uma vez.
+// logada no mesmo navegador: descarta esse resquício uma vez.
 try {
   localStorage.removeItem(LEGACY_KEY);
 } catch {
-  // localStorage indisponível — nada a fazer
+  // localStorage indisponível, nada a fazer
 }
 
 function storageKey() {

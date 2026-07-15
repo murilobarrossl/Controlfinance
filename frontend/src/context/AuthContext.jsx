@@ -7,7 +7,7 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem("token"));
   const [user, setUser] = useState(null);
 
-  // Busca os dados do usuário sempre que existir uma sessão — funciona tanto pra quem
+  // Busca os dados do usuário sempre que existir uma sessão: funciona tanto pra quem
   // acabou de logar quanto pra uma sessão já aberta antes (refresh de página, por exemplo),
   // já que não depende de nada retornado no momento do login/cadastro.
   useEffect(() => {
@@ -19,7 +19,7 @@ export function AuthProvider({ children }) {
         if (!cancelled) setUser(data);
       })
       .catch(() => {
-        // token inválido/expirado — a rota protegida cuida de redirecionar pro login
+        // token inválido/expirado, a rota protegida cuida de redirecionar pro login
       });
 
     return () => {

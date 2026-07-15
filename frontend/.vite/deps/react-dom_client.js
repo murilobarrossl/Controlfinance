@@ -3709,7 +3709,7 @@ var require_react_dom_client_development = /* @__PURE__ */ __commonJSMin(((expor
 							break;
 						}
 						runWithFiberInDEV(workInProgress, function() {
-							console.error("Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.", key);
+							console.error("Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted - the behavior is unsupported and could change in a future version.", key);
 						});
 						break;
 					case REACT_LAZY_TYPE: child = resolveLazy(child), warnOnInvalidKey(returnFiber, workInProgress, child, knownKeys);

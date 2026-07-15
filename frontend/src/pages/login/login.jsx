@@ -66,7 +66,7 @@ export default function LoginPage({ mode = "email" }) {
         setAuthToken(data.token);
       }
 
-      // Só manda pro fluxo de conexão quem ainda não tem banco conectado — mandar todo mundo
+      // Só manda pro fluxo de conexão quem ainda não tem banco conectado: mandar todo mundo
       // pra lá incondicionalmente forçava reconexão a cada login, e cada reconexão podia gerar
       // uma nova conta local (a Polp às vezes emite um novo id de conta por integração), o que
       // duplicava transações nas somas de receitas/despesas.
@@ -75,7 +75,7 @@ export default function LoginPage({ mode = "email" }) {
         const accounts = await getIntegrations();
         hasAccount = Array.isArray(accounts) && accounts.length > 0;
       } catch {
-        // se a checagem falhar, cai no comportamento antigo (manda conectar) — mais seguro
+        // se a checagem falhar, cai no comportamento antigo (manda conectar), mais seguro
         // do que assumir que já tem conta e esconder o fluxo de conexão de quem precisa dele
       }
 
@@ -103,12 +103,12 @@ export default function LoginPage({ mode = "email" }) {
         </h1>
 
         <p className="login__subtitle">
-          Organize suas finanças, simule investimentos e planeje seu futuro —
+          Organize suas finanças, simule investimentos e planeje seu futuro,
           tudo em um só lugar.
         </p>
 
         <p className="login__welcome-back">
-          Entrar em sua conta — Que bom te ver novamente!
+          Entrar em sua conta: que bom te ver novamente!
         </p>
 
         <ul className="login__highlights">

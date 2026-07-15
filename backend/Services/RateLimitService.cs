@@ -2,10 +2,10 @@ using System.Collections.Concurrent;
 
 namespace ControlFinance.API.Services;
 
-// Bloqueia tanto por identificador (email/CPF) quanto por IP — só por identificador permite
+// Bloqueia tanto por identificador (email/CPF) quanto por IP: só por identificador permite
 // que alguém tente senha em N contas diferentes do mesmo IP sem nunca ser bloqueado.
 // ConcurrentDictionary porque esse serviço é singleton e atende requisições concorrentes.
-public class RateLimitService
+public class RateLimitService : IDisposable
 {
     private readonly ConcurrentDictionary<string, (int attempts, DateTime lastAttempt)> _byIdentifier = new();
     private readonly ConcurrentDictionary<string, (int attempts, DateTime lastAttempt)> _byIp = new();
@@ -13,6 +13,16 @@ public class RateLimitService
     private const int MaxAttemptsPerIdentifier = 5;
     private const int MaxAttemptsPerIp = 20;
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(15);
+
+    // Entradas só são removidas em RegisterSuccess ou quando a própria chave é consultada de
+    // novo depois da janela (IsBlocked). Quem falha uma vez e nunca mais volta fica esquecido
+    // no dicionário para sempre; essa varredura periódica evita esse vazamento lento de memória.
+    private readonly Timer _cleanupTimer;
+
+    public RateLimitService()
+    {
+        _cleanupTimer = new Timer(_ => PurgeStale(), null, Window, Window);
+    }
 
     public bool IsBlocked(string identifier, string ipAddress) =>
         IsBlocked(_byIdentifier, identifier, MaxAttemptsPerIdentifier) ||
@@ -56,4 +66,22 @@ public class RateLimitService
             _ => (1, DateTime.UtcNow),
             (_, entry) => (entry.attempts + 1, DateTime.UtcNow));
     }
+
+    private void PurgeStale()
+    {
+        PurgeStale(_byIdentifier);
+        PurgeStale(_byIp);
+    }
+
+    private static void PurgeStale(ConcurrentDictionary<string, (int attempts, DateTime lastAttempt)> store)
+    {
+        var cutoff = DateTime.UtcNow - Window;
+        foreach (var (key, entry) in store)
+        {
+            if (entry.lastAttempt < cutoff)
+                store.TryRemove(key, out _);
+        }
+    }
+
+    public void Dispose() => _cleanupTimer.Dispose();
 }

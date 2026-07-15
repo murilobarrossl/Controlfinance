@@ -1,7 +1,7 @@
 import { getIntegrationStatus, syncIntegration } from "../api/polp.js";
 
 const PENDING_KEY = "pendingPolpIntegrationId";
-// A Polp sincroniza contas/transações de forma assíncrona depois da autenticação —
+// A Polp sincroniza contas/transações de forma assíncrona depois da autenticação -
 // isso pode levar bem mais que alguns segundos, então damos uma folga generosa (5min).
 const POLL_MAX_ATTEMPTS = 100;
 const POLL_INTERVAL_MS = 3000;

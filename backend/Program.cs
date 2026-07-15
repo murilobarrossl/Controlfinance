@@ -12,7 +12,7 @@ using Microsoft.OpenApi.Models;
 var builder = WebApplication.CreateBuilder(args);
 
 // Segredos reais ficam em appsettings.Local.json (gitignorado) ou em variáveis de
-// ambiente — appsettings.json versionado no git só tem placeholders.
+// ambiente: appsettings.json versionado no git só tem placeholders.
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
 // ──────────────────────────────────────────
@@ -24,6 +24,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // ──────────────────────────────────────────
 //  SERVIÇOS DA APLICAÇÃO
 // ──────────────────────────────────────────
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenRevocationService, TokenRevocationService>();
@@ -53,7 +54,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew                = TimeSpan.Zero
         };
 
-        // Rejeita tokens revogados (logout) mesmo que ainda não tenham expirado —
+        // Rejeita tokens revogados (logout) mesmo que ainda não tenham expirado:
         // JWT é stateless por padrão, então essa checagem extra é o que torna o logout real.
         options.Events = new JwtBearerEvents
         {
@@ -78,7 +79,7 @@ builder.Services.AddAuthorization();
 // ──────────────────────────────────────────
 //  CORS
 // ──────────────────────────────────────────
-// Origens liberadas vêm de config (Cors:AllowedOrigins) — em produção, adicionar o domínio
+// Origens liberadas vêm de config (Cors:AllowedOrigins). Em produção, adicionar o domínio
 // real do frontend em appsettings.Local.json ou variável de ambiente, sem tocar no código.
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? ["http://localhost:5173", "http://localhost:3000"];
@@ -146,13 +147,21 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 }
 
-// Confia nos headers X-Forwarded-* do proxy (Cloudflare/DigitalOcean) na frente da aplicação —
+// Confia nos headers X-Forwarded-* do proxy (Cloudflare/DigitalOcean) na frente da aplicação:
 // sem isso, UseHttpsRedirection/UseHsts não enxergam que a conexão já chegou em HTTPS na borda
-// e podem causar loop de redirecionamento.
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+// e podem causar loop de redirecionamento. Além disso, o RemoteIpAddress usado pelo rate limit
+// por IP ficaria sempre igual ao IP do proxy para todo mundo.
+var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
+};
+// Por padrão, o ASP.NET Core só aceita esses headers vindos de loopback; atrás do proxy do
+// DigitalOcean/Cloudflare eles chegam de um IP externo e seriam descartados silenciosamente.
+// Limpar as listas faz confiar em qualquer proxy, seguro aqui porque só o proxy da borda fala
+// diretamente com esta aplicação.
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseHttpsRedirection();
 if (!app.Environment.IsDevelopment())
@@ -160,7 +169,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-// Captura qualquer exceção não tratada antes que ela vaze stack trace na resposta —
+// Captura qualquer exceção não tratada antes que ela vaze stack trace na resposta:
 // precisa vir cedo no pipeline pra cobrir os middlewares seguintes também.
 app.UseExceptionHandler(errorApp =>
 {
@@ -177,7 +186,7 @@ app.UseExceptionHandler(errorApp =>
     });
 });
 
-// Headers de segurança básicos — ASP.NET Core não adiciona nada disso por padrão.
+// Headers de segurança básicos: ASP.NET Core não adiciona nada disso por padrão.
 app.Use(async (context, next) =>
 {
     context.Response.Headers.Append("X-Content-Type-Options", "nosniff");

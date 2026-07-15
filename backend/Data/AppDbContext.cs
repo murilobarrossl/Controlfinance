@@ -43,7 +43,7 @@ public class AppDbContext : DbContext
             e.HasIndex(u => u.Email).IsUnique();
             e.Property(u => u.PhoneNumber).IsRequired().HasMaxLength(20);
 
-            // Document guarda o CPF/CNPJ criptografado — a busca/unicidade usa DocumentHash,
+            // Document guarda o CPF/CNPJ criptografado: a busca/unicidade usa DocumentHash,
             // já que o ciphertext muda a cada gravação e não permite comparação direta.
             e.Property(u => u.Document).IsRequired().HasConversion(textConverter);
             e.Property(u => u.DocumentHash).IsRequired().HasMaxLength(100);
@@ -97,7 +97,7 @@ public class AppDbContext : DbContext
              .OnDelete(DeleteBehavior.SetNull);
 
             // Cobre o filtro (usuário + intervalo de datas) usado no dashboard, em receitas x
-            // despesas e nos relatórios — sem esse índice composto essas consultas caem num
+            // despesas e nos relatórios: sem esse índice composto essas consultas caem num
             // scan por UserId seguido de ordenação em memória por DueDate.
             e.HasIndex(t => new { t.UserId, t.DueDate });
         });
