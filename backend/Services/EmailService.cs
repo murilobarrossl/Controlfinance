@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -112,8 +113,14 @@ public class EmailService : IEmailService
         </html>
         """;
 
-    private static string WelcomeHtml(string name) => BaseHtml("Bem-vindo!", $"""
-        <h2 style="color:#1a1a2e;margin-top:0;">Olá, {name}! 👋</h2>
+    // Nome e nome de transação vêm de dados do próprio usuário (cadastro, transações manuais)
+    // e são interpolados direto no HTML do e-mail: sem encode, um nome como "<img onerror=...>"
+    // seria injetado sem tratamento no corpo enviado pela Resend.
+    private static string WelcomeHtml(string name)
+    {
+        var safeName = WebUtility.HtmlEncode(name);
+        return BaseHtml("Bem-vindo!", $"""
+        <h2 style="color:#1a1a2e;margin-top:0;">Olá, {safeName}! 👋</h2>
         <p style="color:#444;line-height:1.6;">
           Sua conta no <strong>Control Finance</strong> foi criada com sucesso.
           Agora você tem controle total das suas finanças em um só lugar.
@@ -127,25 +134,32 @@ public class EmailService : IEmailService
         <p style="color:#444;">Qualquer dúvida, estamos aqui.</p>
         <p style="color:#444;">Equipe Control Finance 🚀</p>
         """);
+    }
 
-    private static string TransactionAlertHtml(string name, string txName, decimal amount, DateTime due) =>
-        BaseHtml("Lembrete de vencimento", $"""
-        <h2 style="color:#1a1a2e;margin-top:0;">Olá, {name}!</h2>
+    private static string TransactionAlertHtml(string name, string txName, decimal amount, DateTime due)
+    {
+        var safeName = WebUtility.HtmlEncode(name);
+        var safeTxName = WebUtility.HtmlEncode(txName);
+        return BaseHtml("Lembrete de vencimento", $"""
+        <h2 style="color:#1a1a2e;margin-top:0;">Olá, {safeName}!</h2>
         <p style="color:#444;line-height:1.6;">
           Você tem uma conta vencendo em breve:
         </p>
         <div style="background:#fff8e1;border-left:4px solid #f59e0b;padding:16px 20px;border-radius:4px;margin:16px 0;">
-          <p style="margin:0;font-weight:700;color:#1a1a2e;font-size:16px;">{txName}</p>
+          <p style="margin:0;font-weight:700;color:#1a1a2e;font-size:16px;">{safeTxName}</p>
           <p style="margin:4px 0 0;color:#444;">
             Valor: <strong>R$ {amount:N2}</strong> · Vencimento: <strong>{due:dd/MM/yyyy}</strong>
           </p>
         </div>
         <p style="color:#444;">Acesse o app para registrar o pagamento e manter seu controle em dia.</p>
         """);
+    }
 
-    private static string MonthlySummaryHtml(string name, decimal income, decimal expense, decimal balance) =>
-        BaseHtml("Resumo mensal", $"""
-        <h2 style="color:#1a1a2e;margin-top:0;">Olá, {name}! Aqui está seu resumo 📊</h2>
+    private static string MonthlySummaryHtml(string name, decimal income, decimal expense, decimal balance)
+    {
+        var safeName = WebUtility.HtmlEncode(name);
+        return BaseHtml("Resumo mensal", $"""
+        <h2 style="color:#1a1a2e;margin-top:0;">Olá, {safeName}! Aqui está seu resumo 📊</h2>
         <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;">
           <tr>
             <td style="background:#ecfdf5;border-radius:8px;padding:16px;text-align:center;width:33%;">
@@ -166,4 +180,5 @@ public class EmailService : IEmailService
         </table>
         <p style="color:#444;">Acesse o app para ver o relatório completo com detalhes por categoria.</p>
         """);
+    }
 }

@@ -72,7 +72,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
         var categoryIds = expensesByCategory.Select(e => e.CategoryId).ToList();
         var categories = await db.Categories
-            .Where(c => categoryIds.Contains(c.Id))
+            .Where(c => c.UserId == UserId && categoryIds.Contains(c.Id))
             .ToListAsync();
 
         var totalExpenseForCategories = expensesByCategory.Sum(e => e.Amount);

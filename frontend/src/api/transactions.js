@@ -51,3 +51,12 @@ export const deleteTransaction = async (id) => {
   invalidateCache();
   return result;
 };
+
+export const setTransactionFixed = async (id, isFixed) => {
+  const result = await apiFetch(`/transactions/${id}/fixed`, {
+    method: "PUT",
+    body: JSON.stringify({ isFixed }),
+  });
+  invalidateCache();
+  return result;
+};

@@ -5,20 +5,10 @@ import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading
 import BarComparisonChart from "../../../components/charts/BarComparisonChart.jsx";
 import MonthlyTrendChart from "../../../components/charts/MonthlyTrendChart.jsx";
 import { formatCurrency } from "../../../utils/financeMath.js";
+import { monthKey, formatMonthShort } from "../../../utils/monthLabel.js";
 import "./ReceitasDespesas.css";
 
 const MONTHS_WINDOW = 3;
-const MONTH_SHORT_LABEL = new Intl.DateTimeFormat("pt-BR", { month: "short", timeZone: "UTC" });
-
-function monthKey(date) {
-  return `${date.getUTCFullYear()}-${date.getUTCMonth()}`;
-}
-
-function formatMonthShort(date) {
-  const label = MONTH_SHORT_LABEL.format(date).replace(".", "");
-  const capitalized = label.charAt(0).toUpperCase() + label.slice(1);
-  return `${capitalized}/${String(date.getUTCFullYear()).slice(2)}`;
-}
 
 // offset 0 = janela atual (últimos 3 meses); offset 1 = os 3 meses anteriores a essa janela; e por aí vai.
 function getMonthsWindow(count, offset) {

@@ -42,7 +42,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
                 t.Type.ToString(), t.Status.ToString(),
                 t.Amount, t.DueDate, t.PaidAt,
                 t.Category != null ? t.Category.Name : null,
-                t.BankAccount != null ? t.BankAccount.Name : null
+                t.BankAccount != null ? t.BankAccount.Name : null,
+                t.IsFixed
             ))
             .ToListAsync();
 
@@ -69,9 +70,12 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             Type = type,
             Status = status,
             Amount = dto.Amount,
-            DueDate = dto.DueDate,
+            // O JSON manda datas como "2026-08-20" (sem timezone), então o binder do ASP.NET
+            // gera Kind=Unspecified; o Npgsql exige Kind=Utc pra colunas timestamptz.
+            DueDate = DateTime.SpecifyKind(dto.DueDate, DateTimeKind.Utc),
             BankAccountId = dto.BankAccountId,
             CategoryId = dto.CategoryId,
+            IsFixed = dto.IsFixed,
             PaidAt = status == TransactionStatus.Paid ? DateTime.UtcNow : null
         };
 
@@ -101,13 +105,31 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         transaction.Type = type;
         transaction.Status = status;
         transaction.Amount = dto.Amount;
-        transaction.DueDate = dto.DueDate;
+        transaction.DueDate = DateTime.SpecifyKind(dto.DueDate, DateTimeKind.Utc);
         transaction.BankAccountId = dto.BankAccountId;
         transaction.CategoryId = dto.CategoryId;
+        transaction.IsFixed = dto.IsFixed;
         transaction.PaidAt = status == TransactionStatus.Paid ? DateTime.UtcNow : null;
 
         await db.SaveChangesAsync();
         return Ok();
+    }
+
+    // Endpoint dedicado só pra alternar IsFixed: reaproveitar o Update genérico exigiria montar
+    // o CreateTransactionDto inteiro no cliente a partir do TransactionDto (que não expõe
+    // BankAccountId/CategoryId, só os nomes), arriscando sobrescrever campos com dado incompleto.
+    [HttpPut("{id}/fixed")]
+    public async Task<IActionResult> SetFixed(Guid id, [FromBody] SetTransactionFixedDto dto)
+    {
+        var transaction = await db.Transactions
+            .Include(t => t.Category)
+            .Include(t => t.BankAccount)
+            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId);
+        if (transaction is null) return NotFound();
+
+        transaction.IsFixed = dto.IsFixed;
+        await db.SaveChangesAsync();
+        return Ok(TransactionDto.FromEntity(transaction));
     }
 
     [HttpDelete("{id}")]

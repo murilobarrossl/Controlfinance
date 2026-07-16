@@ -22,8 +22,10 @@ export default function Investimentos() {
 
     saveGoal({
       name: goalForm.name,
-      targetAmount: Number(goalForm.targetAmount),
-      currentAmount: Number(goalForm.currentAmount) || 0,
+      // O input aceita "-" digitado direto (o atributo min="0" do HTML só valida visualmente,
+      // não impede o valor de chegar aqui), então trava em zero na hora de gravar.
+      targetAmount: Math.max(0, Number(goalForm.targetAmount)),
+      currentAmount: Math.max(0, Number(goalForm.currentAmount) || 0),
       deadline: goalForm.deadline,
     });
 
@@ -38,10 +40,10 @@ export default function Investimentos() {
 
   function handleSimulate(e) {
     e.preventDefault();
-    const totalValue = Number(simulationForm.totalValue) || 0;
-    const downPayment = Number(simulationForm.downPayment) || 0;
-    const monthlyRate = (Number(simulationForm.monthlyRate) || 0) / 100;
-    const installmentsCount = Number(simulationForm.installmentsCount) || 0;
+    const totalValue = Math.max(0, Number(simulationForm.totalValue) || 0);
+    const downPayment = Math.max(0, Number(simulationForm.downPayment) || 0);
+    const monthlyRate = Math.max(0, (Number(simulationForm.monthlyRate) || 0) / 100);
+    const installmentsCount = Math.max(0, Number(simulationForm.installmentsCount) || 0);
 
     const financedAmount = Math.max(totalValue - downPayment, 0);
     setSimulation(calculateInstallment(financedAmount, monthlyRate, installmentsCount));

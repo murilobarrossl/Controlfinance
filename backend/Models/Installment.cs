@@ -3,8 +3,10 @@ namespace ControlFinance.API.Models;
 public class Installment
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid CreditCardId { get; set; }
-    public CreditCard CreditCard { get; set; } = null!;
+
+    /// <summary>Nulo pra parcelamentos fora de cartão (boleto, Pix parcelado etc.).</summary>
+    public Guid? CreditCardId { get; set; }
+    public CreditCard? CreditCard { get; set; }
     public Guid UserId { get; set; }
 
     public string Description { get; set; } = string.Empty;

@@ -125,7 +125,7 @@ public class AppDbContext : DbContext
             e.HasOne(i => i.CreditCard)
              .WithMany(c => c.Installments)
              .HasForeignKey(i => i.CreditCardId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.SetNull);
         });
 
         // REVOKED TOKEN

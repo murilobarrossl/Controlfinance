@@ -22,6 +22,10 @@ public class Transaction
     public DateTime? PaidAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Marca um gasto recorrente (assinatura, mensalidade). Não se propaga sozinho pra
+    /// novas transações sincronizadas do banco: precisa ser marcado de novo a cada mês.</summary>
+    public bool IsFixed { get; set; }
+
     /// <summary>Quando o lembrete de vencimento por e-mail foi enviado (null = ainda não enviado).</summary>
     public DateTime? ReminderSentAt { get; set; }
 }

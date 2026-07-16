@@ -15,34 +15,14 @@ public class CreditCardsController(AppDbContext db) : ApiControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
+        // Materializa antes de fazer a conta: CreditLimit/UsedLimit são criptografados (guardados
+        // como text no Postgres), e subtrair um do outro dentro do Select fazia o EF tentar
+        // traduzir a subtração pra SQL direto na coluna de texto ("operator does not exist: text - text").
         var cards = await db.CreditCards
             .Where(c => c.UserId == UserId && c.IsActive)
-            .Select(c => new CreditCardDto(
-                c.Id, c.Name, c.Brand,
-                c.CreditLimit, c.UsedLimit,
-                c.CreditLimit - c.UsedLimit,
-                c.ClosingDay, c.DueDay
-            ))
             .ToListAsync();
 
-        return Ok(cards);
-    }
-
-    [HttpGet("{id}/installments")]
-    public async Task<IActionResult> GetInstallments(Guid id)
-    {
-        if (!await db.CreditCards.AnyAsync(c => c.Id == id && c.UserId == UserId)) return NotFound();
-
-        var installments = await db.Installments
-            .Where(i => i.CreditCardId == id)
-            .OrderBy(i => i.NextDueDate)
-            .Select(i => new InstallmentDto(
-                i.Id, i.Description, i.InstallmentAmount,
-                i.CurrentInstallment, i.TotalInstallments, i.NextDueDate
-            ))
-            .ToListAsync();
-
-        return Ok(installments);
+        return Ok(cards.Select(CreditCardDto.FromEntity));
     }
 
     [HttpPost]
@@ -63,32 +43,6 @@ public class CreditCardsController(AppDbContext db) : ApiControllerBase
         await db.SaveChangesAsync();
 
         return CreatedAtAction(nameof(GetAll), new { id = card.Id }, CreditCardDto.FromEntity(card));
-    }
-
-    [HttpPost("{id}/installments")]
-    public async Task<IActionResult> AddInstallment(Guid id, [FromBody] CreateInstallmentDto dto)
-    {
-        var card = await db.CreditCards.FirstOrDefaultAsync(c => c.Id == id && c.UserId == UserId);
-        if (card is null) return NotFound();
-
-        var installment = new Installment
-        {
-            CreditCardId = id,
-            UserId = UserId,
-            Description = dto.Description,
-            TotalAmount = dto.TotalAmount,
-            TotalInstallments = dto.TotalInstallments,
-            CurrentInstallment = dto.CurrentInstallment,
-            InstallmentAmount = dto.InstallmentAmount,
-            NextDueDate = dto.NextDueDate
-        };
-
-        card.UsedLimit += dto.InstallmentAmount;
-
-        db.Installments.Add(installment);
-        await db.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(GetInstallments), new { id }, InstallmentDto.FromEntity(installment));
     }
 
     [HttpDelete("{id}")]

@@ -12,6 +12,7 @@ const TABS = [
   { label: "Relatórios", to: "/dashboard/relatorios" },
   { label: "Categorias", to: "/dashboard/categorias" },
   { label: "Investimentos", to: "/dashboard/investimentos" },
+  { label: "Orçamento", to: "/dashboard/orcamento" },
 ];
 
 export default function DashboardLayout() {

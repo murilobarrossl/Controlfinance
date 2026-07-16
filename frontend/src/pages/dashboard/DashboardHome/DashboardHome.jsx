@@ -48,10 +48,25 @@ export default function DashboardHome() {
   }, []);
 
   useEffect(() => {
+    // Guarda contra resposta fora de ordem: se o usuário trocar de conta de novo antes dessa
+    // requisição voltar, ignora o resultado, senão a tela pode acabar mostrando o resumo da
+    // conta anterior por cima da conta selecionada agora.
+    let cancelled = false;
+
     getDashboardSummary(selectedAccountId)
-      .then(setSummary)
-      .catch((err) => setError(err.message || "Não foi possível carregar o dashboard."))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (!cancelled) setSummary(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Não foi possível carregar o dashboard.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedAccountId]);
 
   function handleSelectAccount(accountId) {
@@ -163,7 +178,7 @@ export default function DashboardHome() {
           />
         </Card>
 
-        <Card title="Principais categorias">
+        <Card title="Principais categorias (mês atual)">
           {donutData.length === 0 ? (
             <p className="dashboard-home__hint">Nenhuma despesa categorizada este mês.</p>
           ) : (

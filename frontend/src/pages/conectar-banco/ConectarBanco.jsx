@@ -12,6 +12,14 @@ import "./ConectarBanco.css";
 const POLL_MAX_ATTEMPTS = 10;
 const POLL_INTERVAL_MS = 1000;
 
+function isSafeHttpUrl(url) {
+  try {
+    return ["http:", "https:"].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
 export default function ConnectBankPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState("intro"); // "intro" | "choosing"
@@ -121,6 +129,15 @@ export default function ConnectBankPage() {
   }
 
   async function openAuthAndWait(integrationId, authUrl, authWindow) {
+    // Confia na Polp pra devolver uma URL de autenticação legítima, mas nunca navega a aba
+    // com um esquema que não seja http/https: uma resposta comprometida da API (ou de um
+    // proxy no meio do caminho) não deveria conseguir rodar algo como javascript: nessa aba.
+    if (!isSafeHttpUrl(authUrl)) {
+      authWindow.close();
+      setError("Não foi possível iniciar a autenticação com o banco. Tente novamente.");
+      return;
+    }
+
     setPendingIntegrationId(integrationId);
     authWindow.location.href = authUrl;
     authWindow.focus();

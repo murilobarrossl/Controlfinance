@@ -224,8 +224,8 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
             .Select(t => (t.BankAccountId!.Value, t.Description))
             .ToHashSet();
 
-        // Busca e persiste as transações de cada conta (apenas a 1ª página por conta,
-        // suficiente para o sprint atual; pode paginar depois se necessário)
+        // Busca e persiste todo o histórico de transações de cada conta (paginado dentro do
+        // PolpService, até o teto de segurança).
         foreach (var account in createdAccounts)
         {
             if (account.PolpAccountId is not int polpAccountId) continue;
@@ -233,7 +233,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
             List<PolpTransactionDto> remoteTransactions;
             try
             {
-                remoteTransactions = await polp.GetTransactionsAsync(polpAccountId, page: 1, ct);
+                remoteTransactions = await polp.GetTransactionsAsync(polpAccountId, ct);
             }
             catch (HttpRequestException)
             {

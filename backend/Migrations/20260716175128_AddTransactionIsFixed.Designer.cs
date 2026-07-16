@@ -3,6 +3,7 @@ using System;
 using ControlFinance.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ControlFinance.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260716175128_AddTransactionIsFixed")]
+    partial class AddTransactionIsFixed
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -145,7 +148,7 @@ namespace ControlFinance.API.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("CreditCardId")
+                    b.Property<Guid>("CreditCardId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("CurrentInstallment")
@@ -390,7 +393,8 @@ namespace ControlFinance.API.Migrations
                     b.HasOne("ControlFinance.API.Models.CreditCard", "CreditCard")
                         .WithMany("Installments")
                         .HasForeignKey("CreditCardId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("CreditCard");
                 });

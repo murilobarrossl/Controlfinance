@@ -132,7 +132,7 @@ public interface IPolpService
     Task<PolpIntegrationDto> CreateIntegrationAsync(int institutionId, string document, CancellationToken ct = default);
     Task<PolpIntegrationDto> GetIntegrationAsync(int integrationId, CancellationToken ct = default);
     Task<List<PolpAccountDto>> GetAccountsAsync(int integrationId, CancellationToken ct = default);
-    Task<List<PolpTransactionDto>> GetTransactionsAsync(int accountId, int page = 1, CancellationToken ct = default);
+    Task<List<PolpTransactionDto>> GetTransactionsAsync(int accountId, CancellationToken ct = default);
 }
 
 public class PolpService : IPolpService
@@ -223,13 +223,33 @@ public class PolpService : IPolpService
         return envelope?.Data ?? [];
     }
 
-    public async Task<List<PolpTransactionDto>> GetTransactionsAsync(int accountId, int page = 1, CancellationToken ct = default)
-    {
-        var resp = await _http.GetAsync($"accounts/{accountId}/transactions?page={page}", ct);
-        await EnsureSuccess(resp, "listar transações");
+    // Antes buscava só a página 1: contas com muito histórico (ex.: vários anos de Nubank)
+    // ficavam sem transações antigas, porque a Polp devolve as mais recentes primeiro e o
+    // resto simplesmente nunca era buscado. Agora pagina até o fim, com um teto de segurança
+    // pra não fazer um número indefinido de requisições numa conta com histórico gigante.
+    private const int MaxTransactionPages = 50;
 
-        var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpTransactionDto>>(JsonOptions, ct);
-        return envelope?.Data ?? [];
+    public async Task<List<PolpTransactionDto>> GetTransactionsAsync(int accountId, CancellationToken ct = default)
+    {
+        var transactions = new List<PolpTransactionDto>();
+        var page = 1;
+        int lastPage;
+
+        do
+        {
+            var resp = await _http.GetAsync($"accounts/{accountId}/transactions?page={page}", ct);
+            await EnsureSuccess(resp, "listar transações");
+
+            var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpTransactionDto>>(JsonOptions, ct);
+            if (envelope?.Data is null || envelope.Data.Count == 0) break;
+
+            transactions.AddRange(envelope.Data);
+            lastPage = Math.Min(envelope.Meta?.LastPage ?? page, MaxTransactionPages);
+            page++;
+
+        } while (page <= lastPage);
+
+        return transactions;
     }
 
     private async Task EnsureSuccess(HttpResponseMessage resp, string action)

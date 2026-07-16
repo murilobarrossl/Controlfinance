@@ -23,6 +23,13 @@
 
     <!-- Swagger -->
     <PackageReference Include="Swashbuckle.AspNetCore"                        Version="6.6.2" />
+
+    <!-- Pins diretos de dependências transitivas vulneráveis (GHSA-qj66-m88j-hmgj,
+         GHSA-hh2w-p6rv-4g7w, GHSA-8g4q-xg66-9fp4): sem isso, o resolver do NuGet trazia
+         versões antigas dessas duas bibliotecas mesmo sem nenhum PackageReference explícito
+         pra elas. -->
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory"           Version="8.0.1" />
+    <PackageReference Include="System.Text.Json"                              Version="8.0.6" />
   </ItemGroup>
 
 </Project>
