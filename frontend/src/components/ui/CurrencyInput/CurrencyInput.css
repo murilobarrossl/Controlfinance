@@ -1,6 +1,8 @@
 .currency-input {
   display: flex;
   align-items: center;
+  width: 100%;
+  box-sizing: border-box;
   background-color: var(--color-border-strong);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
@@ -14,6 +16,10 @@
 }
 
 .currency-input .currency-input__field {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
   background-color: transparent;
   border: none;
   padding-left: 0.4rem;

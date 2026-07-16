@@ -25,3 +25,12 @@ export function addToReserve(amount) {
   const reserve = getReserve();
   persist({ ...reserve, currentAmount: reserve.currentAmount + amount });
 }
+
+export function removeFromReserve(amount) {
+  const reserve = getReserve();
+  persist({ ...reserve, currentAmount: Math.max(0, reserve.currentAmount - amount) });
+}
+
+export function clearReserve() {
+  persist({ ...getReserve(), currentAmount: 0 });
+}

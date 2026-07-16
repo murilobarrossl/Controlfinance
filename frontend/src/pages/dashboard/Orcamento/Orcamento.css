@@ -39,22 +39,9 @@
   border-top: 1px solid var(--color-border);
 }
 
-.orcamento__mark-fixed {
+.orcamento__reserve-actions {
   display: flex;
-  align-items: center;
   gap: 0.6rem;
-  margin-bottom: 1.25rem;
-}
-
-.orcamento__mark-fixed select {
-  flex: 1;
-  background-color: var(--color-border-strong);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  padding: 0.6rem 0.75rem;
-  color: var(--color-text-primary);
-  font-family: inherit;
-  font-size: 0.85rem;
 }
 
 .orcamento__list {
@@ -145,8 +132,13 @@
   font-size: 0.85rem;
 }
 
+.orcamento__form-actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
 .orcamento__reserve-value {
-  color: var(--color-income);
+  color: var(--color-text-primary);
   font-size: 1.4rem;
   font-weight: 600;
   margin: 0 0 1rem;

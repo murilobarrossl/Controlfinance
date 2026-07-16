@@ -7,7 +7,7 @@ import { getCategories } from "../../../api/categories.js";
 import { getTransactions, createTransaction, deleteTransaction, setTransactionFixed } from "../../../api/transactions.js";
 import { getInstallments, createInstallment, deleteInstallment } from "../../../api/installments.js";
 import { getCreditCards } from "../../../api/creditCards.js";
-import { getReserve, addToReserve } from "../../../utils/emergencyReserveStorage.js";
+import { getReserve, addToReserve, removeFromReserve, clearReserve } from "../../../utils/emergencyReserveStorage.js";
 import { formatCurrency } from "../../../utils/financeMath.js";
 import "./Orcamento.css";
 
@@ -39,13 +39,13 @@ export default function Orcamento() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [markFixedId, setMarkFixedId] = useState("");
   const [showFixedForm, setShowFixedForm] = useState(false);
   const [fixedForm, setFixedForm] = useState(EMPTY_FIXED_FORM);
   const [showInstallmentForm, setShowInstallmentForm] = useState(false);
   const [installmentForm, setInstallmentForm] = useState(EMPTY_INSTALLMENT_FORM);
-  const [showReserveForm, setShowReserveForm] = useState(false);
+  const [reservePanel, setReservePanel] = useState(null); // null | "add" | "remove"
   const [topUpInput, setTopUpInput] = useState("");
+  const [withdrawInput, setWithdrawInput] = useState("");
 
   function loadAll() {
     return Promise.all([getCategories(), getTransactions(), getInstallments(), getCreditCards()])
@@ -73,23 +73,11 @@ export default function Orcamento() {
 
   const expenses = useMemo(() => transactions.filter((t) => t.type === "Expense"), [transactions]);
   const fixedExpenses = useMemo(() => expenses.filter((t) => t.isFixed), [expenses]);
-  const unflaggedExpenses = useMemo(() => expenses.filter((t) => !t.isFixed), [expenses]);
   const totalFixed = useMemo(() => fixedExpenses.reduce((sum, t) => sum + t.amount, 0), [fixedExpenses]);
   const totalInstallments = useMemo(
     () => installments.reduce((sum, i) => sum + i.installmentAmount, 0),
     [installments]
   );
-
-  async function handleMarkFixed() {
-    if (!markFixedId) return;
-    try {
-      await setTransactionFixed(markFixedId, true);
-      setMarkFixedId("");
-      await refreshTransactions();
-    } catch (err) {
-      setError(err.message || "Não foi possível marcar essa despesa como fixa.");
-    }
-  }
 
   async function handleUnmarkFixed(id) {
     try {
@@ -133,6 +121,11 @@ export default function Orcamento() {
     }
   }
 
+  function handleCancelFixed() {
+    setShowFixedForm(false);
+    setFixedForm(EMPTY_FIXED_FORM);
+  }
+
   async function handleCreateInstallment(e) {
     e.preventDefault();
     const { description, totalAmount, totalInstallments: totalCount, currentInstallment, installmentAmount, nextDueDate, creditCardId } =
@@ -157,6 +150,11 @@ export default function Orcamento() {
     }
   }
 
+  function handleCancelInstallment() {
+    setShowInstallmentForm(false);
+    setInstallmentForm(EMPTY_INSTALLMENT_FORM);
+  }
+
   async function handleDeleteInstallment(id) {
     try {
       await deleteInstallment(id);
@@ -172,7 +170,28 @@ export default function Orcamento() {
     addToReserve(Math.max(0, Number(topUpInput)));
     setReserve(getReserve());
     setTopUpInput("");
-    setShowReserveForm(false);
+    setReservePanel(null);
+  }
+
+  function handleWithdraw(e) {
+    e.preventDefault();
+    if (!withdrawInput) return;
+    removeFromReserve(Math.max(0, Number(withdrawInput)));
+    setReserve(getReserve());
+    setWithdrawInput("");
+    setReservePanel(null);
+  }
+
+  function handleClearReserve() {
+    clearReserve();
+    setReserve(getReserve());
+    setReservePanel(null);
+  }
+
+  function handleCancelReserve() {
+    setReservePanel(null);
+    setTopUpInput("");
+    setWithdrawInput("");
   }
 
   if (loading) return <p className="orcamento__hint">Carregando...</p>;
@@ -215,31 +234,6 @@ export default function Orcamento() {
 
         {showFixedForm && (
           <div className="orcamento__add-panel">
-            {unflaggedExpenses.length > 0 && (
-              <div className="orcamento__mark-fixed">
-                <select value={markFixedId} onChange={(e) => setMarkFixedId(e.target.value)}>
-                  <option value="">Marcar uma despesa já sincronizada como fixa...</option>
-                  {unflaggedExpenses.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} · {formatCurrency(t.amount)}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  as="button"
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleMarkFixed}
-                  disabled={!markFixedId}
-                >
-                  Marcar como fixa
-                </Button>
-              </div>
-            )}
-
-            <p className="orcamento__section-hint">Ou crie uma despesa fixa nova, que não está registrada no banco:</p>
-
             <form className="orcamento__form" onSubmit={handleCreateFixed}>
               <label className="orcamento__field">
                 <span className="orcamento__field-label">Nome</span>
@@ -283,9 +277,14 @@ export default function Orcamento() {
                   required
                 />
               </label>
-              <Button as="button" type="submit" variant="primary" size="sm">
-                Adicionar
-              </Button>
+              <div className="orcamento__form-actions">
+                <Button as="button" type="submit" variant="primary" size="sm">
+                  Adicionar
+                </Button>
+                <Button as="button" type="button" variant="outline" size="sm" onClick={handleCancelFixed}>
+                  Cancelar
+                </Button>
+              </div>
             </form>
           </div>
         )}
@@ -395,9 +394,14 @@ export default function Orcamento() {
                 ))}
               </select>
             </label>
-            <Button as="button" type="submit" variant="primary" size="sm">
-              Adicionar
-            </Button>
+            <div className="orcamento__form-actions">
+              <Button as="button" type="submit" variant="primary" size="sm">
+                Adicionar
+              </Button>
+              <Button as="button" type="button" variant="outline" size="sm" onClick={handleCancelInstallment}>
+                Cancelar
+              </Button>
+            </div>
           </form>
         )}
       </Card>
@@ -405,19 +409,61 @@ export default function Orcamento() {
       <Card title="Reserva de emergência">
         <p className="orcamento__reserve-value">{formatCurrency(reserve.currentAmount)}</p>
 
-        <Button as="button" type="button" variant="primary" size="sm" onClick={() => setShowReserveForm((v) => !v)}>
-          Adicionar reserva
-        </Button>
+        <div className="orcamento__reserve-actions">
+          <Button
+            as="button"
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={() => setReservePanel((prev) => (prev === "add" ? null : "add"))}
+          >
+            Adicionar reserva
+          </Button>
+          <Button
+            as="button"
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => setReservePanel((prev) => (prev === "remove" ? null : "remove"))}
+          >
+            Remover reserva
+          </Button>
+        </div>
 
-        {showReserveForm && (
+        {reservePanel === "add" && (
           <form className="orcamento__form" onSubmit={handleTopUp}>
             <label className="orcamento__field">
-              <span className="orcamento__field-label">Valor</span>
+              <span className="orcamento__field-label">Valor a adicionar</span>
               <CurrencyInput placeholder="Ex: 300" value={topUpInput} onChange={(e) => setTopUpInput(e.target.value)} />
             </label>
-            <Button as="button" type="submit" variant="primary" size="sm">
-              Adicionar
-            </Button>
+            <div className="orcamento__form-actions">
+              <Button as="button" type="submit" variant="primary" size="sm">
+                Adicionar
+              </Button>
+              <Button as="button" type="button" variant="outline" size="sm" onClick={handleCancelReserve}>
+                Cancelar
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {reservePanel === "remove" && (
+          <form className="orcamento__form" onSubmit={handleWithdraw}>
+            <label className="orcamento__field">
+              <span className="orcamento__field-label">Valor a remover</span>
+              <CurrencyInput placeholder="Ex: 300" value={withdrawInput} onChange={(e) => setWithdrawInput(e.target.value)} />
+            </label>
+            <div className="orcamento__form-actions">
+              <Button as="button" type="submit" variant="secondary" size="sm">
+                Remover
+              </Button>
+              <Button as="button" type="button" variant="outline" size="sm" onClick={handleClearReserve}>
+                Remover tudo
+              </Button>
+              <Button as="button" type="button" variant="outline" size="sm" onClick={handleCancelReserve}>
+                Cancelar
+              </Button>
+            </div>
           </form>
         )}
       </Card>
