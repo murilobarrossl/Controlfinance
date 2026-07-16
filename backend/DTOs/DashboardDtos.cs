@@ -33,6 +33,13 @@ public record CreateTransactionDto(
 
 public record SetTransactionFixedDto(bool IsFixed);
 
+public record TransactionReportDto(
+    IEnumerable<TransactionDto> Items,
+    int TotalCount,
+    decimal TotalIncome,
+    decimal TotalExpense
+);
+
 public record TransactionDto(
     Guid Id,
     string Name,

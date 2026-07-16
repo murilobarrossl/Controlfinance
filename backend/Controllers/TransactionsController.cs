@@ -28,27 +28,110 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, true, out var tp))
             query = query.Where(t => t.Type == tp);
 
-        // Cap de segurança: Categorias/Relatórios/ReceitasDespesas hoje esperam a lista
-        // completa para agregar no cliente, então isso não pagina de verdade, só limita o pior
-        // caso (uma conta com muitos anos de histórico sincronizado da Polp). Paginação de
-        // verdade exige repensar esses três telas para agregar no backend, não só aqui.
+        // Cap de segurança: Categorias/ReceitasDespesas hoje esperam a lista completa pra
+        // agregar no cliente, então isso não pagina de verdade, só limita o pior caso (uma
+        // conta com muitos anos de histórico sincronizado da Polp). O Relatórios tem paginação
+        // de verdade no endpoint /report abaixo.
         const int MaxResults = 2000;
 
-        var result = await query
-            .OrderByDescending(t => t.DueDate)
-            .Take(MaxResults)
-            .Select(t => new TransactionDto(
-                t.Id, t.Name, t.Description,
-                t.Type.ToString(), t.Status.ToString(),
-                t.Amount, t.DueDate, t.PaidAt,
-                t.Category != null ? t.Category.Name : null,
-                t.BankAccount != null ? t.BankAccount.Name : null,
-                t.IsFixed
-            ))
-            .ToListAsync();
+        var result = await ProjectToDto(query.OrderByDescending(t => t.DueDate).Take(MaxResults)).ToListAsync();
 
         return Ok(result);
     }
+
+    // Paginado, filtrado e ordenado no backend, ao contrário do GetAll acima. Necessário porque
+    // Relatórios lista o histórico inteiro numa tabela: carregar tudo de uma vez pra filtrar no
+    // cliente fica pesado à medida que o histórico cresce.
+    [HttpGet("report")]
+    public async Task<IActionResult> GetReport(
+        [FromQuery] string? status,
+        [FromQuery] string? type,
+        [FromQuery] string? search,
+        [FromQuery] string sortBy = "dueDate",
+        [FromQuery] string sortDir = "desc",
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var desc = !string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
+
+        var query = db.Transactions
+            .Where(t => t.UserId == UserId)
+            .Where(t => t.BankAccount == null || t.BankAccount.IsActive);
+
+        if (!string.IsNullOrEmpty(status) && Enum.TryParse<TransactionStatus>(status, true, out var s))
+            query = query.Where(t => t.Status == s);
+
+        if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, true, out var tp))
+            query = query.Where(t => t.Type == tp);
+
+        if (!string.IsNullOrEmpty(search))
+            query = query.Where(t => EF.Functions.ILike(t.Name, $"%{search}%"));
+
+        var totalCount = await query.CountAsync();
+
+        // Amount é criptografado (guardado como texto): "ORDER BY"/"SUM" direto na coluna
+        // cifrada ou dá erro de SQL, ou (no caso do ORDER BY) roda sem erro nenhum e devolve uma
+        // ordem sem sentido, porque estaria ordenando o texto cifrado, não o valor real. Por
+        // isso, quando a ordenação pedida é por valor, materializa (descriptografando) até um
+        // teto de segurança, ordena e soma em memória, e só então corta a página pedida.
+        const int MaxRows = 2000;
+
+        List<TransactionDto> items;
+        decimal totalIncome;
+        decimal totalExpense;
+
+        if (string.Equals(sortBy, "amount", StringComparison.OrdinalIgnoreCase))
+        {
+            var all = await ProjectToDto(query.OrderByDescending(t => t.DueDate).Take(MaxRows)).ToListAsync();
+            var sorted = desc ? all.OrderByDescending(t => t.Amount) : all.OrderBy(t => t.Amount);
+            items = sorted.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            totalIncome = all.Where(t => t.Type == "Income").Sum(t => t.Amount);
+            totalExpense = all.Where(t => t.Type == "Expense").Sum(t => t.Amount);
+        }
+        else
+        {
+            var ordered = ApplySort(query, sortBy, desc);
+            items = await ProjectToDto(ordered.Skip((page - 1) * pageSize).Take(pageSize)).ToListAsync();
+
+            // Totais do filtro inteiro, não só da página atual: mesma limitação do Amount
+            // criptografado, então soma em memória depois de trazer só Type+Amount (mais barato
+            // que montar o TransactionDto inteiro com os joins de categoria/conta).
+            var forTotals = await query
+                .Take(MaxRows)
+                .Select(t => new { t.Type, t.Amount })
+                .ToListAsync();
+            totalIncome = forTotals.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
+            totalExpense = forTotals.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
+        }
+
+        return Ok(new TransactionReportDto(items, totalCount, totalIncome, totalExpense));
+    }
+
+    private static IQueryable<TransactionDto> ProjectToDto(IQueryable<Transaction> query) =>
+        query.Select(t => new TransactionDto(
+            t.Id, t.Name, t.Description,
+            t.Type.ToString(), t.Status.ToString(),
+            t.Amount, t.DueDate, t.PaidAt,
+            t.Category != null ? t.Category.Name : null,
+            t.BankAccount != null ? t.BankAccount.Name : null,
+            t.IsFixed
+        ));
+
+    private static IQueryable<Transaction> ApplySort(IQueryable<Transaction> query, string sortBy, bool desc) => sortBy switch
+    {
+        "name" => desc ? query.OrderByDescending(t => t.Name) : query.OrderBy(t => t.Name),
+        "categoryName" => desc
+            ? query.OrderByDescending(t => t.Category != null ? t.Category.Name : "")
+            : query.OrderBy(t => t.Category != null ? t.Category.Name : ""),
+        "bankAccountName" => desc
+            ? query.OrderByDescending(t => t.BankAccount != null ? t.BankAccount.Name : "")
+            : query.OrderBy(t => t.BankAccount != null ? t.BankAccount.Name : ""),
+        "type" => desc ? query.OrderByDescending(t => t.Type) : query.OrderBy(t => t.Type),
+        "status" => desc ? query.OrderByDescending(t => t.Status) : query.OrderBy(t => t.Status),
+        _ => desc ? query.OrderByDescending(t => t.DueDate) : query.OrderBy(t => t.DueDate),
+    };
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateTransactionDto dto)

@@ -28,6 +28,34 @@ export const getTransactions = async (filters = {}) => {
 
 const invalidateCache = () => cache.clear();
 
+const buildReportQuery = ({ status, type, search, sortBy, sortDir, page, pageSize } = {}) => {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (type) params.set("type", type);
+  if (search) params.set("search", search);
+  if (sortBy) params.set("sortBy", sortBy);
+  if (sortDir) params.set("sortDir", sortDir);
+  if (page) params.set("page", page);
+  if (pageSize) params.set("pageSize", pageSize);
+  return params.toString();
+};
+
+// Paginado/filtrado/ordenado no backend, ao contrário de getTransactions acima (que traz tudo
+// pra Categorias/ReceitasDespesas agregarem no cliente). Usa o mesmo cache do resto do arquivo,
+// então as mutações abaixo (create/update/delete/setFixed) já invalidam essas entradas também.
+export const getTransactionsReport = async (filters = {}) => {
+  const query = buildReportQuery(filters);
+  const cacheKey = `report:${query}`;
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.promise;
+
+  const promise = apiFetch(`/transactions/report${query ? `?${query}` : ""}`);
+  cache.set(cacheKey, { promise, expiresAt: Date.now() + CACHE_TTL_MS });
+
+  promise.catch(() => cache.delete(cacheKey));
+  return promise;
+};
+
 export const createTransaction = async (payload) => {
   const result = await apiFetch("/transactions", {
     method: "POST",
