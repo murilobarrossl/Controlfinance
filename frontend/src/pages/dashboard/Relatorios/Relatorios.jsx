@@ -91,8 +91,6 @@ export default function Relatorios() {
 
   const items = report?.items ?? [];
   const totalCount = report?.totalCount ?? 0;
-  const totalIncome = report?.totalIncome ?? 0;
-  const totalExpense = report?.totalExpense ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   return (
@@ -167,10 +165,7 @@ export default function Relatorios() {
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={4}>Totais ({totalCount} lançamentos)</td>
-                <td colSpan={1} className="relatorios__amount--income">{formatCurrency(totalIncome)}</td>
-                <td colSpan={1} className="relatorios__amount--expense">{formatCurrency(totalExpense)}</td>
-                <td>{formatCurrency(totalIncome - totalExpense)}</td>
+                <td colSpan={COLUMNS.length}>Totais ({totalCount} lançamentos)</td>
               </tr>
             </tfoot>
           </table>

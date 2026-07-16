@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getDashboardSummary } from "../../../api/dashboard.js";
-import { getIntegrations, getConnectors } from "../../../api/polp.js";
+import { getIntegrations, getConnectors, syncAllIntegrations } from "../../../api/polp.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
@@ -39,12 +39,21 @@ export default function DashboardHome() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     // Lista de contas e conectores são só pro seletor de banco: se falhar, o
     // dashboard segue funcionando normalmente com a conta ativa padrão.
     getIntegrations().then(setAccounts).catch(() => {});
     getConnectors().then(setConnectors).catch(() => {});
+
+    // Sincroniza com o banco de verdade ao carregar a página (saldo e transações ficavam
+    // congelados no valor de quando a conta foi conectada, sem isso). Não trava o carregamento
+    // inicial esperando a Polp responder: dispara em paralelo e só atualiza o resumo (efeito
+    // abaixo, via refreshKey) quando a sincronização terminar.
+    syncAllIntegrations()
+      .then(() => setRefreshKey((key) => key + 1))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -67,7 +76,7 @@ export default function DashboardHome() {
     return () => {
       cancelled = true;
     };
-  }, [selectedAccountId]);
+  }, [selectedAccountId, refreshKey]);
 
   function handleSelectAccount(accountId) {
     setLoading(true);

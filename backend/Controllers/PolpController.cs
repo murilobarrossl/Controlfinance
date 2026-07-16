@@ -155,15 +155,53 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
 
         if (local is null) return NotFound();
 
-        List<PolpAccountDto> remoteAccounts;
+        int accountsCount;
         try
         {
-            remoteAccounts = await polp.GetAccountsAsync(local.PolpIntegrationId, ct);
+            accountsCount = await SyncOneAsync(local, ct);
         }
         catch (HttpRequestException ex)
         {
             return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível buscar as contas.", detail = ex.Message });
         }
+
+        return Ok(new { status = "synced", accountsCount });
+    }
+
+    // ──────────────────────────────────────────
+    //  POST /api/polp/integrations/sync-all
+    //  Sincroniza todas as integrações do usuário de uma vez, usado pra atualizar saldo e
+    //  transações automaticamente ao carregar o dashboard, sem precisar reconectar o banco
+    //  nem esperar um job periódico. Uma integração com falha (banco fora do ar, token
+    //  expirado etc.) não trava a sincronização das outras.
+    // ──────────────────────────────────────────
+    [HttpPost("integrations/sync-all")]
+    public async Task<IActionResult> SyncAll(CancellationToken ct)
+    {
+        var integrations = await db.PolpIntegrations
+            .Where(p => p.UserId == UserId)
+            .ToListAsync(ct);
+
+        var syncedCount = 0;
+        foreach (var local in integrations)
+        {
+            try
+            {
+                await SyncOneAsync(local, ct);
+                syncedCount++;
+            }
+            catch (HttpRequestException)
+            {
+                // segue pras próximas integrações mesmo se essa falhar
+            }
+        }
+
+        return Ok(new { syncedIntegrations = syncedCount, totalIntegrations = integrations.Count });
+    }
+
+    private async Task<int> SyncOneAsync(PolpIntegration local, CancellationToken ct)
+    {
+        var remoteAccounts = await polp.GetAccountsAsync(local.PolpIntegrationId, ct);
 
         if (!await db.Categories.AnyAsync(c => c.UserId == UserId, ct))
         {
@@ -268,7 +306,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         local.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        return Ok(new { status = "synced", accountsCount = createdAccounts.Count });
+        return createdAccounts.Count;
     }
 
     // O Npgsql exige DateTimeKind.Utc para colunas timestamptz; DateTime.TryParse sozinho

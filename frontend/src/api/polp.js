@@ -21,6 +21,13 @@ export const syncIntegration = async (integrationId) =>
     method: "POST",
   });
 
+// Sincroniza todas as integrações do usuário de uma vez (usado ao carregar o dashboard, pra
+// saldo/transações não ficarem desatualizados até a próxima reconexão manual do banco)
+export const syncAllIntegrations = async () =>
+  apiFetch("/polp/integrations/sync-all", {
+    method: "POST",
+  });
+
 // Lista os bancos/conectores disponíveis
 export const getConnectors = async () =>
   apiFetch("/polp/connectors");
