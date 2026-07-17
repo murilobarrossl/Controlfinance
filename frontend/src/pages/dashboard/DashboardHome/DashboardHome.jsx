@@ -163,7 +163,7 @@ export default function DashboardHome() {
             >
               <TargetIcon />
             </span>
-            <span className="dashboard-home__stat-label">Saldo do mês (receitas - despezas)</span>
+            <span className="dashboard-home__stat-label">Saldo do mês (receitas - despesas)</span>
           </div>
           <span
             className={`dashboard-home__stat-value ${
