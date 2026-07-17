@@ -36,7 +36,14 @@ export default function App() {
             <Route path="/loginemail" element={<LoginPage mode="email" />} />
             <Route path="/logincpf-cnpj" element={<LoginPage mode="cpf" />} />
             <Route path="/register" element={<RegisterPage />} />
-            <Route path="/conectar-banco" element={<ConnectBankPage />} />
+            <Route
+              path="/conectar-banco"
+              element={
+                <ProtectedRoute>
+                  <ConnectBankPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/termos-de-uso" element={<TermosDeUso />} />
             <Route path="/politica-de-privacidade" element={<PoliticaDePrivacidade />} />
             <Route

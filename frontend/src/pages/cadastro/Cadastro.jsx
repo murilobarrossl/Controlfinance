@@ -77,8 +77,10 @@ export default function RegisterPage() {
         password,
       });
 
-      if (data?.token) {
-        setAuthToken(data.token);
+      // A resposta agora é o usuário direto (o token de sessão já veio num cookie httpOnly
+      // na mesma resposta, o backend cuida disso, não passa mais pelo corpo em JSON).
+      if (data?.id) {
+        setAuthToken(data);
         navigate("/conectar-banco");
       } else {
         navigate("/loginemail");

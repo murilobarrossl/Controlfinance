@@ -18,6 +18,10 @@
     <PackageReference Include="Microsoft.IdentityModel.Tokens"                Version="7.5.1" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt"               Version="7.5.1" />
 
+    <!-- Data Protection: guarda o key ring usado pra assinar os cookies CSRF (IAntiforgery)
+         no Postgres, senão cada reinício/redeploy trocaria a chave e invalidaria os tokens. -->
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="8.0.4" />
+
     <!-- Bcrypt para hash de senha -->
     <PackageReference Include="BCrypt.Net-Next"                               Version="4.0.3" />
 

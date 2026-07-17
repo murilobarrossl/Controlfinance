@@ -1,11 +1,12 @@
 using ControlFinance.API.Models;
 using ControlFinance.API.Services;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace ControlFinance.API.Data;
 
-public class AppDbContext : DbContext
+public class AppDbContext : DbContext, IDataProtectionKeyContext
 {
     private readonly IEncryptionService _encryption;
 
@@ -22,6 +23,8 @@ public class AppDbContext : DbContext
     public DbSet<Installment> Installments => Set<Installment>();
     public DbSet<PolpIntegration> PolpIntegrations => Set<PolpIntegration>();
     public DbSet<RevokedToken> RevokedTokens => Set<RevokedToken>();
+    public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Conversores usados nas colunas que guardam dados sensíveis criptografados (AES-GCM).
