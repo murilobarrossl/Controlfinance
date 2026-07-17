@@ -28,7 +28,7 @@ export default function Hero() {
 
         <p className="hero__trust">
           <ShieldIcon />
-          Conexão criptografada de ponta a ponta. Nunca vemos nem guardamos sua senha.
+          Conexão criptografada de ponta a ponta. Nunca vemos nem guardamos seus dados.
         </p>
 
         <div className="hero__actions">

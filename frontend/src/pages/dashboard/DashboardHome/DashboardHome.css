@@ -40,49 +40,6 @@
   gap: 1rem;
 }
 
-.dashboard-home__stat {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.dashboard-home__stat-header {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.dashboard-home__stat-icon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--color-text-tertiary);
-  flex-shrink: 0;
-}
-
-.dashboard-home__stat-icon svg {
-  width: 14px;
-  height: 14px;
-}
-
-.dashboard-home__stat-icon--income {
-  color: var(--color-income);
-}
-
-.dashboard-home__stat-icon--expense {
-  color: var(--color-accent);
-}
-
-.dashboard-home__stat-label {
-  color: var(--color-text-secondary);
-  font-size: 0.8rem;
-}
-
-.dashboard-home__stat-value {
-  color: var(--color-text-primary);
-  font-size: 1.4rem;
-  font-weight: 500;
-}
-
 .dashboard-home__stat-value--income {
   color: var(--color-income);
 }
@@ -109,14 +66,21 @@
 .dashboard-home__list-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.75rem;
+}
+
+.dashboard-home__list-info {
+  flex: 1;
+  min-width: 0;
 }
 
 .dashboard-home__list-name {
   display: block;
   color: var(--color-text-primary);
   font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard-home__list-meta {

@@ -2,23 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { getTransactions } from "../../../api/transactions.js";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
+import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
 import BarComparisonChart from "../../../components/charts/BarComparisonChart.jsx";
-import MonthlyTrendChart from "../../../components/charts/MonthlyTrendChart.jsx";
+import AreaTrendChart from "../../../components/charts/AreaTrendChart.jsx";
 import { formatCurrency } from "../../../utils/financeMath.js";
 import { monthKey, formatMonthShort } from "../../../utils/monthLabel.js";
+import { getMonthsWindow, buildMonthlyTrend } from "../../../utils/monthlyTrend.js";
 import "./ReceitasDespesas.css";
 
 const MONTHS_WINDOW = 3;
-
-// offset 0 = janela atual (últimos 3 meses); offset 1 = os 3 meses anteriores a essa janela; e por aí vai.
-function getMonthsWindow(count, offset) {
-  const now = new Date();
-  const months = [];
-  for (let i = count - 1; i >= 0; i--) {
-    months.push(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i - offset * count, 1)));
-  }
-  return months;
-}
 
 function topByCategory(transactions, limit = 5) {
   const totals = new Map();
@@ -52,19 +44,7 @@ export default function ReceitasDespesas() {
   const windowMonths = useMemo(() => getMonthsWindow(MONTHS_WINDOW, windowOffset), [windowOffset]);
   const rangeLabel = `${formatMonthShort(windowMonths[0])} – ${formatMonthShort(windowMonths[windowMonths.length - 1])}`;
 
-  const monthlyTrend = useMemo(
-    () =>
-      windowMonths.map((monthDate) => {
-        const key = monthKey(monthDate);
-        const monthTransactions = transactions.filter((t) => monthKey(new Date(t.dueDate)) === key);
-        return {
-          month: formatMonthShort(monthDate),
-          Receitas: monthTransactions.filter((t) => t.type === "Income").reduce((sum, t) => sum + t.amount, 0),
-          Despesas: monthTransactions.filter((t) => t.type === "Expense").reduce((sum, t) => sum + t.amount, 0),
-        };
-      }),
-    [transactions, windowMonths]
-  );
+  const monthlyTrend = useMemo(() => buildMonthlyTrend(transactions, windowMonths), [transactions, windowMonths]);
 
   const windowTransactions = useMemo(() => {
     const keys = new Set(windowMonths.map(monthKey));
@@ -85,27 +65,23 @@ export default function ReceitasDespesas() {
     <div className="receitas-despesas">
       <SectionHeading kicker="Movimentações" title="Receitas e despesas" align="left" />
 
-      <div className="receitas-despesas__window-picker">
-        <button
-          type="button"
-          onClick={() => setWindowOffset((prev) => prev + 1)}
-          aria-label="3 meses anteriores"
-        >
-          ‹
-        </button>
-        <span>{rangeLabel}</span>
-        <button
-          type="button"
-          onClick={() => setWindowOffset((prev) => Math.max(0, prev - 1))}
-          disabled={windowOffset === 0}
-          aria-label="3 meses seguintes"
-        >
-          ›
-        </button>
-      </div>
+      <RangePicker
+        label={rangeLabel}
+        onPrev={() => setWindowOffset((prev) => prev + 1)}
+        onNext={() => setWindowOffset((prev) => Math.max(0, prev - 1))}
+        nextDisabled={windowOffset === 0}
+      />
 
       <Card title={`Receitas x despesas: ${rangeLabel}`}>
-        <MonthlyTrendChart height={260} formatValue={formatCurrency} data={monthlyTrend} />
+        <AreaTrendChart
+          height={260}
+          formatValue={formatCurrency}
+          series={[
+            { key: "Receitas", color: "#4ECDC4" },
+            { key: "Despesas", color: "#ED4A31" },
+          ]}
+          data={monthlyTrend}
+        />
       </Card>
 
       <div className="receitas-despesas__grid">
@@ -113,7 +89,7 @@ export default function ReceitasDespesas() {
           {topIncomes.length === 0 ? (
             <p className="receitas-despesas__hint">Sem receitas nesse período.</p>
           ) : (
-            <BarComparisonChart layout="vertical" height={220} formatValue={formatCurrency} data={topIncomes} />
+            <BarComparisonChart layout="vertical" height={220} formatValue={formatCurrency} data={topIncomes} highlightMax />
           )}
           {biggestIncome && (
             <p className="receitas-despesas__highlight">
@@ -126,7 +102,7 @@ export default function ReceitasDespesas() {
           {topExpenses.length === 0 ? (
             <p className="receitas-despesas__hint">Sem despesas nesse período.</p>
           ) : (
-            <BarComparisonChart layout="vertical" height={220} formatValue={formatCurrency} data={topExpenses} />
+            <BarComparisonChart layout="vertical" height={220} formatValue={formatCurrency} data={topExpenses} highlightMax />
           )}
           {biggestExpense && (
             <p className="receitas-despesas__highlight">

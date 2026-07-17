@@ -1,42 +1,73 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getDashboardSummary } from "../../../api/dashboard.js";
+import { getTransactions } from "../../../api/transactions.js";
+import { getCategories } from "../../../api/categories.js";
 import { getIntegrations, getConnectors, syncAllIntegrations } from "../../../api/polp.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
-import BarComparisonChart from "../../../components/charts/BarComparisonChart.jsx";
+import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
+import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
+import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
+import AreaTrendChart from "../../../components/charts/AreaTrendChart.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
 import AccountSwitcher from "../../../components/dashboard/AccountSwitcher/AccountSwitcher.jsx";
 import { WalletIcon, TrendUpIcon, TrendDownIcon, TargetIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
-import { formatCurrency } from "../../../utils/financeMath.js";
+import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
+import { getMonthsWindow, buildMonthlyTrend } from "../../../utils/monthlyTrend.js";
 import "./DashboardHome.css";
 
 const MAX_DONUT_SLICES = 4;
+const TREND_MONTHS = 6;
+const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
 
 function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString("pt-BR");
 }
 
-function buildDonutData(categoryExpenses) {
+// Usa a mesma cor cadastrada na categoria (a que aparece no gráfico de Categorias), em vez de
+// deixar o gráfico sortear uma cor qualquer, pra uma categoria não parecer "outra" de uma tela
+// pra outra.
+function buildDonutData(categoryExpenses, categories) {
   const sorted = [...categoryExpenses].sort((a, b) => b.amount - a.amount);
   const top = sorted.slice(0, MAX_DONUT_SLICES);
   const rest = sorted.slice(MAX_DONUT_SLICES);
   const restTotal = rest.reduce((sum, c) => sum + c.amount, 0);
 
-  const data = top.map((c) => ({ name: c.categoryName, value: c.amount }));
+  const data = top.map((c) => ({
+    name: c.categoryName,
+    value: c.amount,
+    color: categories.find((cat) => cat.name === c.categoryName)?.color,
+  }));
   if (restTotal > 0) data.push({ name: "Outros", value: restTotal, color: "#808080" });
 
   return data;
+}
+
+// direction segue o sinal literal da variação (pra a seta do badge bater com o número);
+// tone é quem decide a cor, e pra despesas essa leitura é invertida (crescer é ruim).
+function computeTrend(current, previous, { invertTone = false } = {}) {
+  if (!previous) return null;
+  const change = ((current - previous) / previous) * 100;
+  const direction = change >= 0 ? "up" : "down";
+  const isGood = invertTone ? change < 0 : change >= 0;
+  return {
+    direction,
+    tone: isGood ? "positive" : "negative",
+    text: `${change >= 0 ? "+" : ""}${change.toFixed(1)}% vs mês anterior`,
+  };
 }
 
 export default function DashboardHome() {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState([]);
   const [connectors, setConnectors] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [selectedAccountId, setSelectedAccountId] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -46,6 +77,7 @@ export default function DashboardHome() {
     // dashboard segue funcionando normalmente com a conta ativa padrão.
     getIntegrations().then(setAccounts).catch(() => {});
     getConnectors().then(setConnectors).catch(() => {});
+    getCategories().then(setCategories).catch(() => {});
 
     // Sincroniza com o banco de verdade ao carregar a página (saldo e transações ficavam
     // congelados no valor de quando a conta foi conectada, sem isso). Não trava o carregamento
@@ -62,9 +94,12 @@ export default function DashboardHome() {
     // conta anterior por cima da conta selecionada agora.
     let cancelled = false;
 
-    getDashboardSummary(selectedAccountId)
-      .then((data) => {
-        if (!cancelled) setSummary(data);
+    Promise.all([getDashboardSummary(selectedAccountId), getTransactions()])
+      .then(([summaryData, transactionsData]) => {
+        if (!cancelled) {
+          setSummary(summaryData);
+          setTransactions(transactionsData);
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err.message || "Não foi possível carregar o dashboard.");
@@ -77,6 +112,15 @@ export default function DashboardHome() {
       cancelled = true;
     };
   }, [selectedAccountId, refreshKey]);
+
+  // Tendência mensal (últimos 6 meses): agrega todas as contas conectadas, mesmo padrão já
+  // usado em Categorias/Receitas x despesas, não só a conta selecionada no seletor acima.
+  const monthlyTrend = useMemo(
+    () => buildMonthlyTrend(transactions, getMonthsWindow(TREND_MONTHS)),
+    [transactions]
+  );
+  const currentMonthTrend = monthlyTrend[monthlyTrend.length - 1];
+  const previousMonthTrend = monthlyTrend[monthlyTrend.length - 2];
 
   function handleSelectAccount(accountId) {
     setLoading(true);
@@ -99,11 +143,19 @@ export default function DashboardHome() {
 
   const { activeAccount, totalIncome, totalExpense, pendingTransactions, categoryExpenses, activeCard } = summary;
   const monthlyBalance = totalIncome - totalExpense;
+  const percentageSpent = totalIncome > 0 ? (totalExpense / totalIncome) * 100 : 0;
+  const savingsRate =
+    currentMonthTrend?.Receitas > 0
+      ? ((currentMonthTrend.Receitas - currentMonthTrend.Despesas) / currentMonthTrend.Receitas) * 100
+      : 0;
   const upcoming = [...pendingTransactions]
     .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
     .slice(0, 5);
-  const donutData = buildDonutData(categoryExpenses);
+  const donutData = buildDonutData(categoryExpenses, categories);
   const firstName = user?.name?.split(" ")[0];
+
+  const incomeTrend = computeTrend(currentMonthTrend?.Receitas, previousMonthTrend?.Receitas);
+  const expenseTrend = computeTrend(currentMonthTrend?.Despesas, previousMonthTrend?.Despesas, { invertTone: true });
 
   return (
     <div className="dashboard-home">
@@ -123,67 +175,45 @@ export default function DashboardHome() {
       </div>
 
       <div className="dashboard-home__stats">
-        <Card className="dashboard-home__stat">
-          <div className="dashboard-home__stat-header">
-            <span className="dashboard-home__stat-icon">
-              <WalletIcon />
-            </span>
-            <span className="dashboard-home__stat-label">Saldo da conta</span>
-          </div>
-          <span className="dashboard-home__stat-value">{formatCurrency(activeAccount.balance)}</span>
-        </Card>
-        <Card className="dashboard-home__stat">
-          <div className="dashboard-home__stat-header">
-            <span className="dashboard-home__stat-icon dashboard-home__stat-icon--income">
-              <TrendUpIcon />
-            </span>
-            <span className="dashboard-home__stat-label">Receitas do mês</span>
-          </div>
-          <span className="dashboard-home__stat-value dashboard-home__stat-value--income">
-            {formatCurrency(totalIncome)}
-          </span>
-        </Card>
-        <Card className="dashboard-home__stat">
-          <div className="dashboard-home__stat-header">
-            <span className="dashboard-home__stat-icon dashboard-home__stat-icon--expense">
-              <TrendDownIcon />
-            </span>
-            <span className="dashboard-home__stat-label">Despesas do mês</span>
-          </div>
-          <span className="dashboard-home__stat-value dashboard-home__stat-value--expense">
-            {formatCurrency(totalExpense)}
-          </span>
-        </Card>
-        <Card className="dashboard-home__stat">
-          <div className="dashboard-home__stat-header">
-            <span
-              className={`dashboard-home__stat-icon ${
-                monthlyBalance >= 0 ? "dashboard-home__stat-icon--income" : "dashboard-home__stat-icon--expense"
-              }`}
-            >
-              <TargetIcon />
-            </span>
-            <span className="dashboard-home__stat-label">Saldo do mês (receitas - despesas)</span>
-          </div>
-          <span
-            className={`dashboard-home__stat-value ${
-              monthlyBalance >= 0 ? "dashboard-home__stat-value--income" : "dashboard-home__stat-value--expense"
-            }`}
-          >
-            {formatCurrency(monthlyBalance)}
-          </span>
-        </Card>
+        <StatCard
+          icon={<WalletIcon />}
+          label="Saldo da conta"
+          value={formatCurrency(activeAccount.balance)}
+        />
+        <StatCard
+          icon={<TrendUpIcon />}
+          label="Receitas do mês"
+          value={formatCurrency(totalIncome)}
+          valueTone="income"
+          trend={incomeTrend}
+        />
+        <StatCard
+          icon={<TrendDownIcon />}
+          label="Despesas do mês"
+          value={formatCurrency(totalExpense)}
+          valueTone="expense"
+          trend={expenseTrend}
+        />
+        <StatCard
+          icon={<TargetIcon />}
+          label="Saldo do mês (receitas - despesas)"
+          value={formatCurrency(monthlyBalance)}
+          valueTone={monthlyBalance >= 0 ? "income" : "expense"}
+          secondaryLines={[{ label: "% da receita gasta", value: formatPercentage(percentageSpent) }]}
+        />
       </div>
 
       <div className="dashboard-home__grid">
-        <Card title="Receitas x despesas (mês)">
-          <BarComparisonChart
-            height={180}
+        <Card title={`Receitas x despesas (últimos ${TREND_MONTHS} meses)`}>
+          <AreaTrendChart
+            height={220}
             formatValue={formatCurrency}
-            data={[
-              { name: "Receitas", value: totalIncome, color: "#4ECDC4" },
-              { name: "Despesas", value: totalExpense, color: "#ED4A31" },
+            series={[
+              { key: "Receitas", color: "#4ECDC4" },
+              { key: "Despesas", color: "#ED4A31" },
             ]}
+            data={monthlyTrend}
+            badge={{ value: formatPercentage(savingsRate), label: "Taxa de poupança" }}
           />
         </Card>
 
@@ -191,7 +221,12 @@ export default function DashboardHome() {
           {donutData.length === 0 ? (
             <p className="dashboard-home__hint">Nenhuma despesa categorizada este mês.</p>
           ) : (
-            <CategoryDonutChart height={200} formatValue={formatCurrency} data={donutData} />
+            <CategoryDonutChart
+              height={220}
+              formatValue={formatCurrency}
+              data={donutData}
+              centerLabel={formatCurrency(totalExpense)}
+            />
           )}
         </Card>
       </div>
@@ -204,12 +239,14 @@ export default function DashboardHome() {
             <ul className="dashboard-home__list">
               {upcoming.map((t) => (
                 <li key={t.id} className="dashboard-home__list-item">
-                  <div>
+                  <IconAvatar type={t.type === "Income" ? "income" : "expense"} />
+                  <div className="dashboard-home__list-info">
                     <span className="dashboard-home__list-name">{t.name}</span>
                     <span className="dashboard-home__list-meta">
                       {t.categoryName || "Sem categoria"} · {formatDate(t.dueDate)}
                     </span>
                   </div>
+                  <StatusPill status={t.status}>{STATUS_LABELS[t.status] || t.status}</StatusPill>
                   <span
                     className={`dashboard-home__list-amount ${
                       t.type === "Income" ? "dashboard-home__stat-value--income" : "dashboard-home__stat-value--expense"

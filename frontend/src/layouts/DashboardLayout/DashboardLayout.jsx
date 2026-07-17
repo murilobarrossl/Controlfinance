@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { logout as logoutRequest } from "../../api/auth.js";
 import ErrorBoundary from "../../components/ErrorBoundary/ErrorBoundary.jsx";
-import Button from "../../components/ui/Button/Button.jsx";
+import NavUserMenu from "../../components/dashboard/NavUserMenu/NavUserMenu.jsx";
 import logo from "../../assets/images/control-finance-transparente-branco.svg";
 import "./DashboardLayout.css";
 
@@ -16,7 +16,7 @@ const TABS = [
 ];
 
 export default function DashboardLayout() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   async function handleLogout() {
@@ -49,9 +49,7 @@ export default function DashboardLayout() {
           ))}
         </nav>
 
-        <Button as="button" type="button" variant="outline" size="sm" onClick={handleLogout}>
-          Sair
-        </Button>
+        <NavUserMenu user={user} onLogout={handleLogout} />
       </header>
 
       <main className="dashboard-content">

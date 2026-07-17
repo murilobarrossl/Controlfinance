@@ -1,0 +1,113 @@
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.stat-card__header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.stat-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  color: var(--color-text-secondary);
+  background-color: color-mix(in srgb, var(--color-text-tertiary) 16%, transparent);
+}
+
+.stat-card__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.stat-card__icon--income {
+  color: var(--color-income);
+  background-color: color-mix(in srgb, var(--color-income) 16%, transparent);
+}
+
+.stat-card__icon--expense {
+  color: var(--color-accent);
+  background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
+.stat-card__label {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+}
+
+.stat-card__value-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.stat-card__value {
+  color: var(--color-text-primary);
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+
+.stat-card__value--income {
+  color: var(--color-income);
+}
+
+.stat-card__value--expense {
+  color: var(--color-accent);
+}
+
+.stat-card__trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: var(--radius-pill);
+  padding: 0.2rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.stat-card__trend svg {
+  width: 12px;
+  height: 12px;
+}
+
+.stat-card__trend--positive {
+  color: var(--color-income);
+  background-color: color-mix(in srgb, var(--color-income) 16%, transparent);
+}
+
+.stat-card__trend--negative {
+  color: var(--color-accent);
+  background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
+.stat-card__secondary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.stat-card__secondary-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  color: var(--color-text-tertiary);
+}
+
+.stat-card__secondary-line span:last-child {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}

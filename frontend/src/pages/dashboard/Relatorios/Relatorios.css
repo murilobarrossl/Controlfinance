@@ -85,6 +85,20 @@
   white-space: nowrap;
 }
 
+.relatorios__description {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.relatorios__table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.relatorios__table tbody tr:hover {
+  background-color: var(--color-surface-hover);
+}
+
 .relatorios__table tfoot td {
   border-bottom: none;
   border-top: 1px solid var(--color-border);

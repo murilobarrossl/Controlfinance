@@ -93,9 +93,14 @@ export default function RegisterPage() {
   return (
     <div className="register">
       <aside className="register__intro">
-        <Link to="/" className="register__logo">
-          <img src={logo} alt="Control Finance" />
-        </Link>
+        <div className="register__top">
+          <Link to="/" className="register__back">
+            <span aria-hidden="true">‹</span> Voltar
+          </Link>
+          <Link to="/" className="register__logo">
+            <img src={logo} alt="Control Finance" />
+          </Link>
+        </div>
 
         <span className="register__badge">Novo: comece hoje mesmo</span>
         <h1 className="register__title">

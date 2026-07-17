@@ -81,16 +81,19 @@
 
 .orcamento__list-item button {
   border: none;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text-tertiary);
   font-size: 0.8rem;
   line-height: 1;
   cursor: pointer;
   white-space: nowrap;
-  padding: 0.3rem 0.4rem;
+  padding: 0.3rem 0.55rem;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .orcamento__list-item button:hover {
+  background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
   color: var(--color-accent);
 }
 
@@ -130,6 +133,12 @@
   color: var(--color-text-primary);
   font-family: inherit;
   font-size: 0.85rem;
+}
+
+.orcamento__form input:focus-visible,
+.orcamento__form select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .orcamento__form-actions {

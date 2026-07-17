@@ -1,0 +1,24 @@
+.icon-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+}
+
+.icon-avatar svg {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-avatar--income {
+  background-color: color-mix(in srgb, var(--color-income) 16%, transparent);
+  color: var(--color-income);
+}
+
+.icon-avatar--expense {
+  background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
+}

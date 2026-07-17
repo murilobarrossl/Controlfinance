@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { getTransactionsReport } from "../../../api/transactions.js";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
+import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
+import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import { formatCurrency } from "../../../utils/financeMath.js";
 import "./Relatorios.css";
 
@@ -145,11 +147,18 @@ export default function Relatorios() {
               {items.map((t) => (
                 <tr key={t.id}>
                   <td>{new Date(t.dueDate).toLocaleDateString("pt-BR")}</td>
-                  <td>{t.name}</td>
+                  <td>
+                    <div className="relatorios__description">
+                      <IconAvatar type={t.type === "Income" ? "income" : "expense"} />
+                      <span>{t.name}</span>
+                    </div>
+                  </td>
                   <td>{t.categoryName || "Sem categoria"}</td>
                   <td>{t.bankAccountName || "-"}</td>
                   <td>{TYPE_LABELS[t.type] || t.type}</td>
-                  <td>{STATUS_LABELS[t.status] || t.status}</td>
+                  <td>
+                    <StatusPill status={t.status}>{STATUS_LABELS[t.status] || t.status}</StatusPill>
+                  </td>
                   <td className={t.type === "Income" ? "relatorios__amount--income" : "relatorios__amount--expense"}>
                     {formatCurrency(t.amount)}
                   </td>

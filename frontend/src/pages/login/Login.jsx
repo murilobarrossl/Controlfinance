@@ -90,9 +90,14 @@ export default function LoginPage({ mode = "email" }) {
   return (
     <div className="login">
       <aside className="login__intro">
-        <Link to="/" className="login__logo">
-          <img src={logo} alt="Control Finance" />
-        </Link>
+        <div className="login__top">
+          <Link to="/" className="login__back">
+            <span aria-hidden="true">‹</span> Voltar
+          </Link>
+          <Link to="/" className="login__logo">
+            <img src={logo} alt="Control Finance" />
+          </Link>
+        </div>
 
         <span className="login__badge">Entrar na sua conta</span>
 

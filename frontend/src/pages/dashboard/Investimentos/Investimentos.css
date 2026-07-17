@@ -46,6 +46,11 @@
   font-size: 0.85rem;
 }
 
+.investimentos__form input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
 .investimentos__goals {
   list-style: none;
   margin: 0;
@@ -69,15 +74,23 @@
 }
 
 .investimentos__goal-header button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   border: none;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text-tertiary);
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .investimentos__goal-header button:hover {
+  background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
   color: var(--color-accent);
 }
 

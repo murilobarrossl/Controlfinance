@@ -1,5 +1,17 @@
 .category-donut {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.category-donut--with-legend {
+  flex-wrap: wrap;
+}
+
+.category-donut__chart {
   position: relative;
+  flex: 1;
+  min-width: 160px;
 }
 
 .category-donut__center {
@@ -7,6 +19,7 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -14,16 +27,77 @@
   text-align: center;
 }
 
+/* O rótulo central é absolute mas vem depois do gráfico no DOM, então sem isso ele pintava por
+   cima do tooltip do Recharts sempre que o mouse passava perto do meio da rosca. */
+.category-donut__chart .recharts-tooltip-wrapper {
+  z-index: 2;
+}
+
+.category-donut__center-value {
+  color: var(--color-text-primary);
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
 .category-donut__center-label {
   color: var(--color-text-tertiary);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 0.25rem;
+  margin-top: 0.2rem;
 }
 
-.category-donut__center-value {
+.category-donut__legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-width: 140px;
+}
+
+.category-donut__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.category-donut__legend-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.category-donut__legend-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-donut__legend-value {
   color: var(--color-text-primary);
-  font-size: 1.15rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .category-donut {
+    flex-direction: column;
+  }
+
+  .category-donut__chart {
+    width: 100%;
+  }
+
+  .category-donut__legend {
+    width: 100%;
+  }
 }

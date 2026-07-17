@@ -3,10 +3,34 @@ import { getCategories } from "../../../api/categories.js";
 import { getTransactions } from "../../../api/transactions.js";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
+import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
 import CategorySpendBarsChart from "../../../components/charts/CategorySpendBarsChart.jsx";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import "./Categorias.css";
+
+// Só pro pré-select da carga inicial (ver useEffect abaixo): acha a categoria de despesa com
+// maior gasto no ano, sem precisar da lista de categorias (cor/percentual), que ainda não
+// chegou nesse ponto.
+function topExpenseCategoryName(transactions, year) {
+  const totals = new Map();
+  for (const t of transactions) {
+    if (t.type !== "Expense") continue;
+    if (new Date(t.dueDate).getUTCFullYear() !== year) continue;
+    const name = t.categoryName || "Sem categoria";
+    totals.set(name, (totals.get(name) || 0) + t.amount);
+  }
+
+  let topName = null;
+  let topValue = -Infinity;
+  for (const [name, value] of totals) {
+    if (value > topValue) {
+      topValue = value;
+      topName = name;
+    }
+  }
+  return topName;
+}
 
 export default function Categorias() {
   const [categories, setCategories] = useState([]);
@@ -16,12 +40,22 @@ export default function Categorias() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [yearOffset, setYearOffset] = useState(0); // 0 = ano atual; 1 = ano anterior; e por aí vai.
   const drilldownRef = useRef(null);
+  const skipNextScrollRef = useRef(false);
 
   useEffect(() => {
     Promise.all([getCategories(), getTransactions()])
       .then(([categoriesData, transactionsData]) => {
         setCategories(categoriesData);
         setTransactions(transactionsData);
+
+        // Pré-seleciona a categoria com maior gasto do ano atual, pra seção de transações já
+        // vir aberta sem precisar de clique. Só nessa carga inicial: dali em diante o usuário
+        // controla a seleção normalmente, inclusive desmarcando.
+        const topName = topExpenseCategoryName(transactionsData, new Date().getUTCFullYear());
+        if (topName) {
+          skipNextScrollRef.current = true;
+          setSelectedCategory(topName);
+        }
       })
       .catch((err) => setError(err.message || "Não foi possível carregar as categorias."))
       .finally(() => setLoading(false));
@@ -69,6 +103,11 @@ export default function Categorias() {
   useEffect(() => {
     if (!selectedCategory || !drilldownRef.current) return;
 
+    if (skipNextScrollRef.current) {
+      skipNextScrollRef.current = false;
+      return;
+    }
+
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     drilldownRef.current.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
   }, [selectedCategory]);
@@ -80,24 +119,12 @@ export default function Categorias() {
     <div className="categorias">
       <SectionHeading kicker="Onde seu dinheiro vai" title="Categorias" align="left" />
 
-      <div className="categorias__year-picker">
-        <button
-          type="button"
-          onClick={() => setYearOffset((prev) => prev + 1)}
-          aria-label="Ano anterior"
-        >
-          ‹
-        </button>
-        <span>{selectedYear}</span>
-        <button
-          type="button"
-          onClick={() => setYearOffset((prev) => Math.max(0, prev - 1))}
-          disabled={yearOffset === 0}
-          aria-label="Ano seguinte"
-        >
-          ›
-        </button>
-      </div>
+      <RangePicker
+        label={String(selectedYear)}
+        onPrev={() => setYearOffset((prev) => prev + 1)}
+        onNext={() => setYearOffset((prev) => Math.max(0, prev - 1))}
+        nextDisabled={yearOffset === 0}
+      />
 
       <p className="categorias__section-hint">Considerando todas as contas conectadas.</p>
 

@@ -1,8 +1,9 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ResponsiveContainer } from "recharts";
 import { TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE } from "./chartTheme.js";
 
-export default function BarComparisonChart({ data, height = 220, layout = "horizontal", formatValue }) {
+export default function BarComparisonChart({ data, height = 220, layout = "horizontal", formatValue, highlightMax = false }) {
   const isVertical = layout === "vertical";
+  const maxValue = highlightMax ? Math.max(...data.map((d) => d.value)) : null;
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -32,7 +33,11 @@ export default function BarComparisonChart({ data, height = 220, layout = "horiz
         />
         <Bar dataKey="value" radius={[6, 6, 6, 6]} maxBarSize={isVertical ? 22 : 40} barGap={4}>
           {data.map((entry, index) => (
-            <Cell key={entry.name ?? index} fill={entry.color || "#ED4A31"} />
+            <Cell
+              key={entry.name ?? index}
+              fill={entry.color || "#ED4A31"}
+              opacity={maxValue !== null && entry.value !== maxValue ? 0.45 : 1}
+            />
           ))}
         </Bar>
       </BarChart>
