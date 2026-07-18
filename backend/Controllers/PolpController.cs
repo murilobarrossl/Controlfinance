@@ -20,7 +20,15 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
     [HttpGet("connectors")]
     public async Task<IActionResult> GetConnectors(CancellationToken ct)
     {
-        var institutions = await polp.GetInstitutionsAsync(ct);
+        List<PolpInstitutionDto> institutions;
+        try
+        {
+            institutions = await polp.GetInstitutionsAsync(ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível carregar os bancos disponíveis.", detail = ex.Message });
+        }
 
         var connectors = institutions.Select(i => new
         {
