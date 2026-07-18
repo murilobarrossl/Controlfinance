@@ -1,6 +1,7 @@
 using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
 using ControlFinance.API.Models;
+using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -36,6 +37,11 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         var result = await ProjectToDto(query.OrderByDescending(t => t.DueDate).Take(MaxResults)).ToListAsync();
 
+        var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
+        result = result
+            .Select(t => t with { IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName) })
+            .ToList();
+
         return Ok(result);
     }
 
@@ -70,6 +76,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             query = query.Where(t => EF.Functions.ILike(t.Name, $"%{search}%"));
 
         var totalCount = await query.CountAsync();
+        var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
 
         // Amount é criptografado (guardado como texto): "ORDER BY"/"SUM" direto na coluna
         // cifrada ou dá erro de SQL, ou (no caso do ORDER BY) roda sem erro nenhum e devolve uma
@@ -85,25 +92,36 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         if (string.Equals(sortBy, "amount", StringComparison.OrdinalIgnoreCase))
         {
             var all = await ProjectToDto(query.OrderByDescending(t => t.DueDate).Take(MaxRows)).ToListAsync();
+            all = all
+                .Select(t => t with { IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName) })
+                .ToList();
             var sorted = desc ? all.OrderByDescending(t => t.Amount) : all.OrderBy(t => t.Amount);
             items = sorted.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-            totalIncome = all.Where(t => t.Type == "Income").Sum(t => t.Amount);
-            totalExpense = all.Where(t => t.Type == "Expense").Sum(t => t.Amount);
+            // Transferências pra si mesmo continuam nos itens (extrato), só saem dos totais.
+            totalIncome = all.Where(t => t.Type == "Income" && !t.IsTransfer).Sum(t => t.Amount);
+            totalExpense = all.Where(t => t.Type == "Expense" && !t.IsTransfer).Sum(t => t.Amount);
         }
         else
         {
             var ordered = ApplySort(query, sortBy, desc);
             items = await ProjectToDto(ordered.Skip((page - 1) * pageSize).Take(pageSize)).ToListAsync();
+            items = items
+                .Select(t => t with { IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName) })
+                .ToList();
 
             // Totais do filtro inteiro, não só da página atual: mesma limitação do Amount
-            // criptografado, então soma em memória depois de trazer só Type+Amount (mais barato
-            // que montar o TransactionDto inteiro com os joins de categoria/conta).
+            // criptografado, então soma em memória depois de trazer só Type+Amount+Name+Categoria
+            // (mais barato que montar o TransactionDto inteiro com os joins de conta).
             var forTotals = await query
                 .Take(MaxRows)
-                .Select(t => new { t.Type, t.Amount })
+                .Select(t => new { t.Type, t.Amount, t.Name, CategoryName = t.Category != null ? t.Category.Name : null })
                 .ToListAsync();
-            totalIncome = forTotals.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
-            totalExpense = forTotals.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
+            totalIncome = forTotals
+                .Where(t => t.Type == TransactionType.Income && !TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName))
+                .Sum(t => t.Amount);
+            totalExpense = forTotals
+                .Where(t => t.Type == TransactionType.Expense && !TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName))
+                .Sum(t => t.Amount);
         }
 
         return Ok(new TransactionReportDto(items, totalCount, totalIncome, totalExpense));
@@ -116,7 +134,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             t.Amount, t.DueDate, t.PaidAt,
             t.Category != null ? t.Category.Name : null,
             t.BankAccount != null ? t.BankAccount.Name : null,
-            t.IsFixed
+            t.IsFixed,
+            false
         ));
 
     private static IQueryable<Transaction> ApplySort(IQueryable<Transaction> query, string sortBy, bool desc) => sortBy switch

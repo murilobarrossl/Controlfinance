@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ControlFinance.API.Data;
 using ControlFinance.API.Models;
 using ControlFinance.API.Services;
@@ -248,11 +249,12 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
 
         await db.SaveChangesAsync(ct);
 
-        // Categorias do usuário carregadas uma única vez; novas categorias entram no mesmo
-        // dicionário conforme são criadas, sem round-trip ao banco por transação.
-        var categoryByName = await db.Categories
+        // Categorias do usuário carregadas uma única vez (entidade completa, não só o id: precisa
+        // pra poder corrigir a cor de categorias antigas presas no cinza legado); novas categorias
+        // entram no mesmo dicionário conforme são criadas, sem round-trip ao banco por transação.
+        var categoriesByName = await db.Categories
             .Where(c => c.UserId == UserId)
-            .ToDictionaryAsync(c => c.Name, c => c.Id, ct);
+            .ToDictionaryAsync(c => c.Name, c => c, ct);
 
         var accountIds = createdAccounts.Select(a => a.Id).ToList();
         var existingTransactionKeys = (await db.Transactions
@@ -284,7 +286,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
                 if (!existingTransactionKeys.Add((account.Id, polpTransactionId)))
                     continue; // já sincronizada em uma execução anterior
 
-                var categoryId = ResolveCategoryId(categoryByName, rt.Category?.Description);
+                var categoryId = ResolveCategoryId(categoriesByName, rt.Category?.Description, rt.Category?.Color);
 
                 db.Transactions.Add(new Transaction
                 {
@@ -324,16 +326,57 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         return DateTime.UtcNow;
     }
 
-    private Guid? ResolveCategoryId(Dictionary<string, Guid> categoryByName, string? categoryName)
+    // Cinza fixo que toda categoria criada automaticamente recebia antes desse ajuste (a Polp
+    // quase sempre manda a cor da categoria, mas isso nunca era usado). Serve só pra identificar
+    // e corrigir categorias antigas presas nesse cinza — não é mais atribuído a categoria nova.
+    private const string LegacyFallbackColor = "#999999";
+
+    // Mesma paleta usada no fallback dos gráficos no frontend (frontend/src/components/charts/chartTheme.js,
+    // FALLBACK_COLORS) — mantém as duas em sincronia se uma mudar.
+    private static readonly string[] FallbackPalette =
+    [
+        "#ED4A31", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#B39DDB", "#F4A261"
+    ];
+
+    private Guid? ResolveCategoryId(Dictionary<string, Category> categoriesByName, string? categoryName, string? polpColor)
     {
         if (string.IsNullOrWhiteSpace(categoryName)) return null;
 
-        if (categoryByName.TryGetValue(categoryName, out var existingId)) return existingId;
+        if (categoriesByName.TryGetValue(categoryName, out var existing))
+        {
+            // Corrige categorias criadas antes desse ajuste, todas presas no mesmo cinza fixo e
+            // por isso indistinguíveis nos gráficos de rosca/barras.
+            if (existing.Color == LegacyFallbackColor)
+                existing.Color = IsValidHexColor(polpColor) ? polpColor : PickFallbackColor(categoryName);
 
-        var created = new Category { UserId = UserId, Name = categoryName, Color = "#999999" };
+            return existing.Id;
+        }
+
+        var created = new Category
+        {
+            UserId = UserId,
+            Name = categoryName,
+            Color = IsValidHexColor(polpColor) ? polpColor : PickFallbackColor(categoryName)
+        };
         db.Categories.Add(created);
-        categoryByName[categoryName] = created.Id;
+        categoriesByName[categoryName] = created;
         return created.Id;
+    }
+
+    private static bool IsValidHexColor([NotNullWhen(true)] string? color) =>
+        color is { Length: 7 } && color[0] == '#' && color[1..].All(Uri.IsHexDigit);
+
+    // Escolhe uma cor da paleta de forma determinística por nome de categoria, pra mesma categoria
+    // sempre cair na mesma cor entre syncs (em vez de depender da ordem de criação).
+    private static string PickFallbackColor(string categoryName)
+    {
+        unchecked
+        {
+            var hash = 17;
+            foreach (var c in categoryName) hash = hash * 31 + c;
+            var index = ((hash % FallbackPalette.Length) + FallbackPalette.Length) % FallbackPalette.Length;
+            return FallbackPalette[index];
+        }
     }
 
     private static string ResolveTextColor(string? hexColor)

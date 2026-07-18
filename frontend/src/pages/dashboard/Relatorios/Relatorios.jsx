@@ -4,6 +4,8 @@ import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
+import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
+import { TrendUpIcon, TrendDownIcon, WalletIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency } from "../../../utils/financeMath.js";
 import "./Relatorios.css";
 
@@ -21,6 +23,41 @@ const COLUMNS = [
   { key: "status", label: "Status" },
   { key: "amount", label: "Valor" },
 ];
+
+// A Polp manda a descrição de transferências como "Transferência Recebida|Nome do titular"
+// (ver TransferDetection no backend); separa em duas linhas legíveis em vez do texto cru.
+function parseDescription(name) {
+  const pipeIndex = name.indexOf("|");
+  if (pipeIndex === -1) return { primary: name, secondary: null };
+  return { primary: name.slice(0, pipeIndex).trim(), secondary: name.slice(pipeIndex + 1).trim() };
+}
+
+function formatGroupDate(dateStr) {
+  const date = new Date(dateStr);
+  const weekday = date.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+  const full = date.toLocaleDateString("pt-BR");
+  return `${weekday} · ${full}`;
+}
+
+// Agrupa linhas consecutivas do mesmo dia (a página já vem ordenada do backend) pra não repetir
+// a data em cada linha e mostrar um subtotal de entradas/saídas por dia.
+function groupByDate(items) {
+  const groups = [];
+  let current = null;
+
+  for (const t of items) {
+    const key = new Date(t.dueDate).toDateString();
+    if (!current || current.key !== key) {
+      current = { key, dueDate: t.dueDate, items: [], income: 0, expense: 0 };
+      groups.push(current);
+    }
+    current.items.push(t);
+    if (t.type === "Income") current.income += t.amount;
+    else current.expense += t.amount;
+  }
+
+  return groups;
+}
 
 export default function Relatorios() {
   const [report, setReport] = useState(null);
@@ -94,10 +131,25 @@ export default function Relatorios() {
   const items = report?.items ?? [];
   const totalCount = report?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalIncome = report?.totalIncome ?? 0;
+  const totalExpense = report?.totalExpense ?? 0;
+  const balance = totalIncome - totalExpense;
+  const groups = groupByDate(items);
 
   return (
     <div className="relatorios">
       <SectionHeading kicker="Histórico completo" title="Relatórios" align="left" />
+
+      <div className="relatorios__summary">
+        <StatCard icon={<TrendUpIcon />} label="Entradas do período" value={formatCurrency(totalIncome)} valueTone="income" />
+        <StatCard icon={<TrendDownIcon />} label="Saídas do período" value={formatCurrency(totalExpense)} valueTone="expense" />
+        <StatCard
+          icon={<WalletIcon />}
+          label="Saldo do período"
+          value={formatCurrency(balance)}
+          valueTone={balance >= 0 ? "income" : "expense"}
+        />
+      </div>
 
       <Card>
         <div className="relatorios__filters">
@@ -144,26 +196,65 @@ export default function Relatorios() {
               </tr>
             </thead>
             <tbody>
-              {items.map((t) => (
-                <tr key={t.id}>
-                  <td>{new Date(t.dueDate).toLocaleDateString("pt-BR")}</td>
-                  <td>
-                    <div className="relatorios__description">
-                      <IconAvatar type={t.type === "Income" ? "income" : "expense"} />
-                      <span>{t.name}</span>
-                    </div>
+              {groups.flatMap((group) => [
+                <tr key={`group-${group.key}`} className="relatorios__group-row">
+                  <td colSpan={COLUMNS.length} className="relatorios__group-cell">
+                    <span className="relatorios__group-date">{formatGroupDate(group.dueDate)}</span>
+                    <span className="relatorios__group-totals">
+                      {group.income > 0 && (
+                        <span className="relatorios__amount--income">+{formatCurrency(group.income)}</span>
+                      )}
+                      {group.expense > 0 && (
+                        <span className="relatorios__amount--expense">-{formatCurrency(group.expense)}</span>
+                      )}
+                    </span>
                   </td>
-                  <td>{t.categoryName || "Sem categoria"}</td>
-                  <td>{t.bankAccountName || "-"}</td>
-                  <td>{TYPE_LABELS[t.type] || t.type}</td>
-                  <td>
-                    <StatusPill status={t.status}>{STATUS_LABELS[t.status] || t.status}</StatusPill>
-                  </td>
-                  <td className={t.type === "Income" ? "relatorios__amount--income" : "relatorios__amount--expense"}>
-                    {formatCurrency(t.amount)}
-                  </td>
-                </tr>
-              ))}
+                </tr>,
+                ...group.items.map((t) => {
+                  const { primary, secondary } = parseDescription(t.name);
+                  return (
+                    <tr key={t.id}>
+                      <td className="relatorios__date-cell" aria-hidden="true"></td>
+                      <td>
+                        <div className="relatorios__description">
+                          <IconAvatar type={t.type === "Income" ? "income" : "expense"} />
+                          <div className="relatorios__description-text">
+                            <span className="relatorios__description-primary">
+                              {primary}
+                              {t.isTransfer && (
+                                <span
+                                  className="relatorios__transfer-badge"
+                                  title="Transferência entre suas próprias contas: não entra nos totais de receita/despesa."
+                                >
+                                  Transferência
+                                </span>
+                              )}
+                            </span>
+                            {secondary && <span className="relatorios__description-secondary">{secondary}</span>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="relatorios__truncate-cell" title={t.categoryName || "Sem categoria"}>
+                        {t.categoryName || "Sem categoria"}
+                      </td>
+                      <td className="relatorios__truncate-cell" title={t.bankAccountName || "-"}>
+                        {t.bankAccountName || "-"}
+                      </td>
+                      <td>{TYPE_LABELS[t.type] || t.type}</td>
+                      <td>
+                        <StatusPill status={t.status}>{STATUS_LABELS[t.status] || t.status}</StatusPill>
+                      </td>
+                      <td
+                        className={`relatorios__amount-cell ${
+                          t.type === "Income" ? "relatorios__amount--income" : "relatorios__amount--expense"
+                        }`}
+                      >
+                        {formatCurrency(t.amount)}
+                      </td>
+                    </tr>
+                  );
+                }),
+              ])}
               {items.length === 0 && (
                 <tr>
                   <td colSpan={COLUMNS.length} className="relatorios__empty">

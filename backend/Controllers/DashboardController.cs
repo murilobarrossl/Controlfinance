@@ -1,6 +1,7 @@
 using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
 using ControlFinance.API.Models;
+using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -25,23 +26,34 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
         var accountDto = new BankAccountDto(account.Id, account.Name, account.BankCode, account.Balance, account.IsActive);
 
+        var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
+
         // receitas e despesas do mês atual
         var now = DateTime.UtcNow;
         var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var endOfMonth = startOfMonth.AddMonths(1);
 
         var monthlyTransactions = await db.Transactions
+            .Include(t => t.Category)
             .Where(t => t.UserId == UserId
                      && t.BankAccountId == account.Id
                      && t.DueDate >= startOfMonth
                      && t.DueDate < endOfMonth)
             .ToListAsync();
 
-        var totalIncome = monthlyTransactions
+        // Transferências entre contas do próprio usuário (Pix/TED pra outro banco seu) entram
+        // como receita E despesa ao mesmo tempo na Polp; sem excluir dos totais, "receita" e
+        // "despesa" do mês ficam sem sentido. Continuam aparecendo no extrato (pendingEntities
+        // abaixo não passa por esse filtro), só não entram nas somas/gráfico de categoria.
+        var nonTransferMonthly = monthlyTransactions
+            .Where(t => !TransferDetection.IsSelfTransfer(t.Name, t.Category?.Name, ownerName))
+            .ToList();
+
+        var totalIncome = nonTransferMonthly
             .Where(t => t.Type == TransactionType.Income)
             .Sum(t => t.Amount);
 
-        var totalExpense = monthlyTransactions
+        var totalExpense = nonTransferMonthly
             .Where(t => t.Type == TransactionType.Expense)
             .Sum(t => t.Amount);
 
@@ -57,10 +69,10 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             .Take(100)
             .ToListAsync();
 
-        var pending = pendingEntities.Select(TransactionDto.FromEntity).ToList();
+        var pending = pendingEntities.Select(t => TransactionDto.FromEntity(t, ownerName)).ToList();
 
-        // gastos por categoria (mês atual, só despesas)
-        var expensesByCategory = monthlyTransactions
+        // gastos por categoria (mês atual, só despesas, sem transferências pra si mesmo)
+        var expensesByCategory = nonTransferMonthly
             .Where(t => t.Type == TransactionType.Expense && t.CategoryId.HasValue)
             .GroupBy(t => t.CategoryId)
             .Select(g => new

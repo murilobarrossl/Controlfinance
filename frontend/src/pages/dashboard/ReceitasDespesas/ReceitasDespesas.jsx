@@ -48,7 +48,7 @@ export default function ReceitasDespesas() {
 
   const windowTransactions = useMemo(() => {
     const keys = new Set(windowMonths.map(monthKey));
-    return transactions.filter((t) => keys.has(monthKey(new Date(t.dueDate))));
+    return transactions.filter((t) => !t.isTransfer && keys.has(monthKey(new Date(t.dueDate))));
   }, [transactions, windowMonths]);
 
   const incomes = windowTransactions.filter((t) => t.type === "Income");

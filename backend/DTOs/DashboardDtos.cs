@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using ControlFinance.API.Models;
+using ControlFinance.API.Services;
 
 namespace ControlFinance.API.DTOs;
 
@@ -51,16 +52,20 @@ public record TransactionDto(
     DateTime? PaidAt,
     string? CategoryName,
     string? BankAccountName,
-    bool IsFixed
+    bool IsFixed,
+    bool IsTransfer = false
 )
 {
-    public static TransactionDto FromEntity(Transaction t) => new(
+    // ownerName só é conhecido em quem lista várias transações (GetAll/GetReport/GetSummary), que
+    // já busca o nome do usuário uma vez; nula aqui deixa IsTransfer em false (comportamento atual).
+    public static TransactionDto FromEntity(Transaction t, string? ownerName = null) => new(
         t.Id, t.Name, t.Description,
         t.Type.ToString(), t.Status.ToString(),
         t.Amount, t.DueDate, t.PaidAt,
         t.Category?.Name,
         t.BankAccount?.Name,
-        t.IsFixed
+        t.IsFixed,
+        TransferDetection.IsSelfTransfer(t.Name, t.Category?.Name, ownerName)
     );
 }
 
