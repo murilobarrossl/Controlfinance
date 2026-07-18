@@ -4,6 +4,18 @@
   gap: 1.5rem;
 }
 
+.relatorios__summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 700px) {
+  .relatorios__summary {
+    grid-template-columns: 1fr;
+  }
+}
+
 .relatorios__hint {
   color: var(--color-text-secondary);
   font-size: 0.9rem;
@@ -91,6 +103,24 @@
   gap: 0.6rem;
 }
 
+.relatorios__description-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  white-space: normal;
+}
+
+.relatorios__description-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.relatorios__description-secondary {
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+}
+
 .relatorios__transfer-badge {
   display: inline-flex;
   align-items: center;
@@ -103,6 +133,56 @@
   background-color: color-mix(in srgb, var(--color-text-tertiary) 20%, transparent);
   color: var(--color-text-secondary);
   border: 1px solid var(--color-border-strong);
+}
+
+/* Conta/Categoria vêm da Polp com nomes longos (ex.: razão social completa do banco); sem
+   truncar, empurram a coluna de Valor pra fora da área visível da tabela. */
+.relatorios__truncate-cell {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.relatorios__amount-cell {
+  text-align: right;
+  font-weight: 500;
+}
+
+/* A data só aparece uma vez por dia, na linha de grupo (relatorios__group-row) — a coluna
+   continua existindo (o cabeçalho "Data" segue clicável pra ordenar), só a célula fica vazia. */
+.relatorios__date-cell {
+  width: 1px;
+  padding: 0;
+}
+
+.relatorios__group-row {
+  background-color: var(--color-surface-hover);
+}
+
+.relatorios__group-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.relatorios__group-date {
+  white-space: nowrap;
+}
+
+.relatorios__group-totals {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .relatorios__table tbody tr {
