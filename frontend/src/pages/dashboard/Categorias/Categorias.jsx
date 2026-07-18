@@ -15,7 +15,7 @@ import "./Categorias.css";
 function topExpenseCategoryName(transactions, year) {
   const totals = new Map();
   for (const t of transactions) {
-    if (t.type !== "Expense") continue;
+    if (t.type !== "Expense" || t.isTransfer) continue;
     if (new Date(t.dueDate).getUTCFullYear() !== year) continue;
     const name = t.categoryName || "Sem categoria";
     totals.set(name, (totals.get(name) || 0) + t.amount);
@@ -68,7 +68,7 @@ export default function Categorias() {
   }, [transactions, selectedYear]);
 
   const breakdown = useMemo(() => {
-    const expenses = scopedTransactions.filter((t) => t.type === "Expense");
+    const expenses = scopedTransactions.filter((t) => t.type === "Expense" && !t.isTransfer);
     const totals = new Map();
 
     for (const t of expenses) {

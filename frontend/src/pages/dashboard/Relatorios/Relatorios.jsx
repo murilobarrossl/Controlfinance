@@ -151,6 +151,14 @@ export default function Relatorios() {
                     <div className="relatorios__description">
                       <IconAvatar type={t.type === "Income" ? "income" : "expense"} />
                       <span>{t.name}</span>
+                      {t.isTransfer && (
+                        <span
+                          className="relatorios__transfer-badge"
+                          title="Transferência entre suas próprias contas: não entra nos totais de receita/despesa."
+                        >
+                          Transferência
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td>{t.categoryName || "Sem categoria"}</td>
