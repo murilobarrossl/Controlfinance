@@ -52,3 +52,9 @@
 .legal-page__back:hover {
   text-decoration: underline;
 }
+
+@media (max-width: 640px) {
+  .legal-page__content {
+    padding: 2.5rem 1.25rem 3.5rem;
+  }
+}

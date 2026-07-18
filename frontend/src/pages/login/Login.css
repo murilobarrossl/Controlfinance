@@ -270,3 +270,54 @@
   color: var(--color-text-primary);
   text-decoration: underline;
 }
+
+@media (max-width: 900px) {
+  .login {
+    flex-direction: column;
+    min-height: auto;
+  }
+
+  .login__intro {
+    flex: 0 0 auto;
+    padding: 1.75rem 1.5rem;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  /* Lista de destaques é conteúdo de reforço, não essencial: some no mobile pra chegar
+     mais rápido no formulário, que é o que quem abre essa tela realmente veio fazer. */
+  .login__highlights {
+    display: none;
+  }
+
+  .login__title {
+    font-size: 1.6rem;
+    margin-bottom: 1rem;
+  }
+
+  .login__subtitle {
+    margin-bottom: 1rem;
+  }
+
+  .login__welcome-back {
+    margin-bottom: 0;
+  }
+
+  .login__panel {
+    padding: 1.5rem;
+  }
+
+  .login__card {
+    padding: 1.75rem 1.5rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .login__panel {
+    padding: 1rem;
+  }
+
+  .login__card {
+    padding: 1.5rem 1.25rem;
+  }
+}

@@ -106,3 +106,16 @@
   background-color: var(--color-border);
   margin: 0.3rem 0.2rem;
 }
+
+@media (max-width: 480px) {
+  .account-switcher__menu {
+    left: auto;
+    right: 0;
+    min-width: 200px;
+    max-width: calc(100vw - 2rem);
+  }
+
+  .account-switcher__name {
+    max-width: 140px;
+  }
+}

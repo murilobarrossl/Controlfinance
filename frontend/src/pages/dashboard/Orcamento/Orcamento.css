@@ -152,3 +152,14 @@
   font-weight: 600;
   margin: 0 0 1rem;
 }
+
+@media (max-width: 520px) {
+  .orcamento__form {
+    grid-template-columns: 1fr;
+  }
+
+  .orcamento__reserve-actions,
+  .orcamento__form-actions {
+    flex-direction: column;
+  }
+}

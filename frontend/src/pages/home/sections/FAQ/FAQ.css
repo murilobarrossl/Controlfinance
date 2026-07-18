@@ -92,3 +92,14 @@
 .faq__link:hover {
   text-decoration: underline;
 }
+
+@media (max-width: 640px) {
+  .faq {
+    padding: 3rem 1.25rem;
+  }
+
+  .faq__question {
+    font-size: 0.88rem;
+    gap: 1rem;
+  }
+}

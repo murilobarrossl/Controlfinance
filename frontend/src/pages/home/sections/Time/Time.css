@@ -30,3 +30,9 @@
 .time__nome {
   color: var(--color-accent);
 }
+
+@media (max-width: 640px) {
+  .time {
+    padding: 3rem 1.25rem;
+  }
+}

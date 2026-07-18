@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
@@ -16,7 +17,13 @@ const LOADING_STYLE = {
 };
 
 export default function ProtectedRoute({ children }) {
-  const { isAuthenticated, checkingAuth } = useAuth();
+  const { isAuthenticated, checkingAuth, ensureAuthChecked } = useAuth();
+
+  // Só as rotas protegidas precisam perguntar pro backend se a sessão é válida: dispara aqui,
+  // não no AuthProvider, pra visitante de página pública (home, login) nunca gerar essa chamada.
+  useEffect(() => {
+    ensureAuthChecked();
+  }, [ensureAuthChecked]);
 
   if (checkingAuth) {
     return <div style={LOADING_STYLE}>Carregando...</div>;

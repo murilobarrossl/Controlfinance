@@ -84,3 +84,13 @@
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
 }
+
+@media (max-width: 480px) {
+  .nav-user-menu__name {
+    display: none;
+  }
+
+  .nav-user-menu__menu {
+    max-width: calc(100vw - 2rem);
+  }
+}

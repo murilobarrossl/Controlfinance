@@ -155,3 +155,14 @@
   opacity: 0.35;
   cursor: not-allowed;
 }
+
+@media (max-width: 640px) {
+  .relatorios__filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .relatorios__search {
+    min-width: 0;
+  }
+}

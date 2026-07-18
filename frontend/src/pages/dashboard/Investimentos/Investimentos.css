@@ -131,3 +131,9 @@
   line-height: 1.6;
   margin: 0;
 }
+
+@media (max-width: 520px) {
+  .investimentos__form {
+    grid-template-columns: 1fr;
+  }
+}
