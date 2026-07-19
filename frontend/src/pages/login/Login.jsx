@@ -62,10 +62,8 @@ export default function LoginPage({ mode = "email" }) {
       const cleanIdentifier = isCpf ? identifier.replace(/\D/g, "") : identifier;
       const data = await login(cleanIdentifier, password);
 
-      // A resposta agora é o usuário direto (o token de sessão já veio num cookie httpOnly
-      // na mesma resposta, o backend cuida disso, não passa mais pelo corpo em JSON).
-      if (data?.id) {
-        setAuthToken(data);
+      if (data?.token) {
+        setAuthToken(data.token);
       }
 
       // Só manda pro fluxo de conexão quem ainda não tem banco conectado: mandar todo mundo

@@ -13,10 +13,6 @@ namespace ControlFinance.API.Controllers;
 [Authorize]
 public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerBase
 {
-    // ──────────────────────────────────────────
-    //  GET /api/polp/connectors
-    //  Lista as instituições disponíveis (estado "seleção de banco")
-    // ──────────────────────────────────────────
     [HttpGet("connectors")]
     public async Task<IActionResult> GetConnectors(CancellationToken ct)
     {
@@ -44,10 +40,6 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         return Ok(connectors);
     }
 
-    // ──────────────────────────────────────────
-    //  POST /api/polp/integrations
-    //  Cria a integração na Polp e salva o vínculo local (estado "redirect")
-    // ──────────────────────────────────────────
     [HttpPost("integrations")]
     public async Task<IActionResult> Connect([FromBody] PolpConnectDto dto, CancellationToken ct)
     {
@@ -88,10 +80,6 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         });
     }
 
-    // ──────────────────────────────────────────
-    //  GET /api/polp/integrations
-    //  Lista as contas já sincronizadas do usuário
-    // ──────────────────────────────────────────
     [HttpGet("integrations")]
     public async Task<IActionResult> GetIntegrations(CancellationToken ct)
     {
@@ -103,11 +91,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         return Ok(accounts);
     }
 
-    // ──────────────────────────────────────────
-    //  GET /api/polp/integrations/{id}
-    //  Consulta o status da integração (estado "sincronizando").
-    //  {id} aqui é o Guid local salvo em PolpIntegration.
-    // ──────────────────────────────────────────
+    // {id} aqui é o Guid local salvo em PolpIntegration, não o id da integração na própria Polp.
     [HttpGet("integrations/{id:guid}")]
     public async Task<IActionResult> GetIntegrationStatus(Guid id, CancellationToken ct)
     {
@@ -131,7 +115,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         local.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        // Mapeia os status da Polp para os estados que o frontend (Igor) já conhece
+        // Mapeia os status da Polp para os estados que o frontend já conhece
         var mappedStatus = remote.Status switch
         {
             "UPDATING" => "syncing",
@@ -151,11 +135,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         });
     }
 
-    // ──────────────────────────────────────────
-    //  POST /api/polp/integrations/{id}/sync
-    //  Busca contas + transações reais da Polp e persiste localmente.
-    //  Só deve ser chamado quando o status já é UPDATED.
-    // ──────────────────────────────────────────
+    // Só deve ser chamado quando o status já é UPDATED (senão a Polp ainda não tem contas prontas pra buscar).
     [HttpPost("integrations/{id:guid}/sync")]
     public async Task<IActionResult> Sync(Guid id, CancellationToken ct)
     {
@@ -177,13 +157,10 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         return Ok(new { status = "synced", accountsCount });
     }
 
-    // ──────────────────────────────────────────
-    //  POST /api/polp/integrations/sync-all
-    //  Sincroniza todas as integrações do usuário de uma vez, usado pra atualizar saldo e
-    //  transações automaticamente ao carregar o dashboard, sem precisar reconectar o banco
-    //  nem esperar um job periódico. Uma integração com falha (banco fora do ar, token
-    //  expirado etc.) não trava a sincronização das outras.
-    // ──────────────────────────────────────────
+    // Sincroniza todas as integrações do usuário de uma vez, usado pra atualizar saldo e
+    // transações automaticamente ao carregar o dashboard, sem precisar reconectar o banco
+    // nem esperar um job periódico. Uma integração com falha (banco fora do ar, token
+    // expirado etc.) não trava a sincronização das outras.
     [HttpPost("integrations/sync-all")]
     public async Task<IActionResult> SyncAll(CancellationToken ct)
     {

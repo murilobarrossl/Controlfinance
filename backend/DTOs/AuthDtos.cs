@@ -2,10 +2,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace ControlFinance.API.DTOs;
 
-// ──────────────────────────────────────────
-//  REGISTER
-// ──────────────────────────────────────────
-
 public class RegisterRequestDto
 {
     [Required(ErrorMessage = "Nome é obrigatório.")]
@@ -33,10 +29,6 @@ public class RegisterRequestDto
     public string Password { get; set; } = string.Empty;
 }
 
-// ──────────────────────────────────────────
-//  LOGIN
-// ──────────────────────────────────────────
-
 public class LoginRequestDto
 {
     /// <summary>
@@ -48,10 +40,6 @@ public class LoginRequestDto
     [Required(ErrorMessage = "Senha é obrigatória.")]
     public string Password { get; set; } = string.Empty;
 }
-
-// ──────────────────────────────────────────
-//  RESPONSES
-// ──────────────────────────────────────────
 
 public class AuthResponseDto
 {

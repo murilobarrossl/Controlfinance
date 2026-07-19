@@ -16,7 +16,6 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
     [HttpGet]
     public async Task<IActionResult> GetSummary([FromQuery] Guid? bankAccountId)
     {
-        // conta bancária ativa
         var account = bankAccountId.HasValue
             ? await db.BankAccounts.FirstOrDefaultAsync(b => b.Id == bankAccountId && b.UserId == UserId && b.IsActive)
             : await db.BankAccounts.FirstOrDefaultAsync(b => b.UserId == UserId && b.IsActive);
@@ -28,7 +27,6 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
         var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
 
-        // receitas e despesas do mês atual
         var now = DateTime.UtcNow;
         var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var endOfMonth = startOfMonth.AddMonths(1);
@@ -71,7 +69,6 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
         var pending = pendingEntities.Select(t => TransactionDto.FromEntity(t, ownerName)).ToList();
 
-        // gastos por categoria (mês atual, só despesas, sem transferências pra si mesmo)
         var expensesByCategory = nonTransferMonthly
             .Where(t => t.Type == TransactionType.Expense && t.CategoryId.HasValue)
             .GroupBy(t => t.CategoryId)
@@ -95,7 +92,6 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             totalExpenseForCategories > 0 ? Math.Round(e.Amount / totalExpenseForCategories * 100, 1) : 0
         )).ToList();
 
-        // cartão ativo
         var card = await db.CreditCards
             .Include(c => c.Installments)
             .FirstOrDefaultAsync(c => c.UserId == UserId && c.IsActive);

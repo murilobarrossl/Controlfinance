@@ -3,7 +3,6 @@ using System.Security.Claims;
 using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
 using ControlFinance.API.Services;
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,64 +16,20 @@ public class AuthController : ApiControllerBase
     private readonly IAuthService _authService;
     private readonly ITokenRevocationService _tokenRevocation;
     private readonly AppDbContext _db;
-    private readonly IAntiforgery _antiforgery;
-    private readonly IConfiguration _config;
-    private readonly IWebHostEnvironment _env;
 
-    public AuthController(
-        IAuthService authService,
-        ITokenRevocationService tokenRevocation,
-        AppDbContext db,
-        IAntiforgery antiforgery,
-        IConfiguration config,
-        IWebHostEnvironment env)
+    public AuthController(IAuthService authService, ITokenRevocationService tokenRevocation, AppDbContext db)
     {
         _authService = authService;
         _tokenRevocation = tokenRevocation;
         _db = db;
-        _antiforgery = antiforgery;
-        _config = config;
-        _env = env;
-    }
-
-    // Cookie de sessão: httpOnly (JS nunca lê o token), SameSite/Secure variam por ambiente
-    // (localhost em portas diferentes é "same-site" e funciona sem HTTPS local; em produção o
-    // frontend fica num subdomínio diferente da API, exige SameSite=None + Secure).
-    private void SetAuthCookie(string token)
-    {
-        var expiresInHours = int.TryParse(_config["JwtSettings:ExpiresInHours"], out var h) ? h : 8;
-        Response.Cookies.Append("access_token", token, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = !_env.IsDevelopment(),
-            SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.None,
-            Expires = DateTimeOffset.UtcNow.AddHours(expiresInHours),
-            Path = "/"
-        });
-    }
-
-    // Par de cookies CSRF (double-submit): o lado httpOnly fica por conta do IAntiforgery;
-    // esse aqui é o lado que o frontend precisa ler via JS pra ecoar no header X-XSRF-TOKEN.
-    private void IssueCsrfCookie()
-    {
-        var tokens = _antiforgery.GetAndStoreTokens(HttpContext);
-        var expiresInHours = int.TryParse(_config["JwtSettings:ExpiresInHours"], out var h) ? h : 8;
-        Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!, new CookieOptions
-        {
-            HttpOnly = false,
-            Secure = !_env.IsDevelopment(),
-            SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.None,
-            Expires = DateTimeOffset.UtcNow.AddHours(expiresInHours),
-            Path = "/"
-        });
     }
 
     /// <summary>
-    /// Cadastra um novo usuário e autentica via cookie httpOnly.
+    /// Cadastra um novo usuário e retorna o JWT.
     /// </summary>
     /// POST /api/auth/register
     [HttpPost("register")]
-    [ProducesResponseType(typeof(UserInfoDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto dto)
@@ -84,7 +39,6 @@ public class AuthController : ApiControllerBase
 
         if (!success)
         {
-            // 409 para duplicidade, 400 para outros erros de negócio
             var statusCode = error.Contains("já cadastrado")
                 ? StatusCodes.Status409Conflict
                 : StatusCodes.Status400BadRequest;
@@ -92,18 +46,15 @@ public class AuthController : ApiControllerBase
             return StatusCode(statusCode, new { message = error });
         }
 
-        // O token nunca vai no corpo da resposta (JS não pode ler): só no cookie httpOnly.
-        SetAuthCookie(data!.Token);
-        IssueCsrfCookie();
-        return CreatedAtAction(nameof(Register), data.User);
+        return CreatedAtAction(nameof(Register), data);
     }
 
     /// <summary>
-    /// Autentica o usuário com e-mail ou CPF/CNPJ + senha via cookie httpOnly.
+    /// Autentica o usuário com e-mail ou CPF/CNPJ + senha e retorna o JWT.
     /// </summary>
     /// POST /api/auth/login
     [HttpPost("login")]
-    [ProducesResponseType(typeof(UserInfoDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto dto)
     {
@@ -113,15 +64,12 @@ public class AuthController : ApiControllerBase
         if (!success)
             return Unauthorized(new { message = error });
 
-        SetAuthCookie(data!.Token);
-        IssueCsrfCookie();
-        return Ok(data.User);
+        return Ok(data);
     }
 
     /// <summary>
     /// Dados do usuário autenticado, usado pra exibir nome/e-mail em telas que não
     /// vieram de um login/cadastro recente (ex.: sessão já aberta antes, refresh de página).
-    /// Também reemite o cookie CSRF, já que essa rota roda a cada carregamento da página.
     /// </summary>
     /// GET /api/auth/me
     [Authorize]
@@ -136,7 +84,6 @@ public class AuthController : ApiControllerBase
 
         if (user is null) return NotFound();
 
-        IssueCsrfCookie();
         return Ok(user);
     }
 
@@ -157,9 +104,6 @@ public class AuthController : ApiControllerBase
 
         var expiresAt = DateTimeOffset.FromUnixTimeSeconds(expUnix).UtcDateTime;
         await _tokenRevocation.RevokeAsync(jti, expiresAt);
-
-        Response.Cookies.Delete("access_token", new CookieOptions { Path = "/" });
-        Response.Cookies.Delete("XSRF-TOKEN", new CookieOptions { Path = "/" });
 
         return NoContent();
     }

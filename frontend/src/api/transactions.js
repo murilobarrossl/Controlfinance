@@ -22,7 +22,7 @@ export const getTransactions = async (filters = {}) => {
   const promise = apiFetch(`/transactions${query ? `?${query}` : ""}`);
   cache.set(query, { promise, expiresAt: Date.now() + CACHE_TTL_MS });
 
-  promise.catch(() => cache.delete(query)); // não guarda respostas com erro
+  promise.catch(() => cache.delete(query));
   return promise;
 };
 

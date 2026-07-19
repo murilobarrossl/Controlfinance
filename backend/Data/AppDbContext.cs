@@ -37,7 +37,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             v => _encryption.EncryptDecimal(v),
             v => _encryption.DecryptDecimal(v));
 
-        // USER
         modelBuilder.Entity<User>(e =>
         {
             e.HasKey(u => u.Id);
@@ -55,7 +54,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(u => u.PasswordHash).IsRequired();
         });
 
-        // BANK ACCOUNT
         modelBuilder.Entity<BankAccount>(e =>
         {
             e.HasKey(b => b.Id);
@@ -67,7 +65,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
              .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // CATEGORY
         modelBuilder.Entity<Category>(e =>
         {
             e.HasKey(c => c.Id);
@@ -78,7 +75,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
              .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // TRANSACTION
         modelBuilder.Entity<Transaction>(e =>
         {
             e.HasKey(t => t.Id);
@@ -105,7 +101,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasIndex(t => new { t.UserId, t.DueDate });
         });
 
-        // CREDIT CARD
         modelBuilder.Entity<CreditCard>(e =>
         {
             e.HasKey(c => c.Id);
@@ -118,7 +113,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
              .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // INSTALLMENT
         modelBuilder.Entity<Installment>(e =>
         {
             e.HasKey(i => i.Id);
@@ -131,7 +125,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
              .OnDelete(DeleteBehavior.SetNull);
         });
 
-        // REVOKED TOKEN
         modelBuilder.Entity<RevokedToken>(e =>
         {
             e.HasKey(r => r.Jti);

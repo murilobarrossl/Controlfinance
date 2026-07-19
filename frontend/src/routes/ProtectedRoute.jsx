@@ -1,33 +1,8 @@
-import { useEffect } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
-// Estilo inline em vez de uma classe: esse componente roda antes de qualquer página lazy
-// montar, então o CSS scoped de página ainda não carregou nesse ponto. index.css (com as
-// variáveis de tema) é importado de forma eager em main.jsx, esse sim já está disponível.
-const LOADING_STYLE = {
-  minHeight: "100vh",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  backgroundColor: "var(--color-bg)",
-  color: "var(--color-text-secondary)",
-  fontFamily: "Prompt, sans-serif",
-  fontSize: "0.9rem",
-};
-
 export default function ProtectedRoute({ children }) {
-  const { isAuthenticated, checkingAuth, ensureAuthChecked } = useAuth();
-
-  // Só as rotas protegidas precisam perguntar pro backend se a sessão é válida: dispara aqui,
-  // não no AuthProvider, pra visitante de página pública (home, login) nunca gerar essa chamada.
-  useEffect(() => {
-    ensureAuthChecked();
-  }, [ensureAuthChecked]);
-
-  if (checkingAuth) {
-    return <div style={LOADING_STYLE}>Carregando...</div>;
-  }
+  const { isAuthenticated } = useAuth();
 
   if (!isAuthenticated) {
     return <Navigate to="/loginemail" replace />;
