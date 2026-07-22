@@ -17,6 +17,7 @@ import AccountSwitcher from "../../../components/dashboard/AccountSwitcher/Accou
 import { WalletIcon, TrendUpIcon, TrendDownIcon, TargetIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import { getMonthsWindow, buildMonthlyTrend } from "../../../utils/monthlyTrend.js";
+import { computeTrend } from "../../../utils/trend.js";
 import "./DashboardHome.css";
 
 const MAX_DONUT_SLICES = 4;
@@ -44,20 +45,6 @@ function buildDonutData(categoryExpenses, categories) {
   if (restTotal > 0) data.push({ name: "Outros", value: restTotal, color: "#808080" });
 
   return data;
-}
-
-// direction segue o sinal literal da variação (pra a seta do badge bater com o número);
-// tone é quem decide a cor, e pra despesas essa leitura é invertida (crescer é ruim).
-function computeTrend(current, previous, { invertTone = false } = {}) {
-  if (!previous) return null;
-  const change = ((current - previous) / previous) * 100;
-  const direction = change >= 0 ? "up" : "down";
-  const isGood = invertTone ? change < 0 : change >= 0;
-  return {
-    direction,
-    tone: isGood ? "positive" : "negative",
-    text: `${change >= 0 ? "+" : ""}${change.toFixed(1)}% vs mês anterior`,
-  };
 }
 
 export default function DashboardHome() {
@@ -157,6 +144,13 @@ export default function DashboardHome() {
   const incomeTrend = computeTrend(currentMonthTrend?.Receitas, previousMonthTrend?.Receitas);
   const expenseTrend = computeTrend(currentMonthTrend?.Despesas, previousMonthTrend?.Despesas, { invertTone: true });
 
+  // Não existe um saldo histórico salvo (activeAccount.balance é sempre o saldo ao vivo da
+  // Polp), então a única comparação honesta é reconstruir o saldo do início do mês a partir
+  // do saldo atual menos o que já entrou/saiu neste mês — por isso o rótulo é "início do mês",
+  // não "mês anterior" como nos outros cards.
+  const startOfMonthBalance = activeAccount.balance - monthlyBalance;
+  const balanceTrend = computeTrend(activeAccount.balance, startOfMonthBalance, { label: "vs início do mês" });
+
   return (
     <div className="dashboard-home">
       <div className="dashboard-home__header">
@@ -179,6 +173,7 @@ export default function DashboardHome() {
           icon={<WalletIcon />}
           label="Saldo da conta"
           value={formatCurrency(activeAccount.balance)}
+          trend={balanceTrend}
         />
         <StatCard
           icon={<TrendUpIcon />}

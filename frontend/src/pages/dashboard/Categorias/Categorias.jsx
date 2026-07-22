@@ -1,13 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getCategories } from "../../../api/categories.js";
 import { getTransactions } from "../../../api/transactions.js";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
-import CategorySpendBarsChart from "../../../components/charts/CategorySpendBarsChart.jsx";
+import BreakdownRows from "../../../components/dashboard/BreakdownRows/BreakdownRows.jsx";
+import { getGoals } from "../../../utils/investmentStorage.js";
+import { getReserve } from "../../../utils/emergencyReserveStorage.js";
+import { calculateCutImpact } from "../../../utils/cutImpact.js";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import "./Categorias.css";
+
+const CUT_RATE_OPTIONS = [0.1, 0.2, 0.3, 0.5];
+
+function cutImpactSentence(categoryName, categoryAmount, cutRate, impact) {
+  const destinations = [
+    `sua reserva de emergência, que iria de ${formatCurrency(impact.reserveImpact.current)} para ${formatCurrency(
+      impact.reserveImpact.afterCut
+    )}`,
+  ];
+  if (impact.goalImpact) {
+    destinations.push(
+      `aproximar a meta "${impact.goalImpact.name}" (faltariam ${formatCurrency(
+        impact.goalImpact.remainingAfter
+      )} em vez de ${formatCurrency(impact.goalImpact.remainingBefore)})`
+    );
+  }
+  return `Você gastou ${formatCurrency(categoryAmount)} em ${categoryName} neste período. Se cortar ${formatPercentage(
+    cutRate * 100
+  )} (${formatCurrency(impact.cutAmount)}), esse valor poderia ir para ${destinations.join(" ou ")}.`;
+}
 
 // Só pro pré-select da carga inicial (ver useEffect abaixo): acha a categoria de despesa com
 // maior gasto no ano, sem precisar da lista de categorias (cor/percentual), que ainda não
@@ -32,13 +56,32 @@ function topExpenseCategoryName(transactions, year) {
   return topName;
 }
 
+function groupByEstablishment(transactions) {
+  const totals = new Map();
+  for (const t of transactions) {
+    const entry = totals.get(t.name) || { name: t.name, value: 0, count: 0 };
+    entry.value += t.amount;
+    entry.count += 1;
+    totals.set(t.name, entry);
+  }
+  const total = [...totals.values()].reduce((sum, e) => sum + e.value, 0);
+  return [...totals.values()]
+    .map((e) => ({ ...e, percentage: total > 0 ? (e.value / total) * 100 : 0 }))
+    .sort((a, b) => b.value - a.value);
+}
+
 export default function Categorias() {
+  const [searchParams] = useSearchParams();
   const [categories, setCategories] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [expandedEstablishments, setExpandedEstablishments] = useState(() => new Set());
   const [yearOffset, setYearOffset] = useState(0); // 0 = ano atual; 1 = ano anterior; e por aí vai.
+  const [cutRate, setCutRate] = useState(0.3);
+  const [goals] = useState(() => getGoals());
+  const [reserve] = useState(() => getReserve());
   const drilldownRef = useRef(null);
   const skipNextScrollRef = useRef(false);
 
@@ -47,6 +90,14 @@ export default function Categorias() {
       .then(([categoriesData, transactionsData]) => {
         setCategories(categoriesData);
         setTransactions(transactionsData);
+
+        // Chegando de um link da aba Receitas e despesas (?categoria=Nome): abre direto nela,
+        // com scroll até a seção, em vez de pré-selecionar a maior categoria do ano.
+        const categoryFromLink = searchParams.get("categoria");
+        if (categoryFromLink) {
+          setSelectedCategory(categoryFromLink);
+          return;
+        }
 
         // Pré-seleciona a categoria com maior gasto do ano atual, pra seção de transações já
         // vir aberta sem precisar de clique. Só nessa carga inicial: dali em diante o usuário
@@ -59,6 +110,7 @@ export default function Categorias() {
       })
       .catch((err) => setError(err.message || "Não foi possível carregar as categorias."))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só lê searchParams na carga inicial
   }, []);
 
   const selectedYear = new Date().getUTCFullYear() - yearOffset;
@@ -67,38 +119,58 @@ export default function Categorias() {
     return transactions.filter((t) => new Date(t.dueDate).getUTCFullYear() === selectedYear);
   }, [transactions, selectedYear]);
 
+  // Só despesas reais entram aqui: a aba é exclusivamente sobre gastos (a receita já tem seu
+  // próprio lado, autossuficiente, na aba Receitas e despesas), e auto-transferências não são
+  // gasto de verdade.
+  const expenseTransactions = useMemo(
+    () => scopedTransactions.filter((t) => t.type === "Expense" && !t.isTransfer),
+    [scopedTransactions]
+  );
+
   const breakdown = useMemo(() => {
-    const expenses = scopedTransactions.filter((t) => t.type === "Expense" && !t.isTransfer);
     const totals = new Map();
 
-    for (const t of expenses) {
+    for (const t of expenseTransactions) {
       const name = t.categoryName || "Sem categoria";
-      totals.set(name, (totals.get(name) || 0) + t.amount);
+      const entry = totals.get(name) || { name, value: 0, count: 0 };
+      entry.value += t.amount;
+      entry.count += 1;
+      totals.set(name, entry);
     }
 
-    const total = [...totals.values()].reduce((sum, v) => sum + v, 0);
+    const total = [...totals.values()].reduce((sum, e) => sum + e.value, 0);
 
-    return [...totals.entries()]
-      .map(([name, amount]) => {
-        const category = categories.find((c) => c.name === name);
-        return {
-          name,
-          value: amount,
-          color: category?.color,
-          percentage: total > 0 ? (amount / total) * 100 : 0,
-        };
+    return [...totals.values()]
+      .map((e) => {
+        const category = categories.find((c) => c.name === e.name);
+        return { ...e, color: category?.color, percentage: total > 0 ? (e.value / total) * 100 : 0 };
       })
       .sort((a, b) => b.value - a.value);
-  }, [scopedTransactions, categories]);
+  }, [expenseTransactions, categories]);
 
   const totalExpense = useMemo(() => breakdown.reduce((sum, c) => sum + c.value, 0), [breakdown]);
 
-  const drillDownTransactions = useMemo(() => {
+  const categoryTransactions = useMemo(() => {
     if (!selectedCategory) return [];
-    return scopedTransactions
-      .filter((t) => (t.categoryName || "Sem categoria") === selectedCategory)
-      .sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
-  }, [scopedTransactions, selectedCategory]);
+    return expenseTransactions.filter((t) => (t.categoryName || "Sem categoria") === selectedCategory);
+  }, [expenseTransactions, selectedCategory]);
+
+  const establishmentBreakdown = useMemo(() => groupByEstablishment(categoryTransactions), [categoryTransactions]);
+
+  const selectedCategoryAmount = useMemo(
+    () => breakdown.find((c) => c.name === selectedCategory)?.value ?? 0,
+    [breakdown, selectedCategory]
+  );
+
+  const cutImpact = useMemo(() => {
+    if (!selectedCategory || selectedCategoryAmount <= 0) return null;
+    return calculateCutImpact({
+      categoryAmount: selectedCategoryAmount,
+      cutRate,
+      reserveAmount: reserve.currentAmount,
+      goals,
+    });
+  }, [selectedCategory, selectedCategoryAmount, cutRate, reserve, goals]);
 
   useEffect(() => {
     if (!selectedCategory || !drilldownRef.current) return;
@@ -111,6 +183,20 @@ export default function Categorias() {
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     drilldownRef.current.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
   }, [selectedCategory]);
+
+  function toggleCategory(name) {
+    setSelectedCategory((prev) => (prev === name ? null : name));
+    setExpandedEstablishments(new Set());
+  }
+
+  function toggleEstablishment(name) {
+    setExpandedEstablishments((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
 
   if (loading) return <p className="categorias__hint">Carregando...</p>;
   if (error) return <p className="categorias__error">{error}</p>;
@@ -126,7 +212,9 @@ export default function Categorias() {
         nextDisabled={yearOffset === 0}
       />
 
-      <p className="categorias__section-hint">Considerando todas as contas conectadas.</p>
+      <p className="categorias__section-hint">
+        Considerando todas as contas conectadas. Só despesas — receitas ficam em Receitas e despesas.
+      </p>
 
       <div className="categorias__grid">
         <Card title="Despesas por categoria">
@@ -137,7 +225,7 @@ export default function Categorias() {
               height={280}
               formatValue={formatCurrency}
               data={breakdown}
-              onSliceClick={setSelectedCategory}
+              onSliceClick={toggleCategory}
               centerLabel={formatCurrency(totalExpense)}
               showLegend={false}
             />
@@ -145,67 +233,93 @@ export default function Categorias() {
         </Card>
 
         <Card title="Categorias">
-          <ul className="categorias__list">
-            {breakdown.map((c) => (
-              <li key={c.name}>
-                <button
-                  type="button"
-                  className={`categorias__list-item ${
-                    selectedCategory === c.name ? "categorias__list-item--active" : ""
-                  }`}
-                  onClick={() => setSelectedCategory(c.name === selectedCategory ? null : c.name)}
-                >
-                  <span className="categorias__list-dot" style={{ backgroundColor: c.color || "#808080" }} />
-                  <span className="categorias__list-name">{c.name}</span>
-                  <span className="categorias__list-percentage">{formatPercentage(c.percentage)}</span>
-                  <span className="categorias__list-amount">{formatCurrency(c.value)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          {breakdown.length === 0 ? (
+            <p className="categorias__hint">Nenhuma despesa categorizada ainda.</p>
+          ) : (
+            <BreakdownRows data={breakdown} tone="expense" activeName={selectedCategory} onRowClick={toggleCategory} />
+          )}
         </Card>
       </div>
 
-      <Card title="Comparativo por categoria">
-        {breakdown.length === 0 ? (
-          <p className="categorias__hint">Nenhuma despesa categorizada ainda.</p>
-        ) : (
-          <>
-            <p className="categorias__section-hint">
-              Categorias em ordem alfabética. Clique numa barra para ver as transações.
-            </p>
-            <CategorySpendBarsChart
-              data={breakdown}
-              formatValue={formatCurrency}
-              onBarClick={setSelectedCategory}
-            />
-          </>
-        )}
-      </Card>
-
       {selectedCategory && (
-        <div ref={drilldownRef}>
-          <Card title={`Transações: ${selectedCategory}`}>
-            {drillDownTransactions.length === 0 ? (
+        <div ref={drilldownRef} className="categorias__drilldown-section">
+          <Card title={`${selectedCategory}: onde foi o dinheiro`}>
+            {establishmentBreakdown.length === 0 ? (
               <p className="categorias__hint">Nenhuma transação encontrada.</p>
             ) : (
-              <ul className="categorias__drilldown">
-                {drillDownTransactions.map((t) => (
-                  <li key={t.id} className="categorias__drilldown-item">
-                    <div>
-                      <span className="categorias__drilldown-name">{t.name}</span>
-                      <span className="categorias__drilldown-date">
-                        {new Date(t.dueDate).toLocaleDateString("pt-BR")}
-                      </span>
-                    </div>
-                    <span className={t.type === "Income" ? "categorias__amount--income" : "categorias__amount--expense"}>
-                      {formatCurrency(t.amount)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <BreakdownRows
+                data={establishmentBreakdown}
+                tone="expense"
+                expandedNames={expandedEstablishments}
+                onRowClick={toggleEstablishment}
+                renderExpanded={(name) => (
+                  <ul className="categorias__visits">
+                    {categoryTransactions
+                      .filter((t) => t.name === name)
+                      .sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate))
+                      .map((t) => (
+                        <li key={t.id} className="categorias__visits-item">
+                          <span className="categorias__visits-date">{new Date(t.dueDate).toLocaleDateString("pt-BR")}</span>
+                          <span className="categorias__visits-amount">{formatCurrency(t.amount)}</span>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              />
             )}
           </Card>
+
+          {cutImpact && (
+            <Card title={`Impacto de cortar ${selectedCategory}`}>
+              <div className="categorias__impact-rates">
+                {CUT_RATE_OPTIONS.map((rate) => (
+                  <button
+                    key={rate}
+                    type="button"
+                    className={`categorias__impact-rate ${
+                      cutRate === rate ? "categorias__impact-rate--active" : ""
+                    }`}
+                    onClick={() => setCutRate(rate)}
+                  >
+                    {formatPercentage(rate * 100)}
+                  </button>
+                ))}
+              </div>
+
+              <p className="categorias__impact-sentence">
+                {cutImpactSentence(selectedCategory, selectedCategoryAmount, cutRate, cutImpact)}
+              </p>
+
+              <div className="categorias__impact-targets">
+                <div className="categorias__impact-target">
+                  <span className="categorias__impact-target-label">Reserva de emergência</span>
+                  <span className="categorias__impact-target-values">
+                    {formatCurrency(cutImpact.reserveImpact.current)} →{" "}
+                    <span className="categorias__impact-target-after">
+                      {formatCurrency(cutImpact.reserveImpact.afterCut)}
+                    </span>
+                  </span>
+                </div>
+
+                {cutImpact.goalImpact ? (
+                  <div className="categorias__impact-target">
+                    <span className="categorias__impact-target-label">Meta: {cutImpact.goalImpact.name}</span>
+                    <span className="categorias__impact-target-values">
+                      faltam {formatCurrency(cutImpact.goalImpact.remainingBefore)} →{" "}
+                      <span className="categorias__impact-target-after">
+                        faltam {formatCurrency(cutImpact.goalImpact.remainingAfter)}
+                      </span>
+                    </span>
+                  </div>
+                ) : (
+                  <p className="categorias__hint">
+                    Você ainda não cadastrou metas — crie uma em Investimentos para ver o quanto esse corte te
+                    aproximaria dela.
+                  </p>
+                )}
+              </div>
+            </Card>
+          )}
         </div>
       )}
     </div>

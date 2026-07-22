@@ -71,7 +71,7 @@ export default function Orcamento() {
     return getInstallments().then(setInstallments);
   }
 
-  const expenses = useMemo(() => transactions.filter((t) => t.type === "Expense"), [transactions]);
+  const expenses = useMemo(() => transactions.filter((t) => t.type === "Expense" && !t.isTransfer), [transactions]);
   const fixedExpenses = useMemo(() => expenses.filter((t) => t.isFixed), [expenses]);
   const totalFixed = useMemo(() => fixedExpenses.reduce((sum, t) => sum + t.amount, 0), [fixedExpenses]);
   const totalInstallments = useMemo(

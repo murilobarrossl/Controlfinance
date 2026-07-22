@@ -14,25 +14,84 @@
   font-size: 0.9rem;
 }
 
-.receitas-despesas__grid {
+.receitas-despesas__halves {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 1.5rem;
+  align-items: start;
 }
 
-.receitas-despesas__highlight {
+.receitas-despesas__half {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.receitas-despesas__sentence {
   color: var(--color-text-secondary);
-  font-size: 0.85rem;
-  margin: 1rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
 }
 
-.receitas-despesas__highlight strong {
+.receitas-despesas__closing {
+  text-align: center;
+}
+
+.receitas-despesas__closing-value {
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.receitas-despesas__closing-value--income {
+  color: var(--color-income);
+}
+
+.receitas-despesas__closing-value--expense {
+  color: var(--color-accent);
+}
+
+.receitas-despesas__closing-text {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  margin-top: 0.4rem;
+}
+
+/* Transações que compõem uma fonte de receita expandida (a lista de linhas em si vem do
+   componente compartilhado BreakdownRows). */
+
+.rd-transactions {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.rd-transactions__item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+}
+
+.rd-transactions__name {
+  flex: 1;
   color: var(--color-text-primary);
+}
+
+.rd-transactions__date {
+  color: var(--color-text-tertiary);
+}
+
+.rd-transactions__amount {
+  color: var(--color-income);
   font-weight: 500;
 }
 
 @media (max-width: 900px) {
-  .receitas-despesas__grid {
+  .receitas-despesas__halves {
     grid-template-columns: 1fr;
   }
 }

@@ -91,7 +91,7 @@ public class ScheduledEmailService(IServiceScopeFactory scopeFactory, ILogger<Sc
         var userIds = users.Select(u => u.Id).ToList();
         var monthlyTransactionsByUser = (await db.Transactions
                 .Where(t => userIds.Contains(t.UserId) && t.DueDate >= previousMonthStart && t.DueDate < currentMonthStart)
-                .Select(t => new { t.UserId, t.Type, t.Amount })
+                .Select(t => new { t.UserId, t.Type, t.Amount, t.Name, CategoryName = t.Category != null ? t.Category.Name : null })
                 .ToListAsync(ct))
             .GroupBy(t => t.UserId)
             .ToDictionary(g => g.Key, g => g.ToList());
@@ -101,8 +101,15 @@ public class ScheduledEmailService(IServiceScopeFactory scopeFactory, ILogger<Sc
             if (!monthlyTransactionsByUser.TryGetValue(user.Id, out var monthlyTransactions))
                 continue; // nada a resumir, não manda e-mail vazio
 
-            var income = monthlyTransactions.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
-            var expense = monthlyTransactions.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
+            // Mesmo filtro de auto-transferência usado no dashboard (TransferDetection): sem
+            // isso, um Pix entre duas contas do próprio usuário infla receita e despesa aqui
+            // também, mesmo já corrigido na tela.
+            var nonTransfer = monthlyTransactions
+                .Where(t => !TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, user.Name))
+                .ToList();
+
+            var income = nonTransfer.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
+            var expense = nonTransfer.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
 
             try
             {
