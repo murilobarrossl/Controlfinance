@@ -13,7 +13,7 @@ export default function AreaTrendChart({ data, xKey = "month", series, height = 
       )}
 
       <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+        <AreaChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 8 }}>
           <defs>
             {series.map((s) => (
               <linearGradient key={s.key} id={`area-trend-${s.key}`} x1="0" y1="0" x2="0" y2="1">
@@ -23,8 +23,8 @@ export default function AreaTrendChart({ data, xKey = "month", series, height = 
             ))}
           </defs>
           <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey={xKey} stroke="#808080" tick={{ fontSize: 12 }} />
-          <YAxis stroke="#808080" tick={{ fontSize: 12 }} tickFormatter={formatValue} width={64} />
+          <XAxis dataKey={xKey} stroke="#808080" tick={{ fontSize: 12 }} padding={{ right: 12 }} />
+          <YAxis stroke="#808080" tick={{ fontSize: 12 }} tickFormatter={formatValue} width={76} />
           <Tooltip
             formatter={(value) => (formatValue ? formatValue(value) : value)}
             contentStyle={TOOLTIP_STYLE}

@@ -141,6 +141,7 @@
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .relatorios__amount-cell {

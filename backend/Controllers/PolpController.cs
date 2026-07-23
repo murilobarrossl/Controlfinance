@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using ControlFinance.API.Data;
 using ControlFinance.API.Models;
@@ -13,6 +14,28 @@ namespace ControlFinance.API.Controllers;
 [Authorize]
 public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerBase
 {
+    // Serializa syncs concorrentes da mesma integração (ex.: o auto-sync do dashboard cruzando
+    // com um sync manual, ou a página recarregada antes do sync anterior terminar): sem isso,
+    // duas requisições liam o mesmo snapshot de "transações já existentes" antes de qualquer
+    // uma salvar, e cada uma inseria a mesma transação da Polp de novo — causou duplicatas reais
+    // de "Transferência enviada" no extrato. Estático porque o controller é instanciado por
+    // requisição; a chave é o Guid local da integração (PolpIntegration.Id).
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> SyncLocks = new();
+
+    private static async Task<int> SyncOneWithLockAsync(Func<Task<int>> syncOne, Guid integrationId, CancellationToken ct)
+    {
+        var syncLock = SyncLocks.GetOrAdd(integrationId, _ => new SemaphoreSlim(1, 1));
+        await syncLock.WaitAsync(ct);
+        try
+        {
+            return await syncOne();
+        }
+        finally
+        {
+            syncLock.Release();
+        }
+    }
+
     [HttpGet("connectors")]
     public async Task<IActionResult> GetConnectors(CancellationToken ct)
     {
@@ -147,7 +170,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         int accountsCount;
         try
         {
-            accountsCount = await SyncOneAsync(local, ct);
+            accountsCount = await SyncOneWithLockAsync(() => SyncOneAsync(local, ct), local.Id, ct);
         }
         catch (HttpRequestException ex)
         {
@@ -173,7 +196,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         {
             try
             {
-                await SyncOneAsync(local, ct);
+                await SyncOneWithLockAsync(() => SyncOneAsync(local, ct), local.Id, ct);
                 syncedCount++;
             }
             catch (HttpRequestException)
