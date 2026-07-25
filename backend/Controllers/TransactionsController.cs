@@ -53,6 +53,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         [FromQuery] string? status,
         [FromQuery] string? type,
         [FromQuery] string? search,
+        [FromQuery] int? year = null,
+        [FromQuery] int? month = null,
         [FromQuery] string sortBy = "dueDate",
         [FromQuery] string sortDir = "desc",
         [FromQuery] int page = 1,
@@ -74,6 +76,17 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         if (!string.IsNullOrEmpty(search))
             query = query.Where(t => EF.Functions.ILike(t.Name, $"%{search}%"));
+
+        // year/month chegam como inteiros (não como DateTime cru na query string) de propósito:
+        // o model binder de DateTime da ASP.NET não garante Kind=Utc a partir de string, e essa
+        // ambiguidade já causou bug de fronteira de mês em outro lugar do dashboard. Montar o
+        // intervalo aqui, igual o DashboardController faz, evita a mesma armadilha.
+        if (year.HasValue && month.HasValue)
+        {
+            var startOfMonth = new DateTime(year.Value, month.Value, 1, 0, 0, 0, DateTimeKind.Utc);
+            var endOfMonth = startOfMonth.AddMonths(1);
+            query = query.Where(t => t.DueDate >= startOfMonth && t.DueDate < endOfMonth);
+        }
 
         var totalCount = await query.CountAsync();
         var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
@@ -138,18 +151,30 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             false
         ));
 
+    // Todo critério de ordenação termina com ThenBy(Id): DueDate (e os outros campos) frequentemente
+    // se repetem entre transações, e sem um desempate estável o Postgres não garante a mesma ordem
+    // entre duas execuções do Skip/Take — a mesma linha podia aparecer em duas páginas do Relatórios
+    // (ou sumir de todas) só por causa disso.
     private static IQueryable<Transaction> ApplySort(IQueryable<Transaction> query, string sortBy, bool desc) => sortBy switch
     {
-        "name" => desc ? query.OrderByDescending(t => t.Name) : query.OrderBy(t => t.Name),
+        "name" => desc
+            ? query.OrderByDescending(t => t.Name).ThenBy(t => t.Id)
+            : query.OrderBy(t => t.Name).ThenBy(t => t.Id),
         "categoryName" => desc
-            ? query.OrderByDescending(t => t.Category != null ? t.Category.Name : "")
-            : query.OrderBy(t => t.Category != null ? t.Category.Name : ""),
+            ? query.OrderByDescending(t => t.Category != null ? t.Category.Name : "").ThenBy(t => t.Id)
+            : query.OrderBy(t => t.Category != null ? t.Category.Name : "").ThenBy(t => t.Id),
         "bankAccountName" => desc
-            ? query.OrderByDescending(t => t.BankAccount != null ? t.BankAccount.Name : "")
-            : query.OrderBy(t => t.BankAccount != null ? t.BankAccount.Name : ""),
-        "type" => desc ? query.OrderByDescending(t => t.Type) : query.OrderBy(t => t.Type),
-        "status" => desc ? query.OrderByDescending(t => t.Status) : query.OrderBy(t => t.Status),
-        _ => desc ? query.OrderByDescending(t => t.DueDate) : query.OrderBy(t => t.DueDate),
+            ? query.OrderByDescending(t => t.BankAccount != null ? t.BankAccount.Name : "").ThenBy(t => t.Id)
+            : query.OrderBy(t => t.BankAccount != null ? t.BankAccount.Name : "").ThenBy(t => t.Id),
+        "type" => desc
+            ? query.OrderByDescending(t => t.Type).ThenBy(t => t.Id)
+            : query.OrderBy(t => t.Type).ThenBy(t => t.Id),
+        "status" => desc
+            ? query.OrderByDescending(t => t.Status).ThenBy(t => t.Id)
+            : query.OrderBy(t => t.Status).ThenBy(t => t.Id),
+        _ => desc
+            ? query.OrderByDescending(t => t.DueDate).ThenBy(t => t.Id)
+            : query.OrderBy(t => t.DueDate).ThenBy(t => t.Id),
     };
 
     [HttpPost]

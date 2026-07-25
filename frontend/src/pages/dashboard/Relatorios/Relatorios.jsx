@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getTransactionsReport } from "../../../api/transactions.js";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
+import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
 import { TrendUpIcon, TrendDownIcon, WalletIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency } from "../../../utils/financeMath.js";
+import { formatMonthLong } from "../../../utils/monthLabel.js";
+import { getMonthsWindow } from "../../../utils/monthlyTrend.js";
 import "./Relatorios.css";
 
 const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
@@ -69,6 +72,13 @@ export default function Relatorios() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState({ key: "dueDate", direction: "desc" });
   const [page, setPage] = useState(1);
+  // "all" mantém o comportamento antigo (histórico completo, sem filtro de data). Sem isso os
+  // cards de "Entradas/Saídas do período" somavam o histórico inteiro mesmo quando o rótulo
+  // dizia "do período" — nada aqui limitava por mês.
+  const [periodMode, setPeriodMode] = useState("all");
+  const [monthOffset, setMonthOffset] = useState(0);
+
+  const currentMonth = useMemo(() => getMonthsWindow(1, monthOffset)[0], [monthOffset]);
 
   // Busca com debounce: sem isso, cada tecla digitada dispararia uma requisição nova.
   // Reseta a página junto, no mesmo callback (filtro/status/tipo/ordenação já resetam a
@@ -88,6 +98,8 @@ export default function Relatorios() {
       status: statusFilter === "all" ? undefined : statusFilter,
       type: typeFilter === "all" ? undefined : typeFilter,
       search: search || undefined,
+      year: periodMode === "month" ? currentMonth.getUTCFullYear() : undefined,
+      month: periodMode === "month" ? currentMonth.getUTCMonth() + 1 : undefined,
       sortBy: sort.key,
       sortDir: sort.direction,
       page,
@@ -106,7 +118,12 @@ export default function Relatorios() {
     return () => {
       cancelled = true;
     };
-  }, [statusFilter, typeFilter, search, sort, page]);
+  }, [statusFilter, typeFilter, search, periodMode, currentMonth, sort, page]);
+
+  function handlePeriodModeChange(mode) {
+    setPeriodMode(mode);
+    setPage(1);
+  }
 
   function toggleSort(key) {
     setSort((prev) =>
@@ -140,12 +157,53 @@ export default function Relatorios() {
     <div className="relatorios">
       <SectionHeading kicker="Histórico completo" title="Relatórios" align="left" />
 
+      <div className="relatorios__period-filter">
+        <button
+          type="button"
+          className={`relatorios__period-btn ${periodMode === "all" ? "relatorios__period-btn--active" : ""}`}
+          onClick={() => handlePeriodModeChange("all")}
+        >
+          Todo o período
+        </button>
+        <button
+          type="button"
+          className={`relatorios__period-btn ${periodMode === "month" ? "relatorios__period-btn--active" : ""}`}
+          onClick={() => handlePeriodModeChange("month")}
+        >
+          Por mês
+        </button>
+        {periodMode === "month" && (
+          <RangePicker
+            label={formatMonthLong(currentMonth)}
+            onPrev={() => {
+              setMonthOffset((prev) => prev + 1);
+              setPage(1);
+            }}
+            onNext={() => {
+              setMonthOffset((prev) => Math.max(0, prev - 1));
+              setPage(1);
+            }}
+            nextDisabled={monthOffset === 0}
+          />
+        )}
+      </div>
+
       <div className="relatorios__summary">
-        <StatCard icon={<TrendUpIcon />} label="Entradas do período" value={formatCurrency(totalIncome)} valueTone="income" />
-        <StatCard icon={<TrendDownIcon />} label="Saídas do período" value={formatCurrency(totalExpense)} valueTone="expense" />
+        <StatCard
+          icon={<TrendUpIcon />}
+          label={periodMode === "month" ? `Entradas em ${formatMonthLong(currentMonth)}` : "Entradas (todo o período)"}
+          value={formatCurrency(totalIncome)}
+          valueTone="income"
+        />
+        <StatCard
+          icon={<TrendDownIcon />}
+          label={periodMode === "month" ? `Saídas em ${formatMonthLong(currentMonth)}` : "Saídas (todo o período)"}
+          value={formatCurrency(totalExpense)}
+          valueTone="expense"
+        />
         <StatCard
           icon={<WalletIcon />}
-          label="Saldo do período"
+          label={periodMode === "month" ? `Saldo em ${formatMonthLong(currentMonth)}` : "Saldo (todo o período)"}
           value={formatCurrency(balance)}
           valueTone={balance >= 0 ? "income" : "expense"}
         />

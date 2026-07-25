@@ -28,11 +28,13 @@ export const getTransactions = async (filters = {}) => {
 
 const invalidateCache = () => cache.clear();
 
-const buildReportQuery = ({ status, type, search, sortBy, sortDir, page, pageSize } = {}) => {
+const buildReportQuery = ({ status, type, search, year, month, sortBy, sortDir, page, pageSize } = {}) => {
   const params = new URLSearchParams();
   if (status) params.set("status", status);
   if (type) params.set("type", type);
   if (search) params.set("search", search);
+  if (year) params.set("year", year);
+  if (month) params.set("month", month);
   if (sortBy) params.set("sortBy", sortBy);
   if (sortDir) params.set("sortDir", sortDir);
   if (page) params.set("page", page);

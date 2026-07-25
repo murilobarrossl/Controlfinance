@@ -72,7 +72,21 @@ export default function Orcamento() {
   }
 
   const expenses = useMemo(() => transactions.filter((t) => t.type === "Expense" && !t.isTransfer), [transactions]);
-  const fixedExpenses = useMemo(() => expenses.filter((t) => t.isFixed), [expenses]);
+  // Cada "despesa fixa" vira uma transação de verdade (não há motor de recorrência que reaproveite
+  // a mesma linha todo mês). Se o usuário adicionar de novo o mesmo nome num mês seguinte achando
+  // que precisa repetir, sem esse dedup o Total somaria as duas pra sempre. Mantém só a ocorrência
+  // mais recente de cada nome; as antigas continuam no extrato normalmente, só saem dessa lista.
+  const fixedExpenses = useMemo(() => {
+    const latestByName = new Map();
+    for (const t of expenses) {
+      if (!t.isFixed) continue;
+      const existing = latestByName.get(t.name);
+      if (!existing || new Date(t.dueDate) > new Date(existing.dueDate)) {
+        latestByName.set(t.name, t);
+      }
+    }
+    return [...latestByName.values()].sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+  }, [expenses]);
   const totalFixed = useMemo(() => fixedExpenses.reduce((sum, t) => sum + t.amount, 0), [fixedExpenses]);
   const totalInstallments = useMemo(
     () => installments.reduce((sum, i) => sum + i.installmentAmount, 0),
