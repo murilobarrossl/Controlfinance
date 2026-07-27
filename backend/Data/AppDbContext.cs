@@ -23,6 +23,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Installment> Installments => Set<Installment>();
     public DbSet<PolpIntegration> PolpIntegrations => Set<PolpIntegration>();
     public DbSet<RevokedToken> RevokedTokens => Set<RevokedToken>();
+    public DbSet<RecurrenceDecision> RecurrenceDecisions => Set<RecurrenceDecision>();
     public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -59,6 +60,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasKey(b => b.Id);
             e.Property(b => b.Name).IsRequired().HasMaxLength(100);
             e.Property(b => b.Balance).HasConversion(decimalConverter).HasColumnName("BalanceEncrypted");
+            e.Property(b => b.Ownership).HasConversion<string>();
             e.HasOne(b => b.User)
              .WithMany()
              .HasForeignKey(b => b.UserId)
@@ -128,6 +130,26 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<RevokedToken>(e =>
         {
             e.HasKey(r => r.Jti);
+        });
+
+        modelBuilder.Entity<RecurrenceDecision>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.Property(r => r.NormalizedName).IsRequired().HasMaxLength(150);
+            e.Property(r => r.Status).HasConversion<string>();
+            e.Property(r => r.AssumedFrequency).HasConversion<string>();
+            e.HasOne(r => r.User)
+             .WithMany()
+             .HasForeignKey(r => r.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(r => r.BankAccount)
+             .WithMany()
+             .HasForeignKey(r => r.BankAccountId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            // Upsert (POST /api/recurrences/decision) depende dessa chave pra achar a linha
+            // existente antes de decidir entre criar e atualizar.
+            e.HasIndex(r => new { r.UserId, r.BankAccountId, r.NormalizedName }).IsUnique();
         });
     }
 }

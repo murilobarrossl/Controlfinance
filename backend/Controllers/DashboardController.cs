@@ -23,7 +23,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
         if (account is null)
             return Ok(new { message = "Nenhuma conta bancária cadastrada." });
 
-        var accountDto = new BankAccountDto(account.Id, account.Name, account.BankCode, account.Balance, account.IsActive);
+        var accountDto = new BankAccountDto(account.Id, account.Name, account.BankCode, account.Balance, account.IsActive, account.Ownership.ToString());
 
         var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
 

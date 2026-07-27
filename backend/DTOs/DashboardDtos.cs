@@ -10,7 +10,12 @@ public record CreateBankAccountDto(
     [MaxLength(20)] string? BankCode,
     [Range(-1_000_000_000, 1_000_000_000, ErrorMessage = "Saldo fora da faixa permitida.")] decimal Balance
 );
-public record BankAccountDto(Guid Id, string Name, string? BankCode, decimal Balance, bool IsActive);
+public record BankAccountDto(Guid Id, string Name, string? BankCode, decimal Balance, bool IsActive, string Ownership);
+
+// Ownership: "Personal" | "Business" | "Mixed" — string na borda da API, igual Type/Status de
+// TransactionDto, pra não vazar o valor numérico cru do enum (o padrão do System.Text.Json sem
+// conversor: JSON já mandava "ownership":0 antes dessa mudança).
+public record SetAccountOwnershipDto(string Ownership);
 
 // ── CATEGORY ──────────────────────────────────────────
 public record CreateCategoryDto(

@@ -1,5 +1,11 @@
 namespace ControlFinance.API.Models;
 
+// Usado pelo Radar de Recorrências pra separar pessoal de empresa. Mixed = conta mista (o usuário
+// disse explicitamente que não dá pra separar) — nesse caso a detecção continua funcionando
+// normalmente, só não entra em nenhum dos dois lados na tela. Chutado a partir do documento do
+// dono na criação da conta (CNPJ = Business, CPF = Personal); o usuário pode corrigir depois.
+public enum AccountOwnership { Personal, Business, Mixed }
+
 public class BankAccount
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -16,6 +22,8 @@ public class BankAccount
 
     /// <summary>ID da integração na Polp à qual esta conta pertence.</summary>
     public int? PolpIntegrationId { get; set; }
+
+    public AccountOwnership Ownership { get; set; }
 
     public ICollection<Transaction> Transactions { get; set; } = [];
 }

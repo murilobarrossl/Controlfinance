@@ -1,11 +1,14 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Reflection;
 using System.Security.Claims;
 using System.Text;
 using ControlFinance.API.Data;
+using ControlFinance.API.Migrations;
 using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -144,7 +147,40 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // Precisa saber se a migration do Radar de Recorrências ainda não tinha rodado nessa base
+    // ANTES de aplicar (Migrate() abaixo já marca ela como aplicada) — é o gatilho do backfill
+    // logo depois. Sem essa checagem, toda vez que o app subisse ele tentaria rodar de novo o
+    // backfill em cima de linhas que o usuário já classificou manualmente como "conta mista"
+    // (Mixed), sobrescrevendo a escolha dele com o chute. Lido via reflection (o [Migration] da
+    // classe gerada) em vez de string literal: já testei isso quebrando silenciosamente uma vez,
+    // ao regenerar a migration com outro timestamp e esquecer de atualizar o literal à mão.
+    var recurrenceRadarMigrationId = typeof(AddRecurrenceRadarSupport)
+        .GetCustomAttribute<MigrationAttribute>()!.Id;
+    var recurrenceRadarMigrationIsPending = (await db.Database.GetPendingMigrationsAsync())
+        .Contains(recurrenceRadarMigrationId);
+
     db.Database.Migrate();
+
+    if (recurrenceRadarMigrationIsPending)
+        await BackfillAccountOwnershipAsync(db);
+}
+
+// Chute inicial de pessoal/empresa/mista (ver AccountOwnershipDefault) pras contas que já
+// existiam antes da coluna Ownership existir (a coluna nasce com todas as linhas em Personal,
+// valor default do enum, então não precisa filtrar quem "ainda não tem" — é sempre todo mundo).
+// Roda uma única vez, no exato momento em que a migration acima é aplicada — nunca mais depois
+// disso, então uma conta marcada como Mixed pelo usuário fica assim pra sempre, mesmo em
+// reinícios futuros do app.
+static async Task BackfillAccountOwnershipAsync(AppDbContext db)
+{
+    var accounts = await db.BankAccounts.Include(b => b.User).ToListAsync();
+
+    foreach (var account in accounts)
+        account.Ownership = AccountOwnershipDefault.FromDocument(account.User.Document);
+
+    if (accounts.Count > 0)
+        await db.SaveChangesAsync();
 }
 
 // Confia nos headers X-Forwarded-* do proxy (Cloudflare/DigitalOcean) na frente da aplicação:

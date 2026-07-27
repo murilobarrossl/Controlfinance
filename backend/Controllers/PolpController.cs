@@ -232,6 +232,10 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
 
         var createdAccounts = new List<BankAccount>();
 
+        // Chute inicial do Radar de Recorrências pra conta nova (CNPJ = Business, CPF = Personal,
+        // ver AccountOwnershipDefault).
+        var ownerDocument = await db.Users.Where(u => u.Id == UserId).Select(u => u.Document).FirstAsync(ct);
+
         foreach (var remoteAccount in remoteAccounts)
         {
             if (existingAccounts.TryGetValue(remoteAccount.Id, out var account))
@@ -247,7 +251,8 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
                     BankCode = local.InstitutionId.ToString(),
                     PolpAccountId = remoteAccount.Id,
                     PolpIntegrationId = local.PolpIntegrationId,
-                    Balance = remoteAccount.Balance
+                    Balance = remoteAccount.Balance,
+                    Ownership = AccountOwnershipDefault.FromDocument(ownerDocument)
                 };
                 db.BankAccounts.Add(account);
             }
