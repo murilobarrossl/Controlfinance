@@ -19,7 +19,11 @@ public class RecurrenceDecision
     /// + espaços colapsados).</summary>
     public string NormalizedName { get; set; } = string.Empty;
 
-    public RecurrenceDecisionStatus Status { get; set; }
+    // Nullable: uma linha pode existir só pra guardar ReminderRequested, sem o usuário ter dado
+    // opinião sobre confirmar/dispensar — os dois campos são independentes (ver SetDecision em
+    // RecurrencesController: pedir lembrete não força Confirmed, senão maquiaria como "confirmado
+    // manualmente" uma recorrência que a detecção automática já achou sozinha).
+    public RecurrenceDecisionStatus? Status { get; set; }
 
     /// <summary>Só usado quando Status=Confirmed e o histórico ainda não tem ocorrências
     /// suficientes pra classificar a frequência sozinho — vem da escolha do usuário na tela.</summary>

@@ -17,6 +17,7 @@ const Relatorios = lazy(() => import("./pages/dashboard/Relatorios/Relatorios.js
 const Categorias = lazy(() => import("./pages/dashboard/Categorias/Categorias.jsx"));
 const Investimentos = lazy(() => import("./pages/dashboard/Investimentos/Investimentos.jsx"));
 const Orcamento = lazy(() => import("./pages/dashboard/Orcamento/Orcamento.jsx"));
+const Radar = lazy(() => import("./pages/dashboard/Radar/Radar.jsx"));
 const TermosDeUso = lazy(() => import("./pages/legal/TermosDeUso.jsx"));
 const PoliticaDePrivacidade = lazy(() => import("./pages/legal/PoliticaDePrivacidade.jsx"));
 
@@ -60,6 +61,7 @@ export default function App() {
               <Route path="categorias" element={<Categorias />} />
               <Route path="investimentos" element={<Investimentos />} />
               <Route path="orcamento" element={<Orcamento />} />
+              <Route path="radar" element={<Radar />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
