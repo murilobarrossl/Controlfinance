@@ -6,6 +6,7 @@ using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace ControlFinance.API.Controllers;
 
@@ -63,6 +64,29 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         return Ok(connectors);
     }
 
+    // UPDATING/WAITING_USER_INPUT só bloqueiam uma conexão nova se atualizados há menos de 1h:
+    // autenticar um banco aqui leva 5-10min no máximo, então uma integração parada há mais tempo
+    // que isso foi abandonada (aba fechada, MFA nunca completado) — bloquear pra sempre trancaria
+    // o usuário de tentar de novo. UPDATED sempre bloqueia (já está conectado de verdade). A linha
+    // antiga abandonada fica órfã no banco até a limpeza — fora do escopo deste guard.
+    private static readonly TimeSpan StaleIntegrationThreshold = TimeSpan.FromHours(1);
+
+    // Impede o clique duplo (ou um retry depois de um timeout) de criar uma segunda
+    // PolpIntegration local pro mesmo banco — e, pior, uma segunda integração do lado da Polp
+    // também, que depois recusa com 422 ITEM_IS_ALREADY_UPDATING.
+    private async Task<PolpIntegration?> FindBlockingIntegrationAsync(int institutionId, CancellationToken ct)
+    {
+        var candidates = await db.PolpIntegrations
+            .Where(p => p.UserId == UserId && p.InstitutionId == institutionId)
+            .ToListAsync(ct);
+
+        var cutoff = DateTime.UtcNow - StaleIntegrationThreshold;
+
+        return candidates.FirstOrDefault(p =>
+            p.Status == "UPDATED" ||
+            ((p.Status is "UPDATING" or "WAITING_USER_INPUT") && p.UpdatedAt > cutoff));
+    }
+
     [HttpPost("integrations")]
     public async Task<IActionResult> Connect([FromBody] PolpConnectDto dto, CancellationToken ct)
     {
@@ -71,6 +95,17 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
 
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == UserId, ct);
         if (user is null) return Unauthorized();
+
+        var blocking = await FindBlockingIntegrationAsync(institutionId, ct);
+        if (blocking is not null)
+        {
+            return Conflict(new
+            {
+                message = "Já existe uma conexão em andamento ou ativa para esse banco.",
+                integrationId = blocking.Id,
+                status = blocking.Status
+            });
+        }
 
         PolpIntegrationDto created;
         try
@@ -265,9 +300,19 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         // Categorias do usuário carregadas uma única vez (entidade completa, não só o id: precisa
         // pra poder corrigir a cor de categorias antigas presas no cinza legado); novas categorias
         // entram no mesmo dicionário conforme são criadas, sem round-trip ao banco por transação.
-        var categoriesByName = await db.Categories
-            .Where(c => c.UserId == UserId)
-            .ToDictionaryAsync(c => c.Name, c => c, ct);
+        //
+        // GroupBy + First em vez de ToDictionaryAsync: duas execuções concorrentes deste método
+        // (ex.: dois syncs disparados ao mesmo tempo) podiam criar a mesma categoria em paralelo
+        // antes de qualquer uma commitar, gerando duas linhas com o mesmo Name — e ToDictionaryAsync
+        // estourava ArgumentException na segunda ocorrência, derrubando o sync inteiro. Fica com a
+        // mais antiga de cada nome (critério consistente com a limpeza dos dados já existentes).
+        // Caso normal (sem duplicata) dá o resultado idêntico de antes.
+        var categoriesByName = (await db.Categories
+                .Where(c => c.UserId == UserId)
+                .OrderBy(c => c.CreatedAt)
+                .ToListAsync(ct))
+            .GroupBy(c => c.Name)
+            .ToDictionary(g => g.Key, g => g.First());
 
         var accountIds = createdAccounts.Select(a => a.Id).ToList();
         var existingTransactionKeys = (await db.Transactions
@@ -299,7 +344,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
                 if (!existingTransactionKeys.Add((account.Id, polpTransactionId)))
                     continue; // já sincronizada em uma execução anterior
 
-                var categoryId = ResolveCategoryId(categoriesByName, rt.Category?.Description, rt.Category?.Color);
+                var categoryId = await ResolveCategoryIdAsync(categoriesByName, rt.Category?.Description, rt.Category?.Color, ct);
 
                 db.Transactions.Add(new Transaction
                 {
@@ -351,7 +396,8 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         "#ED4A31", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#B39DDB", "#F4A261"
     ];
 
-    private Guid? ResolveCategoryId(Dictionary<string, Category> categoriesByName, string? categoryName, string? polpColor)
+    private async Task<Guid?> ResolveCategoryIdAsync(
+        Dictionary<string, Category> categoriesByName, string? categoryName, string? polpColor, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(categoryName)) return null;
 
@@ -372,9 +418,36 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
             Color = IsValidHexColor(polpColor) ? polpColor : PickFallbackColor(categoryName)
         };
         db.Categories.Add(created);
+
+        try
+        {
+            // Salva na hora, em vez de deixar acumulada pro SaveChangesAsync em lote do fim do
+            // sync: com a constraint de unicidade (UserId, Name) — ainda por vir —, uma corrida
+            // com outro sync concorrente criando essa mesma categoria só pode ser detectada e
+            // tratada aqui, isolada. Se ficasse no lote do fim, a violação derrubaria a transação
+            // inteira e junto ia todo lançamento já processado nesse sync, não só a categoria.
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            // Perdeu a corrida: a outra requisição commitou essa categoria primeiro. Descarta
+            // nossa tentativa (senão ela fica presa no change tracker e quebra o próximo save)
+            // e usa a que já existe, em vez de propagar o erro.
+            db.Entry(created).State = EntityState.Detached;
+
+            var winner = await db.Categories.FirstOrDefaultAsync(c => c.UserId == UserId && c.Name == categoryName, ct);
+            if (winner is null) throw; // não deveria acontecer: a violação só dispara se a linha já existe
+
+            categoriesByName[categoryName] = winner;
+            return winner.Id;
+        }
+
         categoriesByName[categoryName] = created;
         return created.Id;
     }
+
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
     private static bool IsValidHexColor([NotNullWhen(true)] string? color) =>
         color is { Length: 7 } && color[0] == '#' && color[1..].All(Uri.IsHexDigit);
