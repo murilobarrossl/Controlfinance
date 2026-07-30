@@ -36,6 +36,7 @@
 }
 
 .account-switcher__name {
+  color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -57,8 +58,12 @@
   position: absolute;
   z-index: 10;
   top: calc(100% + 0.5rem);
-  left: 0;
+  /* O seletor fica na borda direita do header (justify-content: space-between), então o menu
+     abre alinhado pela direita do botão — se abrisse pela esquerda (padrão de dropdown), ele
+     estourava a viewport pra fora da tela e forçava rolagem horizontal na página inteira. */
+  right: 0;
   min-width: 220px;
+  max-width: calc(100vw - 2rem);
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -101,6 +106,46 @@
   font-weight: 500;
 }
 
+.account-switcher__group-label {
+  margin: 0.2rem 0.6rem 0.15rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.account-switcher__current {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.6rem;
+}
+
+.account-switcher__current .account-switcher__name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.account-switcher__disconnect {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.55rem;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.account-switcher__disconnect:hover {
+  background-color: var(--color-accent);
+  color: var(--color-text-primary);
+  border-color: var(--color-accent);
+}
+
 .account-switcher__divider {
   height: 1px;
   background-color: var(--color-border);
@@ -109,10 +154,7 @@
 
 @media (max-width: 480px) {
   .account-switcher__menu {
-    left: auto;
-    right: 0;
     min-width: 200px;
-    max-width: calc(100vw - 2rem);
   }
 
   .account-switcher__name {

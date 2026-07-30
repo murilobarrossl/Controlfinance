@@ -141,9 +141,12 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
     [HttpGet("integrations")]
     public async Task<IActionResult> GetIntegrations(CancellationToken ct)
     {
+        // PolpIntegrationId vai junto só pra agrupar visualmente no seletor de contas (ex.: conta
+        // corrente + cartão de crédito do mesmo banco, sincronizados na mesma conexão) — cada
+        // conta continua com sua própria visão de dados, nada é somado entre elas.
         var accounts = await db.BankAccounts
             .Where(b => b.UserId == UserId && b.IsActive)
-            .Select(b => new { b.Id, b.Name, b.Balance, b.BankCode })
+            .Select(b => new { b.Id, b.Name, b.Balance, b.BankCode, b.PolpIntegrationId })
             .ToListAsync(ct);
 
         return Ok(accounts);

@@ -4,6 +4,7 @@ import { getDashboardSummary } from "../../../api/dashboard.js";
 import { getTransactions } from "../../../api/transactions.js";
 import { getCategories } from "../../../api/categories.js";
 import { getIntegrations, getConnectors, syncAllIntegrations } from "../../../api/polp.js";
+import { deleteBankAccount } from "../../../api/bankAccounts.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
@@ -120,6 +121,22 @@ export default function DashboardHome() {
     setSelectedAccountId(accountId);
   }
 
+  // Desconecta (soft delete) a conta do banco: some da lista, mas o histórico de transações
+  // continua no extrato (mesmo comportamento de "conta desativada" já tratado no resto do app).
+  // Depois de sair, larga selectedAccountId de volta pra null pra deixar o backend escolher outra
+  // conta ativa sozinho, em vez de continuar apontando pra uma conta que não existe mais.
+  function handleDisconnectAccount(accountId) {
+    setLoading(true);
+    deleteBankAccount(accountId)
+      .then(() => getIntegrations())
+      .then(setAccounts)
+      .catch((err) => setError(err.message || "Não foi possível desconectar essa conta."))
+      .finally(() => {
+        setSelectedAccountId(null);
+        setRefreshKey((key) => key + 1);
+      });
+  }
+
   if (loading) return <p className="dashboard-home__hint">Carregando dashboard...</p>;
   if (error) return <p className="dashboard-home__error">{error}</p>;
 
@@ -171,6 +188,7 @@ export default function DashboardHome() {
           activeAccountId={activeAccount.id}
           connectors={connectors}
           onSelect={handleSelectAccount}
+          onDisconnect={handleDisconnectAccount}
         />
       </div>
 
