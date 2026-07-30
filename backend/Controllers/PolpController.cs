@@ -315,12 +315,10 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
             .ToDictionary(g => g.Key, g => g.First());
 
         var accountIds = createdAccounts.Select(a => a.Id).ToList();
-        var existingTransactionKeys = (await db.Transactions
+        var existingTransactionsByKey = (await db.Transactions
                 .Where(t => t.UserId == UserId && t.BankAccountId != null && accountIds.Contains(t.BankAccountId.Value))
-                .Select(t => new { t.BankAccountId, t.Description })
                 .ToListAsync(ct))
-            .Select(t => (t.BankAccountId!.Value, t.Description))
-            .ToHashSet();
+            .ToDictionary(t => (t.BankAccountId!.Value, t.Description), t => t);
 
         // Busca e persiste todo o histórico de transações de cada conta (paginado dentro do
         // PolpService, até o teto de segurança).
@@ -341,24 +339,45 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
             foreach (var rt in remoteTransactions)
             {
                 var polpTransactionId = rt.Id.ToString();
-                if (!existingTransactionKeys.Add((account.Id, polpTransactionId)))
-                    continue; // já sincronizada em uma execução anterior
+                var type = rt.Amount >= 0 ? TransactionType.Income : TransactionType.Expense;
+                var status = rt.Status == "PENDING" ? TransactionStatus.Pending : TransactionStatus.Paid;
+                var amount = Math.Abs(rt.Amount);
+                var dueDate = ParseDateAsUtc(rt.Date);
+                var paidAt = status == TransactionStatus.Pending ? (DateTime?)null : dueDate;
+
+                if (existingTransactionsByKey.TryGetValue((account.Id, polpTransactionId), out var existing))
+                {
+                    // Já sincronizada antes, mas a Polp pode corrigir o valor/status depois (ex.:
+                    // pré-autorização de cartão que confirma com um valor final diferente, ou
+                    // PENDING que vira PAID). Sem atualizar aqui, o valor exibido ficava congelado
+                    // no que veio na primeira sincronização mesmo depois de o banco confirmar outro
+                    // valor — CategoryId/Name ficam de fora de propósito, pra não sobrescrever uma
+                    // recategorização/renomeação feita manualmente no app.
+                    existing.Amount = amount;
+                    existing.Type = type;
+                    existing.Status = status;
+                    existing.DueDate = dueDate;
+                    existing.PaidAt = paidAt;
+                    continue;
+                }
 
                 var categoryId = await ResolveCategoryIdAsync(categoriesByName, rt.Category?.Description, rt.Category?.Color, ct);
 
-                db.Transactions.Add(new Transaction
+                var transaction = new Transaction
                 {
                     UserId = UserId,
                     BankAccountId = account.Id,
                     CategoryId = categoryId,
                     Name = rt.Merchant?.Name ?? rt.Description ?? "Transação",
                     Description = polpTransactionId, // guarda o id da Polp para evitar duplicar em re-syncs
-                    Type = rt.Amount >= 0 ? TransactionType.Income : TransactionType.Expense,
-                    Status = rt.Status == "PENDING" ? TransactionStatus.Pending : TransactionStatus.Paid,
-                    Amount = Math.Abs(rt.Amount),
-                    DueDate = ParseDateAsUtc(rt.Date),
-                    PaidAt = rt.Status == "PENDING" ? null : ParseDateAsUtc(rt.Date)
-                });
+                    Type = type,
+                    Status = status,
+                    Amount = amount,
+                    DueDate = dueDate,
+                    PaidAt = paidAt
+                };
+                db.Transactions.Add(transaction);
+                existingTransactionsByKey[(account.Id, polpTransactionId)] = transaction;
             }
         }
 

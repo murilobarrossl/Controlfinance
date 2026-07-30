@@ -20,10 +20,25 @@ public static class TransferDetection
         "Transferências", "Transferencia", "Transferência", "TED", "DOC"
     };
 
+    // A Polp manda essa categoria só quando já verificou (via CPF/CNPJ dos dois lados) que é uma
+    // transferência entre contas do mesmo titular — sinal mais forte que a heurística de nome
+    // abaixo, então confia direto nela em vez de exigir bater com ownerName. Sem esse caso, uma
+    // transferência assim (ex.: "Pix enviado - <nome completo>", sem a palavra "transferência" no
+    // nome da transação) caía no fallback de regex, não batia, e entrava como despesa de verdade.
+    private static readonly HashSet<string> SelfOwnershipCategoryNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Transferência mesma titularidade"
+    };
+
     public static bool IsSelfTransfer(string? transactionName, string? categoryName, string? ownerName)
     {
-        if (string.IsNullOrWhiteSpace(transactionName) || string.IsNullOrWhiteSpace(ownerName))
+        if (string.IsNullOrWhiteSpace(transactionName))
             return false;
+
+        if (categoryName is not null && SelfOwnershipCategoryNames.Contains(categoryName))
+            return true;
+
+        if (string.IsNullOrWhiteSpace(ownerName)) return false;
 
         var looksLikeTransfer = (categoryName is not null && TransferCategoryNames.Contains(categoryName))
             || TransferPattern.IsMatch(transactionName);
