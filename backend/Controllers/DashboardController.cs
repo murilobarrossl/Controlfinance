@@ -39,19 +39,14 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
                      && t.DueDate < endOfMonth)
             .ToListAsync();
 
-        // Transferências entre contas do próprio usuário (Pix/TED pra outro banco seu) entram
-        // como receita E despesa ao mesmo tempo na Polp; sem excluir dos totais, "receita" e
-        // "despesa" do mês ficam sem sentido. Continuam aparecendo no extrato (pendingEntities
-        // abaixo não passa por esse filtro), só não entram nas somas/gráfico de categoria.
-        var nonTransferMonthly = monthlyTransactions
-            .Where(t => !TransferDetection.IsSelfTransfer(t.Name, t.Category?.Name, ownerName))
-            .ToList();
-
-        var totalIncome = nonTransferMonthly
+        // Transferência entre contas do próprio usuário conta como receita na conta que recebe e
+        // despesa na conta que envia, igual qualquer outra movimentação — decisão do usuário, não
+        // filtra por IsSelfTransfer aqui.
+        var totalIncome = monthlyTransactions
             .Where(t => t.Type == TransactionType.Income)
             .Sum(t => t.Amount);
 
-        var totalExpense = nonTransferMonthly
+        var totalExpense = monthlyTransactions
             .Where(t => t.Type == TransactionType.Expense)
             .Sum(t => t.Amount);
 
@@ -69,7 +64,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
         var pending = pendingEntities.Select(t => TransactionDto.FromEntity(t, ownerName)).ToList();
 
-        var expensesByCategory = nonTransferMonthly
+        var expensesByCategory = monthlyTransactions
             .Where(t => t.Type == TransactionType.Expense && t.CategoryId.HasValue)
             .GroupBy(t => t.CategoryId)
             .Select(g => new

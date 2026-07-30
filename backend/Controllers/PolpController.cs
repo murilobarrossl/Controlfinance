@@ -37,6 +37,29 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         }
     }
 
+    // TEMPORÁRIO — diagnóstico do bug de fatura de cartão inflada (abril mostrando R$6 mil contra
+    // R$699,86 reais). Devolve exatamente o que a Polp manda pra cada conta do usuário logado, sem
+    // nenhum processamento nosso, pra confirmar se o valor total de compra parcelada e o valor de
+    // "Pagamento recebido" já vêm com o mesmo dinheiro contado duas vezes do lado da Polp. Remover
+    // depois de confirmar a causa.
+    [HttpGet("debug/raw-transactions")]
+    public async Task<IActionResult> DebugRawTransactions(CancellationToken ct)
+    {
+        var accounts = await db.BankAccounts
+            .Where(b => b.UserId == UserId && b.PolpAccountId != null)
+            .ToListAsync(ct);
+
+        var result = new List<object>();
+        foreach (var account in accounts)
+        {
+            if (account.PolpAccountId is not int polpAccountId) continue;
+            var remoteTransactions = await polp.GetTransactionsAsync(polpAccountId, ct);
+            result.Add(new { account.Id, account.Name, account.PolpAccountId, Transactions = remoteTransactions });
+        }
+
+        return Ok(result);
+    }
+
     [HttpGet("connectors")]
     public async Task<IActionResult> GetConnectors(CancellationToken ct)
     {

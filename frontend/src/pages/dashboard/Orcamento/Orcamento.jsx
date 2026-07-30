@@ -71,7 +71,7 @@ export default function Orcamento() {
     return getInstallments().then(setInstallments);
   }
 
-  const expenses = useMemo(() => transactions.filter((t) => t.type === "Expense" && !t.isTransfer), [transactions]);
+  const expenses = useMemo(() => transactions.filter((t) => t.type === "Expense"), [transactions]);
   // Cada "despesa fixa" vira uma transação de verdade (não há motor de recorrência que reaproveite
   // a mesma linha todo mês). Se o usuário adicionar de novo o mesmo nome num mês seguinte achando
   // que precisa repetir, sem esse dedup o Total somaria as duas pra sempre. Mantém só a ocorrência

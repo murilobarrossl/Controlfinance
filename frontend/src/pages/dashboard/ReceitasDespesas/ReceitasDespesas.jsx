@@ -95,10 +95,9 @@ export default function ReceitasDespesas() {
   const { incomes, expenses, previousTotalIncome, previousTotalExpense } = useMemo(() => {
     const currentKey = monthKey(currentMonth);
     const previousKey = monthKey(previousMonth);
-    const nonTransfer = transactions.filter((t) => !t.isTransfer);
 
-    const currentTx = nonTransfer.filter((t) => monthKey(new Date(t.dueDate)) === currentKey);
-    const previousTx = nonTransfer.filter((t) => monthKey(new Date(t.dueDate)) === previousKey);
+    const currentTx = transactions.filter((t) => monthKey(new Date(t.dueDate)) === currentKey);
+    const previousTx = transactions.filter((t) => monthKey(new Date(t.dueDate)) === previousKey);
 
     return {
       incomes: currentTx.filter((t) => t.type === "Income"),

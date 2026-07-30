@@ -13,7 +13,7 @@ export function getMonthsWindow(count, offset = 0) {
 export function buildMonthlyTrend(transactions, months) {
   return months.map((monthDate) => {
     const key = monthKey(monthDate);
-    const monthTransactions = transactions.filter((t) => !t.isTransfer && monthKey(new Date(t.dueDate)) === key);
+    const monthTransactions = transactions.filter((t) => monthKey(new Date(t.dueDate)) === key);
     return {
       month: formatMonthShort(monthDate),
       Receitas: monthTransactions.filter((t) => t.type === "Income").reduce((sum, t) => sum + t.amount, 0),

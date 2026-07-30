@@ -140,9 +140,10 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
                 .ToList();
             var sorted = desc ? all.OrderByDescending(t => t.Amount) : all.OrderBy(t => t.Amount);
             items = sorted.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-            // Transferências pra si mesmo continuam nos itens (extrato), só saem dos totais.
-            totalIncome = all.Where(t => t.Type == "Income" && !t.IsTransfer).Sum(t => t.Amount);
-            totalExpense = all.Where(t => t.Type == "Expense" && !t.IsTransfer).Sum(t => t.Amount);
+            // Transferência pra si mesmo conta normalmente nos totais, igual qualquer outra
+            // movimentação — decisão do usuário.
+            totalIncome = all.Where(t => t.Type == "Income").Sum(t => t.Amount);
+            totalExpense = all.Where(t => t.Type == "Expense").Sum(t => t.Amount);
         }
         else
         {
@@ -159,18 +160,14 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
                 .ToList();
 
             // Totais do filtro inteiro, não só da página atual: mesma limitação do Amount
-            // criptografado, então soma em memória depois de trazer só Type+Amount+Name+Categoria
+            // criptografado, então soma em memória depois de trazer só Type+Amount
             // (mais barato que montar o TransactionDto inteiro com os joins de conta).
             var forTotals = await query
                 .Take(MaxRows)
-                .Select(t => new { t.Type, t.Amount, t.Name, CategoryName = t.Category != null ? t.Category.Name : null })
+                .Select(t => new { t.Type, t.Amount })
                 .ToListAsync();
-            totalIncome = forTotals
-                .Where(t => t.Type == TransactionType.Income && !TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName))
-                .Sum(t => t.Amount);
-            totalExpense = forTotals
-                .Where(t => t.Type == TransactionType.Expense && !TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName))
-                .Sum(t => t.Amount);
+            totalIncome = forTotals.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
+            totalExpense = forTotals.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
         }
 
         return Ok(new TransactionReportDto(items, totalCount, totalIncome, totalExpense));

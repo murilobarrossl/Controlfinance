@@ -101,15 +101,10 @@ public class ScheduledEmailService(IServiceScopeFactory scopeFactory, ILogger<Sc
             if (!monthlyTransactionsByUser.TryGetValue(user.Id, out var monthlyTransactions))
                 continue; // nada a resumir, não manda e-mail vazio
 
-            // Mesmo filtro de auto-transferência usado no dashboard (TransferDetection): sem
-            // isso, um Pix entre duas contas do próprio usuário infla receita e despesa aqui
-            // também, mesmo já corrigido na tela.
-            var nonTransfer = monthlyTransactions
-                .Where(t => !TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, user.Name))
-                .ToList();
-
-            var income = nonTransfer.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
-            var expense = nonTransfer.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
+            // Transferência pra si mesmo conta normalmente, igual na tela (mesma decisão do
+            // usuário) — nada de filtro de autotransferência aqui.
+            var income = monthlyTransactions.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
+            var expense = monthlyTransactions.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
 
             try
             {
