@@ -91,3 +91,12 @@ export const setTransactionFixed = async (id, isFixed) => {
   invalidateCache();
   return result;
 };
+
+export const setTransactionDetails = async (id, { name, categoryId }) => {
+  const result = await apiFetch(`/transactions/${id}/details`, {
+    method: "PUT",
+    body: JSON.stringify({ name, categoryId: categoryId || null }),
+  });
+  invalidateCache();
+  return result;
+};

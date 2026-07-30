@@ -39,6 +39,15 @@ public record CreateTransactionDto(
 
 public record SetTransactionFixedDto(bool IsFixed);
 
+// Edição rápida de nome/categoria (ex.: a Polp categorizou errado, "Multa" virou "Multas de
+// trânsito" sem ter carro) sem precisar montar o CreateTransactionDto inteiro — a lista de
+// transações não expõe BankAccountId/CategoryId como Guid (só os nomes), então não dá pra
+// reconstruir esse DTO no cliente a partir do que a tela já tem.
+public record SetTransactionDetailsDto(
+    [Required(ErrorMessage = "Nome é obrigatório."), MaxLength(150)] string Name,
+    Guid? CategoryId
+);
+
 public record TransactionReportDto(
     IEnumerable<TransactionDto> Items,
     int TotalCount,

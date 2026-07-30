@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { getTransactionsReport } from "../../../api/transactions.js";
+import { getTransactionsReport, setTransactionDetails } from "../../../api/transactions.js";
+import { getCategories } from "../../../api/categories.js";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
@@ -64,6 +65,7 @@ function groupByDate(items) {
 
 export default function Relatorios() {
   const [report, setReport] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -77,8 +79,14 @@ export default function Relatorios() {
   // dizia "do período" — nada aqui limitava por mês.
   const [periodMode, setPeriodMode] = useState("all");
   const [monthOffset, setMonthOffset] = useState(0);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", categoryId: "" });
 
   const currentMonth = useMemo(() => getMonthsWindow(1, monthOffset)[0], [monthOffset]);
+
+  useEffect(() => {
+    getCategories().then(setCategories).catch(() => {});
+  }, []);
 
   // Busca com debounce: sem isso, cada tecla digitada dispararia uma requisição nova.
   // Reseta a página junto, no mesmo callback (filtro/status/tipo/ordenação já resetam a
@@ -91,10 +99,8 @@ export default function Relatorios() {
     return () => clearTimeout(timeout);
   }, [searchInput]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    getTransactionsReport({
+  function loadReport() {
+    return getTransactionsReport({
       status: statusFilter === "all" ? undefined : statusFilter,
       type: typeFilter === "all" ? undefined : typeFilter,
       search: search || undefined,
@@ -104,7 +110,13 @@ export default function Relatorios() {
       sortDir: sort.direction,
       page,
       pageSize: PAGE_SIZE,
-    })
+    });
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadReport()
       .then((data) => {
         if (!cancelled) setReport(data);
       })
@@ -118,7 +130,33 @@ export default function Relatorios() {
     return () => {
       cancelled = true;
     };
+    // loadReport não entra nas deps de propósito: ela fecha sobre os mesmos filtros já listados
+    // aqui, mas é uma função nova a cada render — listar ela faria o efeito rodar de novo em
+    // qualquer render (ex.: ao editar um lançamento), não só quando um filtro muda de verdade.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, typeFilter, search, periodMode, currentMonth, sort, page]);
+
+  function startEdit(t) {
+    const match = categories.find((c) => c.name === t.categoryName);
+    setEditForm({ name: t.name, categoryId: match ? match.id : "" });
+    setEditingId(t.id);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(id) {
+    if (!editForm.name.trim()) return;
+    try {
+      await setTransactionDetails(id, { name: editForm.name.trim(), categoryId: editForm.categoryId || null });
+      setEditingId(null);
+      const data = await loadReport();
+      setReport(data);
+    } catch (err) {
+      setError(err.message || "Não foi possível salvar a edição.");
+    }
+  }
 
   function handlePeriodModeChange(mode) {
     setPeriodMode(mode);
@@ -251,12 +289,13 @@ export default function Relatorios() {
                     {sort.key === col.key && (sort.direction === "asc" ? " ▲" : " ▼")}
                   </th>
                 ))}
+                <th aria-hidden="true"></th>
               </tr>
             </thead>
             <tbody>
               {groups.flatMap((group) => [
                 <tr key={`group-${group.key}`} className="relatorios__group-row">
-                  <td colSpan={COLUMNS.length} className="relatorios__group-cell">
+                  <td colSpan={COLUMNS.length + 1} className="relatorios__group-cell">
                     <span className="relatorios__group-date">{formatGroupDate(group.dueDate)}</span>
                     <span className="relatorios__group-totals">
                       {group.income > 0 && (
@@ -270,30 +309,56 @@ export default function Relatorios() {
                 </tr>,
                 ...group.items.map((t) => {
                   const { primary, secondary } = parseDescription(t.name);
+                  const isEditing = editingId === t.id;
                   return (
                     <tr key={t.id}>
                       <td className="relatorios__date-cell" aria-hidden="true"></td>
                       <td>
-                        <div className="relatorios__description">
-                          <IconAvatar type={t.type === "Income" ? "income" : "expense"} />
-                          <div className="relatorios__description-text">
-                            <span className="relatorios__description-primary">
-                              {primary}
-                              {t.isTransfer && (
-                                <span
-                                  className="relatorios__transfer-badge"
-                                  title="Transferência entre suas próprias contas: não entra nos totais de receita/despesa."
-                                >
-                                  Transferência
-                                </span>
-                              )}
-                            </span>
-                            {secondary && <span className="relatorios__description-secondary">{secondary}</span>}
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            className="relatorios__edit-input"
+                            value={editForm.name}
+                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="relatorios__description">
+                            <IconAvatar type={t.type === "Income" ? "income" : "expense"} />
+                            <div className="relatorios__description-text">
+                              <span className="relatorios__description-primary">
+                                {primary}
+                                {t.isTransfer && (
+                                  <span
+                                    className="relatorios__transfer-badge"
+                                    title="Transferência entre suas próprias contas: não entra nos totais de receita/despesa."
+                                  >
+                                    Transferência
+                                  </span>
+                                )}
+                              </span>
+                              {secondary && <span className="relatorios__description-secondary">{secondary}</span>}
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </td>
                       <td className="relatorios__truncate-cell" title={t.categoryName || "Sem categoria"}>
-                        {t.categoryName || "Sem categoria"}
+                        {isEditing ? (
+                          <select
+                            className="relatorios__edit-select"
+                            value={editForm.categoryId}
+                            onChange={(e) => setEditForm({ ...editForm, categoryId: e.target.value })}
+                          >
+                            <option value="">Sem categoria</option>
+                            {categories.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          t.categoryName || "Sem categoria"
+                        )}
                       </td>
                       <td className="relatorios__truncate-cell" title={t.bankAccountName || "-"}>
                         {t.bankAccountName || "-"}
@@ -309,13 +374,29 @@ export default function Relatorios() {
                       >
                         {formatCurrency(t.amount)}
                       </td>
+                      <td className="relatorios__actions-cell">
+                        {isEditing ? (
+                          <>
+                            <button type="button" onClick={() => saveEdit(t.id)} aria-label="Salvar" title="Salvar">
+                              ✓
+                            </button>
+                            <button type="button" onClick={cancelEdit} aria-label="Cancelar" title="Cancelar">
+                              ×
+                            </button>
+                          </>
+                        ) : (
+                          <button type="button" onClick={() => startEdit(t)} aria-label="Editar" title="Editar nome/categoria">
+                            ✎
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 }),
               ])}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={COLUMNS.length} className="relatorios__empty">
+                  <td colSpan={COLUMNS.length + 1} className="relatorios__empty">
                     Nenhuma transação encontrada.
                   </td>
                 </tr>
@@ -323,7 +404,7 @@ export default function Relatorios() {
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={COLUMNS.length}>Totais ({totalCount} lançamentos)</td>
+                <td colSpan={COLUMNS.length + 1}>Totais ({totalCount} lançamentos)</td>
               </tr>
             </tfoot>
           </table>

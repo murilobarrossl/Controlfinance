@@ -254,7 +254,8 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
                 new Category { UserId = UserId, Name = "Transporte",  Color = "#4ECDC4" },
                 new Category { UserId = UserId, Name = "Salário",     Color = "#45B7D1" },
                 new Category { UserId = UserId, Name = "Lazer",       Color = "#96CEB4" },
-                new Category { UserId = UserId, Name = "Saúde",       Color = "#FFEAA7" }
+                new Category { UserId = UserId, Name = "Saúde",       Color = "#FFEAA7" },
+                new Category { UserId = UserId, Name = "Outros",      Color = "#B39DDB" }
             );
             await db.SaveChangesAsync(ct);
         }
@@ -425,10 +426,21 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         "#ED4A31", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#B39DDB", "#F4A261"
     ];
 
+    // Categoria de fallback pra quando a própria Polp não manda nenhuma categoria pra uma
+    // transação. Antes ficava CategoryId=null e a tela mostrava o texto "Sem categoria" — só que
+    // isso não é uma categoria de verdade, então não dava pra editar/reatribuir. "Outros" é uma
+    // Category normal (mesmo fluxo de criação/cor das demais), então o usuário pode renomeá-la ou
+    // mover a transação pra outra categoria como qualquer outra.
+    private const string UncategorizedFallbackName = "Outros";
+
     private async Task<Guid?> ResolveCategoryIdAsync(
         Dictionary<string, Category> categoriesByName, string? categoryName, string? polpColor, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(categoryName)) return null;
+        if (string.IsNullOrWhiteSpace(categoryName))
+        {
+            categoryName = UncategorizedFallbackName;
+            polpColor = null; // cor da Polp não se aplica a uma categoria que ela não mandou
+        }
 
         if (categoriesByName.TryGetValue(categoryName, out var existing))
         {

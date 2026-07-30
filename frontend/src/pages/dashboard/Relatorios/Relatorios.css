@@ -178,6 +178,42 @@
   font-weight: 500;
 }
 
+.relatorios__edit-input,
+.relatorios__edit-select {
+  width: 100%;
+  min-width: 120px;
+  background-color: var(--color-border-strong);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.5rem;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.relatorios__actions-cell {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.relatorios__actions-cell button {
+  border: 1px solid var(--color-border-strong);
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  margin-left: 0.3rem;
+}
+
+.relatorios__actions-cell button:hover {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
 /* A data só aparece uma vez por dia, na linha de grupo (relatorios__group-row) — a coluna
    continua existindo (o cabeçalho "Data" segue clicável pra ordenar), só a célula fica vazia. */
 .relatorios__date-cell {

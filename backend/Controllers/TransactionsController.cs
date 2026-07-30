@@ -295,6 +295,31 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         return Ok(TransactionDto.FromEntity(transaction));
     }
 
+    // Endpoint dedicado só pra corrigir nome/categoria (ex.: categorização errada vinda da Polp) —
+    // ver comentário no SetTransactionDetailsDto sobre por que não dá pra reaproveitar o Update genérico.
+    [HttpPut("{id}/details")]
+    public async Task<IActionResult> SetDetails(Guid id, [FromBody] SetTransactionDetailsDto dto)
+    {
+        var transaction = await db.Transactions
+            .Include(t => t.Category)
+            .Include(t => t.BankAccount)
+            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId);
+        if (transaction is null) return NotFound();
+
+        if (dto.CategoryId.HasValue && !await db.Categories.AnyAsync(c => c.Id == dto.CategoryId && c.UserId == UserId))
+            return BadRequest(new { message = "Categoria inválida." });
+
+        transaction.Name = dto.Name;
+        transaction.CategoryId = dto.CategoryId;
+
+        await db.SaveChangesAsync();
+
+        // Recarrega a categoria pro DTO de resposta refletir a mudança (o Include acima ainda
+        // aponta pra categoria antiga depois de só trocar o CategoryId na entidade).
+        await db.Entry(transaction).Reference(t => t.Category).LoadAsync();
+        return Ok(TransactionDto.FromEntity(transaction));
+    }
+
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {
