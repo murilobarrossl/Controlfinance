@@ -37,39 +37,6 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         }
     }
 
-    // TEMPORÁRIO — diagnóstico do bug de fatura de cartão inflada (abril mostrando R$6 mil contra
-    // R$699,86 reais). Devolve exatamente o que a Polp manda pra cada conta do usuário logado, sem
-    // nenhum processamento nosso, pra confirmar se o valor total de compra parcelada e o valor de
-    // "Pagamento recebido" já vêm com o mesmo dinheiro contado duas vezes do lado da Polp. Remover
-    // depois de confirmar a causa.
-    [HttpGet("debug/raw-transactions")]
-    public async Task<IActionResult> DebugRawTransactions(CancellationToken ct)
-    {
-        var accounts = await db.BankAccounts
-            .Where(b => b.UserId == UserId && b.PolpAccountId != null)
-            .ToListAsync(ct);
-
-        if (accounts.Count == 0)
-            return Ok(new { message = "Nenhuma conta com PolpAccountId encontrada pra esse usuário.", userId = UserId });
-
-        var result = new List<object>();
-        foreach (var account in accounts)
-        {
-            if (account.PolpAccountId is not int polpAccountId) continue;
-            try
-            {
-                var remoteTransactions = await polp.GetTransactionsAsync(polpAccountId, ct);
-                result.Add(new { account.Id, account.Name, account.PolpAccountId, Transactions = remoteTransactions });
-            }
-            catch (Exception ex)
-            {
-                result.Add(new { account.Id, account.Name, account.PolpAccountId, Error = ex.ToString() });
-            }
-        }
-
-        return Ok(result);
-    }
-
     [HttpGet("connectors")]
     public async Task<IActionResult> GetConnectors(CancellationToken ct)
     {
@@ -372,7 +339,17 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
             foreach (var rt in remoteTransactions)
             {
                 var polpTransactionId = rt.Id.ToString();
-                var type = rt.Amount >= 0 ? TransactionType.Income : TransactionType.Expense;
+                // A Polp já manda a direção explícita ("DEBIT"/"CREDIT") — usa ela em vez de
+                // inferir pelo sinal do valor. Pra conta corrente as duas coisas coincidiam, mas
+                // em cartão de crédito o sinal vinha invertido do que a gente assumia (compra
+                // normal virando "Receita", pagamento de fatura virando "Despesa"). Sinal só entra
+                // como fallback se a Polp mandar um valor de "type" que não seja nenhum dos dois.
+                var type = rt.Type.ToUpperInvariant() switch
+                {
+                    "CREDIT" => TransactionType.Income,
+                    "DEBIT" => TransactionType.Expense,
+                    _ => rt.Amount >= 0 ? TransactionType.Income : TransactionType.Expense,
+                };
                 var status = rt.Status == "PENDING" ? TransactionStatus.Pending : TransactionStatus.Paid;
                 var amount = Math.Abs(rt.Amount);
                 var dueDate = ParseDateAsUtc(rt.Date);
