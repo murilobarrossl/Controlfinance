@@ -1,6 +1,7 @@
 using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
 using ControlFinance.API.Models;
+using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -25,7 +26,9 @@ public class InstallmentsController(AppDbContext db) : ApiControllerBase
             .OrderBy(i => i.NextDueDate)
             .ToListAsync();
 
-        return Ok(installments.Select(InstallmentDto.FromEntity));
+        var active = await InstallmentProgress.ReconcileAsync(db, installments);
+
+        return Ok(active.OrderBy(i => i.NextDueDate).Select(InstallmentDto.FromEntity));
     }
 
     [HttpPost]

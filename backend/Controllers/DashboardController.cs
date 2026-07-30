@@ -14,7 +14,7 @@ namespace ControlFinance.API.Controllers;
 public class DashboardController(AppDbContext db) : ApiControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetSummary([FromQuery] Guid? bankAccountId)
+    public async Task<IActionResult> GetSummary([FromQuery] Guid? bankAccountId, CancellationToken ct)
     {
         var account = bankAccountId.HasValue
             ? await db.BankAccounts.FirstOrDefaultAsync(b => b.Id == bankAccountId && b.UserId == UserId && b.IsActive)
@@ -99,9 +99,13 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
         CreditCardDashboardDto? cardDto = null;
         if (card is not null)
         {
+            // Reconcilia antes de ler CreditLimit/UsedLimit: parcelamento já quitado (todas as
+            // parcelas restantes já venceram) libera limite aqui, senão "Fatura atual"/"Limite
+            // usado" ficavam inflados pra sempre por um parcelamento que devia ter sumido sozinho.
+            var activeInstallments = await InstallmentProgress.ReconcileAsync(db, card.Installments.ToList(), ct);
             var cardInfo = CreditCardDto.FromEntity(card);
 
-            var currentInvoice = card.Installments.Sum(i => i.InstallmentAmount);
+            var currentInvoice = activeInstallments.Sum(i => i.InstallmentAmount);
 
             // próximo vencimento da fatura: clampa pro último dia válido do mês (ex.: DueDay=31
             // em fevereiro derrubaria o dashboard inteiro com ArgumentOutOfRangeException).
@@ -110,7 +114,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             var dueDate = new DateTime(today.Year, today.Month, safeDueDay, 0, 0, 0, DateTimeKind.Utc);
             if (dueDate < today) dueDate = dueDate.AddMonths(1);
 
-            var installments = card.Installments
+            var installments = activeInstallments
                 .OrderBy(i => i.NextDueDate)
                 .Select(InstallmentDto.FromEntity)
                 .ToList();

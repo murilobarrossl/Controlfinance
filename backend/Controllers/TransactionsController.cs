@@ -23,8 +23,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             // nas somas de receitas/despesas mesmo depois de "desconectada".
             .Where(t => t.BankAccount == null || t.BankAccount.IsActive);
 
-        if (!string.IsNullOrEmpty(status) && Enum.TryParse<TransactionStatus>(status, true, out var s))
-            query = query.Where(t => t.Status == s);
+        query = ApplyStatusFilter(query, status);
 
         if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, true, out var tp))
             query = query.Where(t => t.Type == tp);
@@ -39,10 +38,36 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
         result = result
-            .Select(t => t with { IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName) })
+            .Select(t => t with
+            {
+                IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName),
+                Status = t.Status == nameof(TransactionStatus.Pending) && t.DueDate.Date < DateTime.UtcNow.Date
+                    ? nameof(TransactionStatus.Overdue)
+                    : t.Status,
+            })
             .ToList();
 
         return Ok(result);
+    }
+
+    // Pending "vencido" é calculado na leitura (TransactionDto.EffectiveStatus), não gravado no
+    // banco — então o filtro por status precisa enxergar a mesma coisa, senão status=Overdue não
+    // acha nada (nenhuma linha guarda literalmente Overdue a não ser quando o usuário seta à mão)
+    // e status=Pending mostra até pendências que a tela já rotula como Atrasado.
+    private static IQueryable<Transaction> ApplyStatusFilter(IQueryable<Transaction> query, string? status)
+    {
+        if (string.IsNullOrEmpty(status) || !Enum.TryParse<TransactionStatus>(status, true, out var s))
+            return query;
+
+        // Por dia, não pelo instante exato: uma conta que vence hoje ainda é Pending, não Overdue.
+        var today = DateTime.UtcNow.Date;
+        return s switch
+        {
+            TransactionStatus.Overdue => query.Where(t =>
+                t.Status == TransactionStatus.Overdue || (t.Status == TransactionStatus.Pending && t.DueDate < today)),
+            TransactionStatus.Pending => query.Where(t => t.Status == TransactionStatus.Pending && t.DueDate >= today),
+            _ => query.Where(t => t.Status == s),
+        };
     }
 
     // Paginado, filtrado e ordenado no backend, ao contrário do GetAll acima. Necessário porque
@@ -68,8 +93,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             .Where(t => t.UserId == UserId)
             .Where(t => t.BankAccount == null || t.BankAccount.IsActive);
 
-        if (!string.IsNullOrEmpty(status) && Enum.TryParse<TransactionStatus>(status, true, out var s))
-            query = query.Where(t => t.Status == s);
+        query = ApplyStatusFilter(query, status);
 
         if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, true, out var tp))
             query = query.Where(t => t.Type == tp);
@@ -106,7 +130,13 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         {
             var all = await ProjectToDto(query.OrderByDescending(t => t.DueDate).Take(MaxRows)).ToListAsync();
             all = all
-                .Select(t => t with { IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName) })
+                .Select(t => t with
+                {
+                    IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName),
+                    Status = t.Status == nameof(TransactionStatus.Pending) && t.DueDate.Date < DateTime.UtcNow.Date
+                        ? nameof(TransactionStatus.Overdue)
+                        : t.Status,
+                })
                 .ToList();
             var sorted = desc ? all.OrderByDescending(t => t.Amount) : all.OrderBy(t => t.Amount);
             items = sorted.Skip((page - 1) * pageSize).Take(pageSize).ToList();
@@ -119,7 +149,13 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             var ordered = ApplySort(query, sortBy, desc);
             items = await ProjectToDto(ordered.Skip((page - 1) * pageSize).Take(pageSize)).ToListAsync();
             items = items
-                .Select(t => t with { IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName) })
+                .Select(t => t with
+                {
+                    IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName),
+                    Status = t.Status == nameof(TransactionStatus.Pending) && t.DueDate.Date < DateTime.UtcNow.Date
+                        ? nameof(TransactionStatus.Overdue)
+                        : t.Status,
+                })
                 .ToList();
 
             // Totais do filtro inteiro, não só da página atual: mesma limitação do Amount

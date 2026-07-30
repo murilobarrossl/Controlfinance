@@ -65,13 +65,24 @@ public record TransactionDto(
     // já busca o nome do usuário uma vez; nula aqui deixa IsTransfer em false (comportamento atual).
     public static TransactionDto FromEntity(Transaction t, string? ownerName = null) => new(
         t.Id, t.Name, t.Description,
-        t.Type.ToString(), t.Status.ToString(),
+        t.Type.ToString(), EffectiveStatus(t.Status, t.DueDate),
         t.Amount, t.DueDate, t.PaidAt,
         t.Category?.Name,
         t.BankAccount?.Name,
         t.IsFixed,
         TransferDetection.IsSelfTransfer(t.Name, t.Category?.Name, ownerName)
     );
+
+    // Não existe job de fundo que varre pendências vencidas e grava Overdue no banco — calcula na
+    // leitura em vez disso, senão uma conta "Pending" cuja data já passou ficava mostrando
+    // "Pendente" pra sempre em vez de "Atrasado". Só se aplica a Pending: Paid/Overdue (setado à
+    // mão pelo usuário) continuam como estão.
+    // Compara por dia (não pelo instante exato): uma conta que vence hoje não pode virar "Atrasado"
+    // só porque já passou da meia-noite UTC — continua Pending até o dia do vencimento acabar.
+    public static string EffectiveStatus(TransactionStatus status, DateTime dueDate) =>
+        status == TransactionStatus.Pending && dueDate.Date < DateTime.UtcNow.Date
+            ? nameof(TransactionStatus.Overdue)
+            : status.ToString();
 }
 
 // ── CREDIT CARD ───────────────────────────────────────
