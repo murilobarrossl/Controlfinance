@@ -14,7 +14,7 @@ namespace ControlFinance.API.Controllers;
 public class TransactionsController(AppDbContext db) : ApiControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] string? status, [FromQuery] string? type)
+    public async Task<IActionResult> GetAll([FromQuery] string? status, [FromQuery] string? type, [FromQuery] Guid? bankAccountId)
     {
         var query = db.Transactions
             .Where(t => t.UserId == UserId)
@@ -22,6 +22,9 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             // com a Polp, ou removida manualmente em BankAccountsController) continuavam entrando
             // nas somas de receitas/despesas mesmo depois de "desconectada".
             .Where(t => t.BankAccount == null || t.BankAccount.IsActive);
+
+        if (bankAccountId.HasValue)
+            query = query.Where(t => t.BankAccountId == bankAccountId);
 
         query = ApplyStatusFilter(query, status);
 

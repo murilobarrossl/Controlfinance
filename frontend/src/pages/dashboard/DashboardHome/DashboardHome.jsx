@@ -81,12 +81,19 @@ export default function DashboardHome() {
     // conta anterior por cima da conta selecionada agora.
     let cancelled = false;
 
-    Promise.all([getDashboardSummary(selectedAccountId), getTransactions()])
-      .then(([summaryData, transactionsData]) => {
-        if (!cancelled) {
-          setSummary(summaryData);
-          setTransactions(transactionsData);
-        }
+    // Busca as transações só depois do resumo responder: o gráfico de tendência precisa saber
+    // qual conta ficou ativa (selectedAccountId pode vir nulo, aí o backend escolhe a conta
+    // padrão) pra filtrar pela mesma conta dos cards acima — antes buscava transações de todas
+    // as contas juntas, e a tendência não batia com "Receitas do mês"/"Despesas do mês".
+    getDashboardSummary(selectedAccountId)
+      .then((summaryData) => {
+        if (cancelled) return;
+        setSummary(summaryData);
+        const accountId = summaryData?.activeAccount?.id;
+        return accountId ? getTransactions({ bankAccountId: accountId }) : [];
+      })
+      .then((transactionsData) => {
+        if (!cancelled) setTransactions(transactionsData ?? []);
       })
       .catch((err) => {
         if (!cancelled) setError(err.message || "Não foi possível carregar o dashboard.");
@@ -100,8 +107,7 @@ export default function DashboardHome() {
     };
   }, [selectedAccountId, refreshKey]);
 
-  // Tendência mensal (últimos 6 meses): agrega todas as contas conectadas, mesmo padrão já
-  // usado em Categorias/Receitas x despesas, não só a conta selecionada no seletor acima.
+  // Tendência mensal (últimos 6 meses) da mesma conta ativa que os cards acima.
   const monthlyTrend = useMemo(
     () => buildMonthlyTrend(transactions, getMonthsWindow(TREND_MONTHS)),
     [transactions]

@@ -7,10 +7,11 @@ import { apiFetch } from "./client.js";
 const CACHE_TTL_MS = 15_000;
 const cache = new Map(); // query string -> { promise, expiresAt }
 
-const buildQuery = ({ status, type } = {}) => {
+const buildQuery = ({ status, type, bankAccountId } = {}) => {
   const params = new URLSearchParams();
   if (status) params.set("status", status);
   if (type) params.set("type", type);
+  if (bankAccountId) params.set("bankAccountId", bankAccountId);
   return params.toString();
 };
 
