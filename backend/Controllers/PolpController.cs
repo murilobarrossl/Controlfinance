@@ -49,12 +49,22 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
             .Where(b => b.UserId == UserId && b.PolpAccountId != null)
             .ToListAsync(ct);
 
+        if (accounts.Count == 0)
+            return Ok(new { message = "Nenhuma conta com PolpAccountId encontrada pra esse usuário.", userId = UserId });
+
         var result = new List<object>();
         foreach (var account in accounts)
         {
             if (account.PolpAccountId is not int polpAccountId) continue;
-            var remoteTransactions = await polp.GetTransactionsAsync(polpAccountId, ct);
-            result.Add(new { account.Id, account.Name, account.PolpAccountId, Transactions = remoteTransactions });
+            try
+            {
+                var remoteTransactions = await polp.GetTransactionsAsync(polpAccountId, ct);
+                result.Add(new { account.Id, account.Name, account.PolpAccountId, Transactions = remoteTransactions });
+            }
+            catch (Exception ex)
+            {
+                result.Add(new { account.Id, account.Name, account.PolpAccountId, Error = ex.ToString() });
+            }
         }
 
         return Ok(result);
