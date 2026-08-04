@@ -152,6 +152,39 @@
   margin: 0.3rem 0.2rem;
 }
 
+.account-switcher__sync-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.1rem 0.6rem 0.35rem;
+}
+
+.account-switcher__sync-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-accent);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.account-switcher__sync-btn:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.account-switcher__sync-btn:disabled {
+  color: var(--color-text-tertiary);
+  cursor: default;
+}
+
+.account-switcher__sync-error {
+  color: var(--color-accent);
+  font-size: 0.75rem;
+}
+
 @media (max-width: 480px) {
   .account-switcher__menu {
     min-width: 200px;
