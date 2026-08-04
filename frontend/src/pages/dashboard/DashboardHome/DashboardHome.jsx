@@ -189,6 +189,7 @@ export default function DashboardHome() {
           connectors={connectors}
           onSelect={handleSelectAccount}
           onDisconnect={handleDisconnectAccount}
+          onSynced={() => setRefreshKey((key) => key + 1)}
         />
       </div>
 

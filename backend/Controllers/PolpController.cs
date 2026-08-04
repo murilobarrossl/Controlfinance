@@ -71,6 +71,19 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
     // antiga abandonada fica órfã no banco até a limpeza — fora do escopo deste guard.
     private static readonly TimeSpan StaleIntegrationThreshold = TimeSpan.FromHours(1);
 
+    // Throttle do "sincronizar agora" (manual e automático no mount do dashboard): já tivemos um
+    // bug de polling sem limite martelando uma API externa, então tanto o botão manual quanto o
+    // sync-all automático respeitam essa janela por integração, não só a UI.
+    private static readonly TimeSpan SyncThrottleWindow = TimeSpan.FromMinutes(5);
+
+    private static bool IsSyncThrottled(PolpIntegration local) =>
+        local.LastSyncedAt is { } last && DateTime.UtcNow - last < SyncThrottleWindow;
+
+    private static int SyncThrottleRemainingSeconds(PolpIntegration local) =>
+        local.LastSyncedAt is { } last
+            ? Math.Max(0, (int)Math.Ceiling((SyncThrottleWindow - (DateTime.UtcNow - last)).TotalSeconds))
+            : 0;
+
     // Impede o clique duplo (ou um retry depois de um timeout) de criar uma segunda
     // PolpIntegration local pro mesmo banco — e, pior, uma segunda integração do lado da Polp
     // também, que depois recusa com 422 ITEM_IS_ALREADY_UPDATING.
@@ -149,7 +162,32 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
             .Select(b => new { b.Id, b.Name, b.Balance, b.BankCode, b.PolpIntegrationId })
             .ToListAsync(ct);
 
-        return Ok(accounts);
+        // BankAccount.PolpIntegrationId guarda o id remoto (int) da Polp, mas o botão de
+        // "sincronizar agora" precisa do Guid local (PolpIntegration.Id) pra chamar o endpoint de
+        // sync — busca esse mapeamento de uma vez em vez de uma query por conta.
+        var localByRemoteId = await db.PolpIntegrations
+            .Where(p => p.UserId == UserId)
+            .ToDictionaryAsync(p => p.PolpIntegrationId, p => new { p.Id, p.LastSyncedAt }, ct);
+
+        var result = accounts.Select(a =>
+        {
+            var local = a.PolpIntegrationId.HasValue && localByRemoteId.TryGetValue(a.PolpIntegrationId.Value, out var info)
+                ? info
+                : null;
+
+            return new
+            {
+                a.Id,
+                a.Name,
+                a.Balance,
+                a.BankCode,
+                a.PolpIntegrationId,
+                localIntegrationId = local?.Id,
+                lastSyncedAt = local?.LastSyncedAt
+            };
+        });
+
+        return Ok(result);
     }
 
     // {id} aqui é o Guid local salvo em PolpIntegration, não o id da integração na própria Polp.
@@ -205,6 +243,15 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
 
         if (local is null) return NotFound();
 
+        if (IsSyncThrottled(local))
+        {
+            return StatusCode(StatusCodes.Status429TooManyRequests, new
+            {
+                message = "Essa conexão já foi sincronizada há pouco. Tente novamente em instantes.",
+                retryAfterSeconds = SyncThrottleRemainingSeconds(local)
+            });
+        }
+
         int accountsCount;
         try
         {
@@ -232,6 +279,10 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
         var syncedCount = 0;
         foreach (var local in integrations)
         {
+            // Mesmo throttle do sync manual: sem isso, todo reload do dashboard martelava a Polp
+            // de novo pra cada integração, sem limite nenhum.
+            if (IsSyncThrottled(local)) continue;
+
             try
             {
                 await SyncOneWithLockAsync(() => SyncOneAsync(local, ct), local.Id, ct);
@@ -397,6 +448,7 @@ public class PolpController(AppDbContext db, IPolpService polp) : ApiControllerB
 
         local.SyncedLocally = true;
         local.UpdatedAt = DateTime.UtcNow;
+        local.LastSyncedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
         return createdAccounts.Count;

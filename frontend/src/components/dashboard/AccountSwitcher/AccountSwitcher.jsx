@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ChevronDownIcon } from "../../ui/icons/FeatureIcons.jsx";
+import { syncIntegration } from "../../../api/polp.js";
 import "./AccountSwitcher.css";
+
+// Some tempo suficiente pro usuário ler o resultado ("Sincronizado!" ou o erro) antes do botão
+// voltar sozinho pro estado normal, sem precisar de um clique extra pra limpar o feedback.
+const SYNC_FEEDBACK_DURATION_MS = 4000;
 
 // Mesma cor usada na tarja ao lado de cada banco na tela de conectar-banco, nunca
 // escolhida à mão aqui, só repassada do conector correspondente (via bankCode).
@@ -28,8 +33,9 @@ function groupAccounts(accounts, connectorsById) {
   }));
 }
 
-export default function AccountSwitcher({ accounts, activeAccountId, connectors, onSelect, onDisconnect }) {
+export default function AccountSwitcher({ accounts, activeAccountId, connectors, onSelect, onDisconnect, onSynced }) {
   const [open, setOpen] = useState(false);
+  const [syncState, setSyncState] = useState({}); // localIntegrationId -> { status: "loading" | "success" | "error", message? }
   const rootRef = useRef(null);
 
   useEffect(() => {
@@ -39,6 +45,24 @@ export default function AccountSwitcher({ accounts, activeAccountId, connectors,
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  async function handleSync(localIntegrationId) {
+    setSyncState((prev) => ({ ...prev, [localIntegrationId]: { status: "loading" } }));
+    try {
+      await syncIntegration(localIntegrationId);
+      setSyncState((prev) => ({ ...prev, [localIntegrationId]: { status: "success" } }));
+      onSynced?.();
+    } catch (err) {
+      setSyncState((prev) => ({ ...prev, [localIntegrationId]: { status: "error", message: err.message } }));
+    } finally {
+      setTimeout(() => {
+        setSyncState((prev) => {
+          const { [localIntegrationId]: _removed, ...rest } = prev;
+          return rest;
+        });
+      }, SYNC_FEEDBACK_DURATION_MS);
+    }
+  }
 
   if (accounts.length === 0) return null;
 
@@ -111,6 +135,28 @@ export default function AccountSwitcher({ accounts, activeAccountId, connectors,
                     <span className="account-switcher__name">{account.name}</span>
                   </button>
                 )
+              )}
+
+              {group.accounts[0].localIntegrationId && (
+                <div className="account-switcher__sync-row">
+                  <button
+                    type="button"
+                    className="account-switcher__sync-btn"
+                    disabled={syncState[group.accounts[0].localIntegrationId]?.status === "loading"}
+                    onClick={() => handleSync(group.accounts[0].localIntegrationId)}
+                  >
+                    {syncState[group.accounts[0].localIntegrationId]?.status === "loading"
+                      ? "Sincronizando..."
+                      : syncState[group.accounts[0].localIntegrationId]?.status === "success"
+                      ? "Sincronizado!"
+                      : "Sincronizar agora"}
+                  </button>
+                  {syncState[group.accounts[0].localIntegrationId]?.status === "error" && (
+                    <span className="account-switcher__sync-error">
+                      {syncState[group.accounts[0].localIntegrationId].message}
+                    </span>
+                  )}
+                </div>
               )}
 
               <div className="account-switcher__divider" />
