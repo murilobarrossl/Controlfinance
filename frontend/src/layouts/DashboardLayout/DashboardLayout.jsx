@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { logout as logoutRequest } from "../../api/auth.js";
 import ErrorBoundary from "../../components/ErrorBoundary/ErrorBoundary.jsx";

@@ -44,6 +44,34 @@
   font-size: 0.9rem;
 }
 
+.breakdown-rows__installment-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  vertical-align: middle;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-pill);
+  background-color: color-mix(in srgb, var(--color-text-tertiary) 16%, transparent);
+}
+
+.breakdown-rows__installment-label {
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.breakdown-rows__chevron {
+  display: inline-flex;
+  color: var(--color-text-tertiary);
+  transition: transform 0.15s ease;
+}
+
+.breakdown-rows__chevron--open {
+  transform: rotate(180deg);
+}
+
 .breakdown-rows__value {
   color: var(--color-text-primary);
   font-weight: 500;

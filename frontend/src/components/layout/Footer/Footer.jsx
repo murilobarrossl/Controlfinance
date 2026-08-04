@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import logo from "../../../assets/images/control-finance-transparente-branco.svg";
 import { ShieldIcon } from "../../ui/icons/FeatureIcons.jsx";
 import "./Footer.css";

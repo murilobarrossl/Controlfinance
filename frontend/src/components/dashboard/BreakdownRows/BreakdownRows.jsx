@@ -1,3 +1,4 @@
+import { ChevronDownIcon } from "../../ui/icons/FeatureIcons.jsx";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import "./BreakdownRows.css";
 
@@ -30,7 +31,20 @@ export default function BreakdownRows({
               aria-expanded={renderExpanded ? isExpanded : undefined}
             >
               <div className="breakdown-rows__row-top">
-                <span className="breakdown-rows__name">{item.name}</span>
+                <span className="breakdown-rows__name">
+                  {item.name}
+                  {item.isInstallmentGroup && (
+                    <span
+                      className="breakdown-rows__installment-hint"
+                      title="Compra parcelada — clique pra ver as parcelas"
+                    >
+                      <span className="breakdown-rows__installment-label">Clique para expandir parcelas</span>
+                      <span className={`breakdown-rows__chevron${isExpanded ? " breakdown-rows__chevron--open" : ""}`}>
+                        <ChevronDownIcon />
+                      </span>
+                    </span>
+                  )}
+                </span>
                 <span className="breakdown-rows__value">{formatCurrency(item.value)}</span>
               </div>
               <div className="breakdown-rows__bar-track">

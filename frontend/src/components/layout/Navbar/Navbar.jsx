@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import Button from "../../ui/Button/Button.jsx";
 import { MenuIcon, CloseIcon } from "../../ui/icons/FeatureIcons.jsx";
 import logo from "../../../assets/images/control-finance-transparente-branco.svg";

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { getDashboardSummary } from "../../../api/dashboard.js";
 import { getTransactions } from "../../../api/transactions.js";
 import { getCategories } from "../../../api/categories.js";

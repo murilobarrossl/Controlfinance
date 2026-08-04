@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import Button from "../../components/ui/Button/Button.jsx";
 import { ShieldIcon, SyncIcon } from "../../components/ui/icons/FeatureIcons.jsx";
 import { EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";

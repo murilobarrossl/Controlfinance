@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import Navbar from "../../components/layout/Navbar/Navbar.jsx";
 import SectionHeading from "../../components/ui/SectionHeading/SectionHeading.jsx";
 import "./LegalPage.css";

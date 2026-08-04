@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { getPendingIntegrationId, watchPolpConnection } from "../services/polpConnection.js";
 
 export default function usePolpConnectionWatcher() {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { getCategories } from "../../../api/categories.js";
 import { getTransactions } from "../../../api/transactions.js";
 import Card from "../../../components/ui/Card/Card.jsx";
@@ -56,13 +56,31 @@ function topExpenseCategoryName(transactions, year) {
   return topName;
 }
 
+// Parcela de compra no cartão vem da Polp com o número da parcela grudado no fim do nome da
+// compra original (ex.: "MERCADOLIVRE*OTHPR01/12", "MERCADOLIVRE*OTHPR02/12"...). Sem tratar
+// isso, cada parcela virava um "estabelecimento" separado no agrupamento — 12 linhas pra uma
+// compra só. Extrai o nome base (sem o "01/12") pra juntar todas as parcelas na mesma linha.
+const INSTALLMENT_SUFFIX = /(\d{2}\/\d{2})$/;
+
+function establishmentKey(name) {
+  return INSTALLMENT_SUFFIX.test(name) ? name.replace(INSTALLMENT_SUFFIX, "").trim() : name;
+}
+
+// "01/12" etc., ou null se o nome não tiver o sufixo de parcela.
+function installmentLabel(name) {
+  return name.match(INSTALLMENT_SUFFIX)?.[1] ?? null;
+}
+
 function groupByEstablishment(transactions) {
   const totals = new Map();
   for (const t of transactions) {
-    const entry = totals.get(t.name) || { name: t.name, value: 0, count: 0 };
+    const isInstallment = INSTALLMENT_SUFFIX.test(t.name);
+    const key = establishmentKey(t.name);
+    const entry = totals.get(key) || { name: key, value: 0, count: 0, isInstallmentGroup: false };
     entry.value += t.amount;
     entry.count += 1;
-    totals.set(t.name, entry);
+    if (isInstallment) entry.isInstallmentGroup = true;
+    totals.set(key, entry);
   }
   const total = [...totals.values()].reduce((sum, e) => sum + e.value, 0);
   return [...totals.values()]
@@ -254,11 +272,16 @@ export default function Categorias() {
                 renderExpanded={(name) => (
                   <ul className="categorias__visits">
                     {categoryTransactions
-                      .filter((t) => t.name === name)
+                      .filter((t) => establishmentKey(t.name) === name)
                       .sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate))
                       .map((t) => (
                         <li key={t.id} className="categorias__visits-item">
-                          <span className="categorias__visits-date">{new Date(t.dueDate).toLocaleDateString("pt-BR")}</span>
+                          <span className="categorias__visits-date">
+                            {installmentLabel(t.name) && (
+                              <span className="categorias__visits-installment">Parcela {installmentLabel(t.name)} · </span>
+                            )}
+                            {new Date(t.dueDate).toLocaleDateString("pt-BR")}
+                          </span>
                           <span className="categorias__visits-amount">{formatCurrency(t.amount)}</span>
                         </li>
                       ))}

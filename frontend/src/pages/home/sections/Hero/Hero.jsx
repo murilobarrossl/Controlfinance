@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import Button from "../../../../components/ui/Button/Button.jsx";
 import { ShieldIcon } from "../../../../components/ui/icons/FeatureIcons.jsx";
 import heroBg from "../../../../assets/images/hero-bg.webp";

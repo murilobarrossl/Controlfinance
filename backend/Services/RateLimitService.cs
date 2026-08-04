@@ -2,8 +2,14 @@ using System.Collections.Concurrent;
 
 namespace ControlFinance.API.Services;
 
-// Bloqueia tanto por identificador (email/CPF) quanto por IP: só por identificador permite
-// que alguém tente senha em N contas diferentes do mesmo IP sem nunca ser bloqueado.
+// Bloqueia tanto por identificador (email/CPF) quanto por IP, com propósitos diferentes:
+// - Por identificador: trava força bruta vertical (uma conta, muitas senhas).
+// - Por IP: trava um script martelando várias contas de uma máquina/rede só.
+// Nenhum dos dois sozinho (nem os dois juntos) impede um "password spraying" de verdade —
+// atacante rotacionando IPs, uma tentativa por conta — isso exige outra camada (detecção de
+// senha vazada, CAPTCHA, WAF), fora do escopo deste serviço. O limite de IP é propositalmente
+// generoso (bem mais alto que o de identificador) pra não travar rede compartilhada legítima
+// (escritório, NAT, várias contas de teste na mesma rede).
 // ConcurrentDictionary porque esse serviço é singleton e atende requisições concorrentes.
 public class RateLimitService : IDisposable
 {
@@ -11,7 +17,7 @@ public class RateLimitService : IDisposable
     private readonly ConcurrentDictionary<string, (int attempts, DateTime lastAttempt)> _byIp = new();
 
     private const int MaxAttemptsPerIdentifier = 5;
-    private const int MaxAttemptsPerIp = 20;
+    private const int MaxAttemptsPerIp = 100;
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(15);
 
     // Entradas só são removidas em RegisterSuccess ou quando a própria chave é consultada de
@@ -24,6 +30,10 @@ public class RateLimitService : IDisposable
         _cleanupTimer = new Timer(_ => PurgeStale(), null, Window, Window);
     }
 
+    // De propósito, não existe um "RemainingAttempts" exposto pra API: sites grandes não avisam
+    // quantas tentativas restam nem que você foi bloqueado — a resposta de erro é sempre a mesma
+    // esteja você só errando a senha ou já travado, senão dá pra um atacante calibrar o ataque
+    // pela própria mensagem de erro.
     public bool IsBlocked(string identifier, string ipAddress) =>
         IsBlocked(_byIdentifier, identifier, MaxAttemptsPerIdentifier) ||
         IsBlocked(_byIp, ipAddress, MaxAttemptsPerIp);
@@ -38,12 +48,6 @@ public class RateLimitService : IDisposable
     {
         _byIdentifier.TryRemove(identifier, out _);
         _byIp.TryRemove(ipAddress, out _);
-    }
-
-    public int RemainingAttempts(string identifier)
-    {
-        if (!_byIdentifier.TryGetValue(identifier, out var entry)) return MaxAttemptsPerIdentifier;
-        return Math.Max(0, MaxAttemptsPerIdentifier - entry.attempts);
     }
 
     private static bool IsBlocked(ConcurrentDictionary<string, (int attempts, DateTime lastAttempt)> store, string key, int maxAttempts)

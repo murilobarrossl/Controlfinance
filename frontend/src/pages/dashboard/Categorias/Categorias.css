@@ -47,6 +47,11 @@
   color: var(--color-text-tertiary);
 }
 
+.categorias__visits-installment {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
 .categorias__visits-amount {
   color: var(--color-accent);
   font-weight: 500;
