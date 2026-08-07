@@ -12,10 +12,6 @@
   flex-wrap: wrap;
 }
 
-.dashboard-home__header .section-heading {
-  margin-bottom: 0;
-}
-
 .dashboard-home__account-controls {
   display: flex;
   align-items: center;

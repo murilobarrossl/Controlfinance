@@ -2,13 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { getTransactionsReport, setTransactionDetails } from "../../../api/transactions.js";
 import { getCategories } from "../../../api/categories.js";
 import { useAccount } from "../../../context/AccountContext.jsx";
-import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
-import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
-import { TrendUpIcon, TrendDownIcon, WalletIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency } from "../../../utils/financeMath.js";
 import { formatMonthLong } from "../../../utils/monthLabel.js";
 import { getMonthsWindow } from "../../../utils/monthlyTrend.js";
@@ -201,14 +198,14 @@ export default function Relatorios() {
       <div className="relatorios__period-filter">
         <button
           type="button"
-          className={`relatorios__period-btn ${periodMode === "all" ? "relatorios__period-btn--active" : ""}`}
+          className={`relatorios__chip ${periodMode === "all" ? "relatorios__chip--active" : ""}`}
           onClick={() => handlePeriodModeChange("all")}
         >
           Todo o período
         </button>
         <button
           type="button"
-          className={`relatorios__period-btn ${periodMode === "month" ? "relatorios__period-btn--active" : ""}`}
+          className={`relatorios__chip ${periodMode === "month" ? "relatorios__chip--active" : ""}`}
           onClick={() => handlePeriodModeChange("month")}
         >
           Por mês
@@ -229,29 +226,37 @@ export default function Relatorios() {
         )}
       </div>
 
-      <div className="relatorios__summary">
-        <StatCard
-          icon={<TrendUpIcon />}
-          label={periodMode === "month" ? `Entradas em ${formatMonthLong(currentMonth)}` : "Entradas (todo o período)"}
-          value={formatCurrency(totalIncome)}
-          valueTone="income"
-        />
-        <StatCard
-          icon={<TrendDownIcon />}
-          label={periodMode === "month" ? `Saídas em ${formatMonthLong(currentMonth)}` : "Saídas (todo o período)"}
-          value={formatCurrency(totalExpense)}
-          valueTone="expense"
-        />
-        <StatCard
-          icon={<WalletIcon />}
-          label={periodMode === "month" ? `Saldo em ${formatMonthLong(currentMonth)}` : "Saldo (todo o período)"}
-          value={formatCurrency(balance)}
-          valueTone={balance >= 0 ? "income" : "expense"}
-        />
+      <div className="relatorios__totals-bar">
+        <div className="relatorios__totals-item">
+          <span className="relatorios__totals-label">
+            {periodMode === "month" ? `Entradas em ${formatMonthLong(currentMonth)}` : "Entradas (todo o período)"}
+          </span>
+          <span className="relatorios__totals-value relatorios__amount--income">{formatCurrency(totalIncome)}</span>
+        </div>
+        <div className="relatorios__totals-divider" aria-hidden="true" />
+        <div className="relatorios__totals-item">
+          <span className="relatorios__totals-label">
+            {periodMode === "month" ? `Saídas em ${formatMonthLong(currentMonth)}` : "Saídas (todo o período)"}
+          </span>
+          <span className="relatorios__totals-value relatorios__amount--expense">{formatCurrency(totalExpense)}</span>
+        </div>
+        <div className="relatorios__totals-divider" aria-hidden="true" />
+        <div className="relatorios__totals-item">
+          <span className="relatorios__totals-label">
+            {periodMode === "month" ? `Saldo em ${formatMonthLong(currentMonth)}` : "Saldo (todo o período)"}
+          </span>
+          <span
+            className={`relatorios__totals-value ${
+              balance >= 0 ? "relatorios__amount--income" : "relatorios__amount--expense"
+            }`}
+          >
+            {formatCurrency(balance)}
+          </span>
+        </div>
       </div>
 
-      <Card>
-        <div className="relatorios__filters">
+      <div className="relatorios__table-panel">
+        <div className="relatorios__toolbar">
           <input
             type="text"
             placeholder="Buscar por descrição..."
@@ -260,26 +265,38 @@ export default function Relatorios() {
             className="relatorios__search"
           />
 
-          <select
-            value={typeFilter}
-            onChange={(e) => handleTypeFilterChange(e.target.value)}
-            className="relatorios__select"
-          >
-            <option value="all">Todos os tipos</option>
-            <option value="Income">Receitas</option>
-            <option value="Expense">Despesas</option>
-          </select>
+          <div className="relatorios__chip-group" role="group" aria-label="Filtrar por tipo">
+            {[
+              { value: "Income", label: "Receitas" },
+              { value: "Expense", label: "Despesas" },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`relatorios__chip ${typeFilter === opt.value ? "relatorios__chip--active" : ""}`}
+                onClick={() => handleTypeFilterChange(typeFilter === opt.value ? "all" : opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => handleStatusFilterChange(e.target.value)}
-            className="relatorios__select"
-          >
-            <option value="all">Todos os status</option>
-            <option value="Pending">Pendente</option>
-            <option value="Paid">Pago</option>
-            <option value="Overdue">Atrasado</option>
-          </select>
+          <div className="relatorios__chip-group" role="group" aria-label="Filtrar por status">
+            {[
+              { value: "Pending", label: "Pendente" },
+              { value: "Paid", label: "Pago" },
+              { value: "Overdue", label: "Atrasado" },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`relatorios__chip ${statusFilter === opt.value ? "relatorios__chip--active" : ""}`}
+                onClick={() => handleStatusFilterChange(statusFilter === opt.value ? "all" : opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="relatorios__table-wrapper">
@@ -427,7 +444,7 @@ export default function Relatorios() {
             ›
           </button>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

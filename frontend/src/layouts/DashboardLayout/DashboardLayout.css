@@ -70,6 +70,15 @@
   margin: 0 auto;
 }
 
+/* SectionHeading tem margin-bottom pensado pra separar seções na home pública, onde é o único
+   espaçamento entre elas. Toda aba do dashboard já embrulha o conteúdo num container com gap
+   próprio (ex.: .categorias, .relatorios), então essa margem só somava com o gap e dobrava o
+   espaço entre o título e o conteúdo — corrigido aqui uma vez, pra qualquer aba, em vez de
+   remendar cada página individualmente. */
+.dashboard-content .section-heading {
+  margin-bottom: 0;
+}
+
 .dashboard-sidebar-overlay {
   position: fixed;
   inset: 0;

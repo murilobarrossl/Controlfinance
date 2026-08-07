@@ -25,6 +25,11 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
+  /* Sem isso, o grid estica os dois cards pra altura do mais alto (padrão do CSS Grid) — como
+     o gráfico e a lista raramente têm a mesma altura, sobrava espaço vazio dentro do card mais
+     curto, às vezes o suficiente pra empurrar a página um pouco além da tela e criar um scroll
+     vertical que não servia pra nada. Cada card agora fica só do tamanho do seu próprio conteúdo. */
+  align-items: start;
 }
 
 .categorias__donut-block {
@@ -104,35 +109,41 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1.25rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: 1.25rem;
-  color: var(--color-text-primary);
-  font-size: 0.85rem;
 }
 
-.categorias__pagination button {
-  border: 1px solid var(--color-border-strong);
-  background-color: transparent;
-  color: var(--color-text-primary);
-  border-radius: var(--radius-sm);
-  width: 32px;
+/* Mesma pílula do "Impacto de cortar" mais abaixo nesta página (.categorias__impact-rate), de
+   propósito: a paginação usa a linguagem visual da própria tela de Categorias em vez do
+   par de setas "‹ Página X de Y ›" do rodapé de tabela do Relatórios. */
+.categorias__page-btn {
+  min-width: 32px;
   height: 32px;
+  padding: 0 0.6rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  font-family: inherit;
   cursor: pointer;
-  font-size: 1.1rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.categorias__pagination button:hover:not(:disabled) {
+.categorias__page-btn:hover {
   background-color: var(--color-surface-hover);
 }
 
-.categorias__pagination button:focus-visible {
+.categorias__page-btn:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
-.categorias__pagination button:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
+.categorias__page-btn--active {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-hover);
 }
 
 .categorias__visits {

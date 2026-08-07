@@ -11,37 +11,83 @@
   gap: 0.6rem;
 }
 
-.relatorios__period-btn {
+/* Pílula única reaproveitada pelos três filtros da página (período, tipo, status): dá pra tela
+   uma identidade própria de "chips clicáveis", em vez dos <select> que a aba Categorias também
+   usa pro seletor de ordenação. */
+.relatorios__chip {
   border: 1px solid var(--color-border-strong);
   background-color: transparent;
   color: var(--color-text-secondary);
   border-radius: var(--radius-pill);
   padding: 0.45rem 0.9rem;
   font-family: inherit;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.relatorios__period-btn:hover {
+.relatorios__chip:hover {
   background-color: var(--color-surface-hover);
 }
 
-.relatorios__period-btn--active {
-  background-color: var(--color-accent);
+/* Tinta translúcida, não preenchimento sólido: com filtro de período + tipo + status na mesma
+   barra, três pílulas de laranja cheia ao mesmo tempo competiam entre si e gritavam mais que
+   qualquer dado da tabela embaixo. */
+.relatorios__chip--active {
+  background-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
   border-color: var(--color-accent);
   color: var(--color-text-primary);
 }
 
-.relatorios__summary {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
+/* Barra fina de totais no lugar dos StatCards (mesma peça usada no Dashboard): aqui é só
+   número + rótulo lado a lado, sem ícone nem card próprio, pra não repetir a mesma moldura
+   usada em quase toda outra tela do app. */
+.relatorios__totals-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  padding: 0.85rem 1.1rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.relatorios__totals-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.relatorios__totals-label {
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.relatorios__totals-value {
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.relatorios__totals-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--color-border-strong);
 }
 
 @media (max-width: 700px) {
-  .relatorios__summary {
-    grid-template-columns: 1fr;
+  .relatorios__totals-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+
+  .relatorios__totals-divider {
+    display: none;
   }
 }
 
@@ -55,38 +101,54 @@
   font-size: 0.9rem;
 }
 
-.relatorios__filters {
+.relatorios__toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-bottom: 1.25rem;
+  align-items: center;
+  gap: 0.6rem 1.25rem;
+}
+
+.relatorios__chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 
 .relatorios__search {
   flex: 1;
   min-width: 200px;
-  background-color: var(--color-border-strong);
+  background-color: var(--color-bg);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.8rem;
   color: var(--color-text-primary);
   font-family: inherit;
   font-size: 0.85rem;
 }
 
-.relatorios__select {
-  background-color: var(--color-border-strong);
-  border: 1px solid var(--color-border-strong);
+.relatorios__search:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+/* Um único bloco com borda pra busca+filtros+tabela+paginação, em vez de pedaços soltos sem
+   nada em comum entre eles (o que ficava com peso visual inconsistente, mais parecendo
+   fragmentado que intencional). Ainda assim mais enxuto que o `Card` padrão do resto do app
+   (menos padding, cantos menos arredondados), pra continuar lendo como planilha/extrato.
+   Diferença real pra Categorias: aqui é um bloco só cobrindo a tela inteira, lá são dois
+   `Card`s lado a lado. */
+.relatorios__table-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 1.1rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 0.6rem 0.9rem;
-  color: var(--color-text-primary);
-  font-family: inherit;
-  font-size: 0.85rem;
 }
 
 .relatorios__table-wrapper {
   overflow-x: auto;
-  border-radius: var(--radius-md);
 }
 
 .relatorios__table {
@@ -284,7 +346,6 @@
   align-items: center;
   justify-content: center;
   gap: 1.25rem;
-  margin-top: 1.25rem;
   color: var(--color-text-primary);
   font-size: 0.85rem;
 }
@@ -317,7 +378,7 @@
 }
 
 @media (max-width: 640px) {
-  .relatorios__filters {
+  .relatorios__toolbar {
     flex-direction: column;
     align-items: stretch;
   }

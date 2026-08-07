@@ -349,26 +349,21 @@ export default function Categorias() {
               />
 
               {categoryTotalPages > 1 && (
-                <div className="categorias__pagination">
-                  <button
-                    type="button"
-                    onClick={() => setCategoryPage((p) => Math.max(1, p - 1))}
-                    disabled={categoryPageSafe === 1}
-                    aria-label="Página anterior"
-                  >
-                    ‹
-                  </button>
-                  <span>
-                    Página {categoryPageSafe} de {categoryTotalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCategoryPage((p) => Math.min(categoryTotalPages, p + 1))}
-                    disabled={categoryPageSafe >= categoryTotalPages}
-                    aria-label="Próxima página"
-                  >
-                    ›
-                  </button>
+                <div className="categorias__pagination" role="navigation" aria-label="Páginas de categorias">
+                  {Array.from({ length: categoryTotalPages }, (_, i) => i + 1).map((pageNumber) => (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      className={`categorias__page-btn ${
+                        pageNumber === categoryPageSafe ? "categorias__page-btn--active" : ""
+                      }`}
+                      onClick={() => setCategoryPage(pageNumber)}
+                      aria-current={pageNumber === categoryPageSafe ? "page" : undefined}
+                      aria-label={`Página ${pageNumber}`}
+                    >
+                      {pageNumber}
+                    </button>
+                  ))}
                 </div>
               )}
             </>
