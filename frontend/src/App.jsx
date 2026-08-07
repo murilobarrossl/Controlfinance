@@ -12,6 +12,7 @@ const RegisterPage = lazy(() => import("./pages/cadastro/Cadastro.jsx"));
 const ConnectBankPage = lazy(() => import("./pages/conectar-banco/ConectarBanco.jsx"));
 const DashboardLayout = lazy(() => import("./layouts/DashboardLayout/DashboardLayout.jsx"));
 const DashboardHome = lazy(() => import("./pages/dashboard/DashboardHome/DashboardHome.jsx"));
+const Cartoes = lazy(() => import("./pages/dashboard/Cartoes/Cartoes.jsx"));
 const ReceitasDespesas = lazy(() => import("./pages/dashboard/ReceitasDespesas/ReceitasDespesas.jsx"));
 const Relatorios = lazy(() => import("./pages/dashboard/Relatorios/Relatorios.jsx"));
 const Categorias = lazy(() => import("./pages/dashboard/Categorias/Categorias.jsx"));
@@ -56,6 +57,7 @@ export default function App() {
               }
             >
               <Route index element={<DashboardHome />} />
+              <Route path="cartoes" element={<Cartoes />} />
               <Route path="receitas-despesas" element={<ReceitasDespesas />} />
               <Route path="relatorios" element={<Relatorios />} />
               <Route path="categorias" element={<Categorias />} />

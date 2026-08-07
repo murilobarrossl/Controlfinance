@@ -1,0 +1,207 @@
+.credit-card-visual {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Proporção real de um cartão físico (ISO/IEC 7810 ID-1, ~85.6mm x 53.98mm). Cantos bem mais
+   arredondados que --radius-lg (8px) de propósito: aqui precisa ler como "um cartão", não como
+   "mais um painel do app". --shadow-panel é "none" globalmente, então as sombras de profundidade
+   são todas definidas aqui, não reaproveitadas de nenhum token. */
+.credit-card-visual__face {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  aspect-ratio: 1.586 / 1;
+  border-radius: 20px;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, var(--color-border-strong));
+  background:
+    radial-gradient(140% 140% at 100% 0%, color-mix(in srgb, var(--color-accent) 40%, transparent) 0%, transparent 55%),
+    linear-gradient(155deg, var(--color-surface-alt) 0%, var(--color-bg) 55%, #000000 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 36px -14px rgba(0, 0, 0, 0.75),
+    0 6px 16px -6px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  transform: perspective(1000px) rotateX(4deg) rotateY(-6deg);
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.35s ease;
+  text-align: left;
+  font-family: inherit;
+  color: var(--color-text-primary);
+  cursor: default;
+  overflow: hidden;
+}
+
+/* Brilho diagonal fino, tipo verniz de cartão plástico sob luz. */
+.credit-card-visual__face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.08) 45%,
+    rgba(255, 255, 255, 0.02) 55%,
+    transparent 65%
+  );
+  pointer-events: none;
+}
+
+.credit-card-visual__face--interactive {
+  cursor: pointer;
+}
+
+.credit-card-visual__face--interactive:hover,
+.credit-card-visual__face--interactive:focus-visible {
+  transform: perspective(1000px) rotateX(0deg) rotateY(0deg) translateY(-4px) scale(1.015);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 26px 44px -14px rgba(0, 0, 0, 0.8),
+    0 8px 20px -6px color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
+.credit-card-visual__face--interactive:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.credit-card-visual__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+/* Chip decorativo: só um retângulo com gradiente dourado, sem nenhum vínculo com dado real —
+   nenhum número/dígito aparece em lugar nenhum deste componente. */
+.credit-card-visual__chip {
+  width: 38px;
+  height: 28px;
+  border-radius: 6px;
+  background: linear-gradient(155deg, #e8c877 0%, #b8912f 55%, #8a6a1f 100%);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.credit-card-visual__brand {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+
+.credit-card-visual__name {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.credit-card-visual__bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+}
+
+.credit-card-visual__holder {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .credit-card-visual__face {
+    transform: none;
+    transition: none;
+  }
+
+  .credit-card-visual__face--interactive:hover,
+  .credit-card-visual__face--interactive:focus-visible {
+    transform: none;
+  }
+}
+
+.credit-card-visual__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.credit-card-visual__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.credit-card-visual__stat-label {
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+}
+
+.credit-card-visual__stat-value {
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.credit-card-visual__limit {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.credit-card-visual__limit-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.credit-card-visual__limit-labels strong {
+  color: var(--color-text-primary);
+}
+
+.credit-card-visual__progress {
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-border);
+  overflow: hidden;
+}
+
+.credit-card-visual__progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background-color: var(--color-accent);
+}
+
+.credit-card-visual__hint,
+.credit-card-visual__synced {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+}
+
+.credit-card-visual__synced {
+  color: var(--color-income);
+}
+
+.credit-card-visual__hint svg,
+.credit-card-visual__synced svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 520px) {
+  .credit-card-visual__stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}

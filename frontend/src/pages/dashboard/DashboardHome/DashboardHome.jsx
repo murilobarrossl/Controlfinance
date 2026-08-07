@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { getDashboardSummary } from "../../../api/dashboard.js";
 import { getTransactions } from "../../../api/transactions.js";
 import { getCategories } from "../../../api/categories.js";
@@ -12,12 +12,14 @@ import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
 import AreaTrendChart from "../../../components/charts/AreaTrendChart.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
 import AccountSwitcher from "../../../components/dashboard/AccountSwitcher/AccountSwitcher.jsx";
+import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import { groupAccounts } from "../../../utils/accountGrouping.js";
 import { WalletIcon, TrendUpIcon, TrendDownIcon, TargetIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
-import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
+import { formatCurrency, formatPercentage, formatDate } from "../../../utils/financeMath.js";
 import { getMonthsWindow, buildMonthlyTrend, buildPreviousMonthSamePeriod } from "../../../utils/monthlyTrend.js";
 import { computeTrend } from "../../../utils/trend.js";
 import "./DashboardHome.css";
@@ -25,10 +27,6 @@ import "./DashboardHome.css";
 const MAX_DONUT_SLICES = 4;
 const TREND_MONTHS = 6;
 const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
-
-function formatDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString("pt-BR");
-}
 
 // Usa a mesma cor cadastrada na categoria (a que aparece no gráfico de Categorias), em vez de
 // deixar o gráfico sortear uma cor qualquer, pra uma categoria não parecer "outra" de uma tela
@@ -51,6 +49,7 @@ function buildDonutData(categoryExpenses, categories) {
 
 export default function DashboardHome() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { accounts, connectors, selectedAccountId, setSelectedAccountId, dataRefreshKey, bumpDataRefresh, disconnectAccount } =
     useAccount();
   const [categories, setCategories] = useState([]);
@@ -58,6 +57,7 @@ export default function DashboardHome() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [cardConfirmOpen, setCardConfirmOpen] = useState(false);
 
   useEffect(() => {
     getCategories().then(setCategories).catch(() => {});
@@ -168,6 +168,11 @@ export default function DashboardHome() {
   );
   const isMultiAccountGroup = (activeGroup?.accounts.length ?? 0) > 1;
 
+  // A conta selecionada agora é a mesma que o usuário vinculou a um CreditCard cadastrado
+  // (ver "Sobre os dados desta página" em Cartões) — fecha o ciclo apontando de volta pra lá,
+  // já que fatura/limite/parcelas dessa conta só aparecem naquela tela.
+  const isActiveAccountLinkedCard = activeCard?.card?.bankAccountId === activeAccount.id;
+
   return (
     <div className="dashboard-home">
       <div className="dashboard-home__header">
@@ -178,11 +183,18 @@ export default function DashboardHome() {
         />
 
         <div className="dashboard-home__account-controls">
-          {isMultiAccountGroup && (
+          {isActiveAccountLinkedCard ? (
             <span className="dashboard-home__account-hint">
-              A conta corrente e o cartão de crédito aparecem separados no seletor ao lado: escolha
-              um deles pra ver só os dados dele, sem somar os dois.
+              Esta conta está vinculada a um cartão cadastrado: veja fatura, limite e parcelas em{" "}
+              <Link to="/dashboard/cartoes">Cartões</Link>.
             </span>
+          ) : (
+            isMultiAccountGroup && (
+              <span className="dashboard-home__account-hint">
+                A conta corrente e o cartão de crédito aparecem separados no seletor ao lado: escolha
+                um deles pra ver só os dados dele, sem somar os dois.
+              </span>
+            )
           )}
 
           <AccountSwitcher
@@ -284,28 +296,32 @@ export default function DashboardHome() {
         </Card>
 
         {activeCard && (
-          <Card title={`Cartão ${activeCard.card.name}`}>
-            <p className="dashboard-home__card-line">
-              Fatura atual: <strong>{formatCurrency(activeCard.currentInvoice)}</strong>
-            </p>
-            <p className="dashboard-home__card-line">
-              Vencimento: <strong>{formatDate(activeCard.invoiceDueDate)}</strong>
-            </p>
-            <p className="dashboard-home__card-line">
-              Limite disponível: <strong>{formatCurrency(activeCard.card.availableLimit)}</strong> de{" "}
-              {formatCurrency(activeCard.card.creditLimit)}
-            </p>
-            <div className="dashboard-home__progress">
-              <div
-                className="dashboard-home__progress-fill"
-                style={{
-                  width: `${Math.min(100, (activeCard.card.usedLimit / activeCard.card.creditLimit) * 100)}%`,
-                }}
-              />
-            </div>
+          <Card title="Seu cartão">
+            <CreditCardVisual
+              card={activeCard.card}
+              cardholderName={user?.name}
+              currentInvoice={activeCard.currentInvoice}
+              invoiceDueDate={activeCard.invoiceDueDate}
+              activeInstallmentsCount={activeCard.installments?.length ?? 0}
+              linkedAccountName={activeCard.card.bankAccountName}
+              onClick={() => setCardConfirmOpen(true)}
+            />
           </Card>
         )}
       </div>
+
+      <ConfirmDialog
+        open={cardConfirmOpen}
+        title="Ir para a área de Cartões"
+        message="Você vai ser levado pra área de Cartões, onde pode ver fatura, limite, parcelamentos e vencimentos de cada cartão com mais detalhe. Continuar?"
+        confirmLabel="Ir para Cartões"
+        cancelLabel="Cancelar"
+        onConfirm={() => {
+          setCardConfirmOpen(false);
+          navigate("/dashboard/cartoes");
+        }}
+        onClose={() => setCardConfirmOpen(false)}
+      />
     </div>
   );
 }

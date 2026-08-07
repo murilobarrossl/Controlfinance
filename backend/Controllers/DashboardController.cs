@@ -93,35 +93,20 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             totalExpenseForCategories > 0 ? Math.Round(e.Amount / totalExpenseForCategories * 100, 1) : 0
         )).ToList();
 
+        // Sem OrderBy antes o resultado era indefinido quando o usuário tinha mais de um cartão
+        // (Postgres/EF não garantem ordem sem ela); CreatedAt deixa determinístico: o cartão mais
+        // antigo é o que aparece aqui. Ver CreditCardSummaryBuilder pro cálculo de fatura/vencimento
+        // (compartilhado com a listagem de todos os cartões em CreditCardsController.GetSummary).
         var card = await db.CreditCards
             .Include(c => c.Installments)
-            .FirstOrDefaultAsync(c => c.UserId == UserId && c.IsActive);
+            .Include(c => c.BankAccount)
+            .Where(c => c.UserId == UserId && c.IsActive)
+            .OrderBy(c => c.CreatedAt)
+            .FirstOrDefaultAsync();
 
-        CreditCardDashboardDto? cardDto = null;
-        if (card is not null)
-        {
-            // Reconcilia antes de ler CreditLimit/UsedLimit: parcelamento já quitado (todas as
-            // parcelas restantes já venceram) libera limite aqui, senão "Fatura atual"/"Limite
-            // usado" ficavam inflados pra sempre por um parcelamento que devia ter sumido sozinho.
-            var activeInstallments = await InstallmentProgress.ReconcileAsync(db, card.Installments.ToList(), ct);
-            var cardInfo = CreditCardDto.FromEntity(card);
-
-            var currentInvoice = activeInstallments.Sum(i => i.InstallmentAmount);
-
-            // próximo vencimento da fatura: clampa pro último dia válido do mês (ex.: DueDay=31
-            // em fevereiro derrubaria o dashboard inteiro com ArgumentOutOfRangeException).
-            var today = DateTime.UtcNow;
-            var safeDueDay = Math.Min(card.DueDay, DateTime.DaysInMonth(today.Year, today.Month));
-            var dueDate = new DateTime(today.Year, today.Month, safeDueDay, 0, 0, 0, DateTimeKind.Utc);
-            if (dueDate < today) dueDate = dueDate.AddMonths(1);
-
-            var installments = activeInstallments
-                .OrderBy(i => i.NextDueDate)
-                .Select(InstallmentDto.FromEntity)
-                .ToList();
-
-            cardDto = new CreditCardDashboardDto(cardInfo, currentInvoice, dueDate, installments);
-        }
+        CreditCardDashboardDto? cardDto = card is not null
+            ? await CreditCardSummaryBuilder.BuildAsync(db, card, ct)
+            : null;
 
         var summary = new DashboardSummaryDto(
             accountDto,

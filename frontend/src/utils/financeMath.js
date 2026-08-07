@@ -9,6 +9,10 @@ export function formatPercentage(value) {
   return `${(value ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 }
 
+export function formatDate(dateStr) {
+  return new Date(dateStr).toLocaleDateString("pt-BR");
+}
+
 // Tabela Price: parcela fixa para um financiamento/consórcio.
 // financedAmount = valor total - entrada; monthlyRate em decimal (ex: 0.02 = 2% a.m.)
 export function calculateInstallment(financedAmount, monthlyRate, installmentsCount) {

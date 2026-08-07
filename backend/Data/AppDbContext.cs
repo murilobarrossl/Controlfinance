@@ -122,6 +122,16 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
              .WithMany()
              .HasForeignKey(c => c.UserId)
              .OnDelete(DeleteBehavior.Cascade);
+
+            // SetNull (não Cascade): desconectar a conta na Polp não pode apagar o cadastro
+            // manual do cartão (limite/fatura/parcelas), só desfazer o vínculo entre os dois.
+            // Índice único: Postgres trata cada NULL como distinto, então isso só impede duas
+            // CreditCard apontarem pra mesma BankAccount — várias sem vínculo nenhum continuam ok.
+            e.HasOne(c => c.BankAccount)
+             .WithMany()
+             .HasForeignKey(c => c.BankAccountId)
+             .OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(c => c.BankAccountId).IsUnique();
         });
 
         modelBuilder.Entity<Installment>(e =>

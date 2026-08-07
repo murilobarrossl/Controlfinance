@@ -100,7 +100,8 @@ public record CreateCreditCardDto(
     [MaxLength(50)] string? Brand,
     [Range(0, double.MaxValue, ErrorMessage = "Limite não pode ser negativo.")] decimal CreditLimit,
     [Range(1, 31, ErrorMessage = "Dia de fechamento deve ser entre 1 e 31.")] int ClosingDay,
-    [Range(1, 31, ErrorMessage = "Dia de vencimento deve ser entre 1 e 31.")] int DueDay
+    [Range(1, 31, ErrorMessage = "Dia de vencimento deve ser entre 1 e 31.")] int DueDay,
+    Guid? BankAccountId = null
 );
 
 public record CreditCardDto(
@@ -111,14 +112,17 @@ public record CreditCardDto(
     decimal UsedLimit,
     decimal AvailableLimit,
     int ClosingDay,
-    int DueDay
+    int DueDay,
+    Guid? BankAccountId,
+    string? BankAccountName
 )
 {
     public static CreditCardDto FromEntity(CreditCard c) => new(
         c.Id, c.Name, c.Brand,
         c.CreditLimit, c.UsedLimit,
         c.CreditLimit - c.UsedLimit,
-        c.ClosingDay, c.DueDay
+        c.ClosingDay, c.DueDay,
+        c.BankAccountId, c.BankAccount?.Name
     );
 }
 

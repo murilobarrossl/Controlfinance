@@ -14,5 +14,12 @@ public class CreditCard
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    // Vínculo opcional com a conta sincronizada da Polp que corresponde a este cartão (ex.: a 2ª
+    // conta de uma mesma conexão bancária, que o seletor de contas já trata como "o cartão").
+    // Escolhido manualmente pelo usuário no cadastro: não existe campo na Polp que diga "isto é
+    // conta de cartão", então não dá pra inferir isso sozinho.
+    public Guid? BankAccountId { get; set; }
+    public BankAccount? BankAccount { get; set; }
+
     public ICollection<Installment> Installments { get; set; } = [];
 }

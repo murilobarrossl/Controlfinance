@@ -1,0 +1,122 @@
+.cartoes {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.cartoes__hint {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.cartoes__error {
+  color: var(--color-accent);
+  font-size: 0.9rem;
+}
+
+.cartoes__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.cartoes__form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.cartoes__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cartoes__field-label {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.cartoes__form input,
+.cartoes__form select {
+  background-color: var(--color-border-strong);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.85rem;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.cartoes__form input:focus-visible,
+.cartoes__form select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.cartoes__form-actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.cartoes__form-hint {
+  color: var(--color-text-tertiary);
+  font-size: 0.82rem;
+  margin: 1rem 0 0;
+}
+
+.cartoes__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cartoes__list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cartoes__list-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cartoes__list-name {
+  color: var(--color-text-primary);
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cartoes__list-meta {
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+  margin-top: 0.15rem;
+}
+
+.cartoes__list-amount {
+  color: var(--color-accent);
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .cartoes__form {
+    grid-template-columns: 1fr;
+  }
+
+  .cartoes__form-actions {
+    flex-direction: column;
+  }
+}

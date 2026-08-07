@@ -12,6 +12,7 @@ import "./DashboardLayout.css";
 
 const TABS = [
   { label: "Dashboard inteligente", to: "/dashboard", end: true },
+  { label: "Cartões", to: "/dashboard/cartoes" },
   { label: "Receitas e despesas", to: "/dashboard/receitas-despesas" },
   { label: "Relatórios", to: "/dashboard/relatorios" },
   { label: "Categorias", to: "/dashboard/categorias" },
