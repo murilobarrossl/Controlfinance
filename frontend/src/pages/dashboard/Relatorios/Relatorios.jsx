@@ -331,7 +331,7 @@ export default function Relatorios() {
                                 {t.isTransfer && (
                                   <span
                                     className="relatorios__transfer-badge"
-                                    title="Transferência entre suas próprias contas (mesmo titular nos dois lados)."
+                                    title="Transferência entre suas próprias contas (mesmo titular nos dois lados): não entra nos totais de receita/despesa."
                                   >
                                     Transferência para mesma titularidade
                                   </span>

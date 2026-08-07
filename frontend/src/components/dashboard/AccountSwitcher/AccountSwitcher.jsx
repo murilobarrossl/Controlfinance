@@ -4,9 +4,15 @@ import { ChevronDownIcon } from "../../ui/icons/FeatureIcons.jsx";
 import { syncIntegration } from "../../../api/polp.js";
 import "./AccountSwitcher.css";
 
-// Some tempo suficiente pro usuário ler o resultado ("Sincronizado!" ou o erro) antes do botão
-// voltar sozinho pro estado normal, sem precisar de um clique extra pra limpar o feedback.
+// Some tempo suficiente pro usuário ler o resultado ("Sincronização iniciada" ou o erro) antes
+// do botão voltar sozinho pro estado normal, sem precisar de um clique extra pra limpar o feedback.
 const SYNC_FEEDBACK_DURATION_MS = 4000;
+
+// O sync roda em background no servidor (a Polp já levou até 20s por chamada nos logs) — o
+// clique só confirma que foi enfileirado, não que já terminou. Espera um tempo plausível antes
+// de recarregar os dados do dashboard, em vez de recarregar na hora e mostrar o estado antigo
+// como se já fosse o resultado da sincronização.
+const SYNC_REFRESH_DELAY_MS = 8000;
 
 // Mesma cor usada na tarja ao lado de cada banco na tela de conectar-banco, nunca
 // escolhida à mão aqui, só repassada do conector correspondente (via bankCode).
@@ -50,8 +56,8 @@ export default function AccountSwitcher({ accounts, activeAccountId, connectors,
     setSyncState((prev) => ({ ...prev, [localIntegrationId]: { status: "loading" } }));
     try {
       await syncIntegration(localIntegrationId);
-      setSyncState((prev) => ({ ...prev, [localIntegrationId]: { status: "success" } }));
-      onSynced?.();
+      setSyncState((prev) => ({ ...prev, [localIntegrationId]: { status: "queued" } }));
+      setTimeout(() => onSynced?.(), SYNC_REFRESH_DELAY_MS);
     } catch (err) {
       setSyncState((prev) => ({ ...prev, [localIntegrationId]: { status: "error", message: err.message } }));
     } finally {
@@ -146,9 +152,9 @@ export default function AccountSwitcher({ accounts, activeAccountId, connectors,
                     onClick={() => handleSync(group.accounts[0].localIntegrationId)}
                   >
                     {syncState[group.accounts[0].localIntegrationId]?.status === "loading"
-                      ? "Sincronizando..."
-                      : syncState[group.accounts[0].localIntegrationId]?.status === "success"
-                      ? "Sincronizado!"
+                      ? "Iniciando..."
+                      : syncState[group.accounts[0].localIntegrationId]?.status === "queued"
+                      ? "Sincronização iniciada"
                       : "Sincronizar agora"}
                   </button>
                   {syncState[group.accounts[0].localIntegrationId]?.status === "error" && (

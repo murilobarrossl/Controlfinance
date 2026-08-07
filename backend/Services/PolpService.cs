@@ -219,7 +219,16 @@ public class PolpService : IPolpService
         var resp = await _http.GetAsync($"integrations/{integrationId}/accounts", ct);
         await EnsureSuccess(resp, "listar contas");
 
-        var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpAccountDto>>(JsonOptions, ct);
+        // TEMP — captura crua pra descobrir onde a Polp expõe limite/fatura/parcela de cartão de
+        // crédito: PolpAccountDto só declara os campos que já usamos, e a desserialização tipada
+        // descarta silenciosamente qualquer campo extra que a Polp já esteja mandando (não tem
+        // JsonExtensionData). Lê como string em vez de ReadFromJsonAsync direto só pra poder logar
+        // o corpo inteiro antes de desserializar — resultado do envelope é idêntico ao de antes.
+        // REMOVER esse bloco (as 2 linhas de log) depois do diagnóstico.
+        var rawJson = await resp.Content.ReadAsStringAsync(ct);
+        _logger.LogInformation("=== POLP RAW CARD JSON (accounts, integrationId={IntegrationId}) === {RawJson}", integrationId, rawJson);
+
+        var envelope = JsonSerializer.Deserialize<PolpListEnvelope<PolpAccountDto>>(rawJson, JsonOptions);
         return envelope?.Data ?? [];
     }
 
@@ -240,7 +249,15 @@ public class PolpService : IPolpService
             var resp = await _http.GetAsync($"accounts/{accountId}/transactions?page={page}", ct);
             await EnsureSuccess(resp, "listar transações");
 
-            var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpTransactionDto>>(JsonOptions, ct);
+            // TEMP — mesma captura crua da conta, agora pro extrato: parcela (ex.: "3/12") é da
+            // compra, não da conta, então é mais provável que apareça aqui do que no /accounts.
+            // REMOVER junto com o bloco equivalente em GetAccountsAsync.
+            var rawJson = await resp.Content.ReadAsStringAsync(ct);
+            _logger.LogInformation(
+                "=== POLP RAW CARD JSON (transactions, accountId={AccountId}, page={Page}) === {RawJson}",
+                accountId, page, rawJson);
+
+            var envelope = JsonSerializer.Deserialize<PolpListEnvelope<PolpTransactionDto>>(rawJson, JsonOptions);
             if (envelope?.Data is null || envelope.Data.Count == 0) break;
 
             transactions.AddRange(envelope.Data);

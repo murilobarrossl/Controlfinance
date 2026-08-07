@@ -76,7 +76,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
              .HasForeignKey(c => c.UserId)
              .OnDelete(DeleteBehavior.Cascade);
 
-            // Fecha a corrida que ResolveCategoryIdAsync (PolpController) já sabe recuperar de:
+            // Fecha a corrida que ResolveCategoryIdAsync (PolpSyncService) já sabe recuperar de:
             // duas execuções de sync concorrentes não conseguem mais criar duas categorias com o
             // mesmo nome pro mesmo usuário — a segunda leva 23505, e o catch já tratado busca a
             // que a primeira criou. ATENÇÃO AO APLICAR EM PRODUÇÃO: só depois de rodar a limpeza

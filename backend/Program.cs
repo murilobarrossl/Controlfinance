@@ -31,6 +31,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenRevocationService, TokenRevocationService>();
+builder.Services.AddScoped<PolpSyncService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 builder.Services.AddSingleton<RateLimitService>();
 builder.Services.AddHttpClient<EmailService>();

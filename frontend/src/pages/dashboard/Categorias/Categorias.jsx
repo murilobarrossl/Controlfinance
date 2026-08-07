@@ -39,7 +39,7 @@ function cutImpactSentence(categoryName, categoryAmount, cutRate, impact) {
 function topExpenseCategoryName(transactions, year) {
   const totals = new Map();
   for (const t of transactions) {
-    if (t.type !== "Expense") continue;
+    if (t.type !== "Expense" || t.isTransfer) continue;
     if (new Date(t.dueDate).getUTCFullYear() !== year) continue;
     const name = t.categoryName || "Sem categoria";
     totals.set(name, (totals.get(name) || 0) + t.amount);
@@ -137,10 +137,11 @@ export default function Categorias() {
     return transactions.filter((t) => new Date(t.dueDate).getUTCFullYear() === selectedYear);
   }, [transactions, selectedYear]);
 
-  // Só despesas entram aqui: a aba é exclusivamente sobre gastos (a receita já tem seu próprio
-  // lado, autossuficiente, na aba Receitas e despesas).
+  // Só despesas reais entram aqui: a aba é exclusivamente sobre gastos (a receita já tem seu
+  // próprio lado, autossuficiente, na aba Receitas e despesas), e auto-transferências não são
+  // gasto de verdade.
   const expenseTransactions = useMemo(
-    () => scopedTransactions.filter((t) => t.type === "Expense"),
+    () => scopedTransactions.filter((t) => t.type === "Expense" && !t.isTransfer),
     [scopedTransactions]
   );
 
