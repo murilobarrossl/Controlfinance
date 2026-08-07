@@ -16,6 +16,17 @@ import "./Categorias.css";
 
 const CUT_RATE_OPTIONS = [0.1, 0.2, 0.3, 0.5];
 
+// Quantas categorias por página na lista à direita: sem paginar, uma conta com muitas categorias
+// deixava essa lista muito mais alta que o gráfico de rosca ao lado, sobrando espaço vazio embaixo
+// do gráfico (o grid estica os dois cards pra mesma altura, a mais alta dos dois).
+const CATEGORY_PAGE_SIZE = 5;
+
+const CATEGORY_SORT_OPTIONS = [
+  { value: "value-desc", label: "Maior gasto" },
+  { value: "value-asc", label: "Menor gasto" },
+  { value: "count-desc", label: "Mais ativas" },
+];
+
 function cutImpactSentence(categoryName, categoryAmount, cutRate, impact) {
   const destinations = [
     `sua reserva de emergência, que iria de ${formatCurrency(impact.reserveImpact.current)} para ${formatCurrency(
@@ -97,6 +108,8 @@ export default function Categorias() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [categorySort, setCategorySort] = useState("value-desc");
+  const [categoryPage, setCategoryPage] = useState(1);
   const [expandedEstablishments, setExpandedEstablishments] = useState(() => new Set());
   const [yearOffset, setYearOffset] = useState(0); // 0 = ano atual; 1 = ano anterior; e por aí vai.
   const [cutRate, setCutRate] = useState(0.3);
@@ -178,6 +191,28 @@ export default function Categorias() {
 
   const totalExpense = useMemo(() => breakdown.reduce((sum, c) => sum + c.value, 0), [breakdown]);
 
+  const sortedBreakdown = useMemo(() => {
+    const sorted = [...breakdown];
+    switch (categorySort) {
+      case "value-asc":
+        return sorted.sort((a, b) => a.value - b.value);
+      case "count-desc":
+        return sorted.sort((a, b) => b.count - a.count);
+      case "value-desc":
+      default:
+        return sorted.sort((a, b) => b.value - a.value);
+    }
+  }, [breakdown, categorySort]);
+
+  const categoryTotalPages = Math.max(1, Math.ceil(sortedBreakdown.length / CATEGORY_PAGE_SIZE));
+  // Clampa em vez de resetar por efeito: se a página atual ficar fora do intervalo (ex.: trocou
+  // de ano e sobraram menos categorias), já cai numa página válida no próprio render.
+  const categoryPageSafe = Math.min(categoryPage, categoryTotalPages);
+  const pagedBreakdown = useMemo(
+    () => sortedBreakdown.slice((categoryPageSafe - 1) * CATEGORY_PAGE_SIZE, categoryPageSafe * CATEGORY_PAGE_SIZE),
+    [sortedBreakdown, categoryPageSafe]
+  );
+
   const categoryTransactions = useMemo(() => {
     if (!selectedCategory) return [];
     return expenseTransactions.filter((t) => (t.categoryName || "Sem categoria") === selectedCategory);
@@ -249,22 +284,94 @@ export default function Categorias() {
           {breakdown.length === 0 ? (
             <p className="categorias__hint">Nenhuma despesa categorizada ainda.</p>
           ) : (
-            <CategoryDonutChart
-              height={280}
-              formatValue={formatCurrency}
-              data={breakdown}
-              onSliceClick={toggleCategory}
-              centerLabel={formatCurrency(totalExpense)}
-              showLegend={false}
-            />
+            <div className="categorias__donut-block">
+              <div className="categorias__donut-wrap">
+                <CategoryDonutChart
+                  height={340}
+                  formatValue={formatCurrency}
+                  data={breakdown}
+                  onSliceClick={toggleCategory}
+                  centerLabel={formatCurrency(totalExpense)}
+                  showLegend={false}
+                />
+              </div>
+
+              <ul className="categorias__donut-summary">
+                {breakdown.slice(0, 3).map((c) => (
+                  <li key={c.name} className="categorias__donut-summary-item">
+                    <span className="categorias__donut-summary-dot" style={{ backgroundColor: c.color || "#808080" }} />
+                    <span className="categorias__donut-summary-name">{c.name}</span>
+                    <span className="categorias__donut-summary-percentage">{formatPercentage(c.percentage)}</span>
+                    <span className="categorias__donut-summary-value">{formatCurrency(c.value)}</span>
+                  </li>
+                ))}
+                {breakdown.length > 3 && (
+                  <li className="categorias__donut-summary-more">
+                    + {breakdown.length - 3} {breakdown.length - 3 === 1 ? "categoria" : "categorias"} na lista ao lado
+                  </li>
+                )}
+              </ul>
+            </div>
           )}
         </Card>
 
-        <Card title="Categorias">
+        <Card
+          title="Categorias"
+          action={
+            breakdown.length > 0 && (
+              <select
+                value={categorySort}
+                onChange={(e) => {
+                  setCategorySort(e.target.value);
+                  setCategoryPage(1);
+                }}
+                className="categorias__select"
+                aria-label="Ordenar categorias"
+              >
+                {CATEGORY_SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            )
+          }
+        >
           {breakdown.length === 0 ? (
             <p className="categorias__hint">Nenhuma despesa categorizada ainda.</p>
           ) : (
-            <BreakdownRows data={breakdown} tone="expense" activeName={selectedCategory} onRowClick={toggleCategory} />
+            <>
+              <BreakdownRows
+                data={pagedBreakdown}
+                tone="expense"
+                activeName={selectedCategory}
+                onRowClick={toggleCategory}
+              />
+
+              {categoryTotalPages > 1 && (
+                <div className="categorias__pagination">
+                  <button
+                    type="button"
+                    onClick={() => setCategoryPage((p) => Math.max(1, p - 1))}
+                    disabled={categoryPageSafe === 1}
+                    aria-label="Página anterior"
+                  >
+                    ‹
+                  </button>
+                  <span>
+                    Página {categoryPageSafe} de {categoryTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryPage((p) => Math.min(categoryTotalPages, p + 1))}
+                    disabled={categoryPageSafe >= categoryTotalPages}
+                    aria-label="Próxima página"
+                  >
+                    ›
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </Card>
       </div>

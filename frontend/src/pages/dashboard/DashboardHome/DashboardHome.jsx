@@ -18,7 +18,7 @@ import AccountSwitcher from "../../../components/dashboard/AccountSwitcher/Accou
 import { groupAccounts } from "../../../utils/accountGrouping.js";
 import { WalletIcon, TrendUpIcon, TrendDownIcon, TargetIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
-import { getMonthsWindow, buildMonthlyTrend } from "../../../utils/monthlyTrend.js";
+import { getMonthsWindow, buildMonthlyTrend, buildPreviousMonthSamePeriod } from "../../../utils/monthlyTrend.js";
 import { computeTrend } from "../../../utils/trend.js";
 import "./DashboardHome.css";
 
@@ -111,7 +111,10 @@ export default function DashboardHome() {
     [transactions]
   );
   const currentMonthTrend = monthlyTrend[monthlyTrend.length - 1];
-  const previousMonthTrend = monthlyTrend[monthlyTrend.length - 2];
+  // Compara com o mesmo intervalo de dias do mês passado, não o mês passado inteiro: nos
+  // primeiros dias de cada mês, comparar contra um mês inteiro sempre dá uma queda enorme e
+  // artificial (ver buildPreviousMonthSamePeriod).
+  const previousMonthSamePeriod = useMemo(() => buildPreviousMonthSamePeriod(transactions), [transactions]);
 
   if (loading) return <p className="dashboard-home__hint">Carregando dashboard...</p>;
   if (error) return <p className="dashboard-home__error">{error}</p>;
@@ -140,8 +143,13 @@ export default function DashboardHome() {
   const donutData = buildDonutData(categoryExpenses, categories);
   const firstName = user?.name?.split(" ")[0];
 
-  const incomeTrend = computeTrend(currentMonthTrend?.Receitas, previousMonthTrend?.Receitas);
-  const expenseTrend = computeTrend(currentMonthTrend?.Despesas, previousMonthTrend?.Despesas, { invertTone: true });
+  const incomeTrend = computeTrend(currentMonthTrend?.Receitas, previousMonthSamePeriod?.Receitas, {
+    label: "vs mesmo período",
+  });
+  const expenseTrend = computeTrend(currentMonthTrend?.Despesas, previousMonthSamePeriod?.Despesas, {
+    invertTone: true,
+    label: "vs mesmo período",
+  });
 
   // Não existe um saldo histórico salvo (activeAccount.balance é sempre o saldo ao vivo da
   // Polp), então a única comparação honesta é reconstruir o saldo do início do mês a partir
