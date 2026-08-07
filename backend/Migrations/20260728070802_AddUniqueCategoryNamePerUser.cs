@@ -10,7 +10,7 @@ namespace ControlFinance.API.Migrations
         // ══════════════════════════════════════════════════════════════════════════════════
         // NÃO FAZ DEPLOY DESTA MIGRATION EM PRODUÇÃO ANTES DE RODAR A LIMPEZA DA FASE C.
         // Em 2026-07-28 existiam 4 pares de categoria duplicada (mesmo UserId+Name) no banco de
-        // produção — o CREATE UNIQUE INDEX abaixo falha se qualquer duplicata ainda existir
+        // produção. O CREATE UNIQUE INDEX abaixo falha se qualquer duplicata ainda existir
         // (Postgres não cria índice único sobre dado que já o viola). A guarda SQL logo no início
         // do Up() torna esse erro explícito ("rode a Fase C antes") em vez do erro genérico do
         // Postgres sobre índice único, mas a ordem certa continua sendo: 1) Fase C (DELETE dos

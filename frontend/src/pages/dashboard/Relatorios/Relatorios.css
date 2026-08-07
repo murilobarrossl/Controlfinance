@@ -214,7 +214,7 @@
   color: var(--color-text-primary);
 }
 
-/* A data só aparece uma vez por dia, na linha de grupo (relatorios__group-row) — a coluna
+/* A data só aparece uma vez por dia, na linha de grupo (relatorios__group-row). A coluna
    continua existindo (o cabeçalho "Data" segue clicável pra ordenar), só a célula fica vazia. */
 .relatorios__date-cell {
   width: 1px;

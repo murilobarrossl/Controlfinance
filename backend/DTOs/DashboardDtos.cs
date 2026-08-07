@@ -12,7 +12,7 @@ public record CreateBankAccountDto(
 );
 public record BankAccountDto(Guid Id, string Name, string? BankCode, decimal Balance, bool IsActive, string Ownership);
 
-// Ownership: "Personal" | "Business" | "Mixed" — string na borda da API, igual Type/Status de
+// Ownership: "Personal" | "Business" | "Mixed", string na borda da API, igual Type/Status de
 // TransactionDto, pra não vazar o valor numérico cru do enum (o padrão do System.Text.Json sem
 // conversor: JSON já mandava "ownership":0 antes dessa mudança).
 public record SetAccountOwnershipDto(string Ownership);
@@ -40,7 +40,7 @@ public record CreateTransactionDto(
 public record SetTransactionFixedDto(bool IsFixed);
 
 // Edição rápida de nome/categoria (ex.: a Polp categorizou errado, "Multa" virou "Multas de
-// trânsito" sem ter carro) sem precisar montar o CreateTransactionDto inteiro — a lista de
+// trânsito" sem ter carro) sem precisar montar o CreateTransactionDto inteiro. A lista de
 // transações não expõe BankAccountId/CategoryId como Guid (só os nomes), então não dá pra
 // reconstruir esse DTO no cliente a partir do que a tela já tem.
 public record SetTransactionDetailsDto(
@@ -82,12 +82,12 @@ public record TransactionDto(
         TransferDetection.IsSelfTransfer(t.Name, t.Category?.Name, ownerName)
     );
 
-    // Não existe job de fundo que varre pendências vencidas e grava Overdue no banco — calcula na
+    // Não existe job de fundo que varre pendências vencidas e grava Overdue no banco: calcula na
     // leitura em vez disso, senão uma conta "Pending" cuja data já passou ficava mostrando
     // "Pendente" pra sempre em vez de "Atrasado". Só se aplica a Pending: Paid/Overdue (setado à
     // mão pelo usuário) continuam como estão.
     // Compara por dia (não pelo instante exato): uma conta que vence hoje não pode virar "Atrasado"
-    // só porque já passou da meia-noite UTC — continua Pending até o dia do vencimento acabar.
+    // só porque já passou da meia-noite UTC, continua Pending até o dia do vencimento acabar.
     public static string EffectiveStatus(TransactionStatus status, DateTime dueDate) =>
         status == TransactionStatus.Pending && dueDate.Date < DateTime.UtcNow.Date
             ? nameof(TransactionStatus.Overdue)

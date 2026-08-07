@@ -8,7 +8,7 @@ Control Finance is a personal finance web app: an ASP.NET Core 8 API backend (`b
 React + Vite frontend (`frontend/`). Users track bank accounts, transactions, credit cards, and
 installments, optionally synced automatically via the Polp open-finance integration.
 
-The `ControlFinance/` directory at repo root is stale (only contains `node_modules`, no source) —
+The `ControlFinance/` directory at repo root is stale (only contains `node_modules`, no source);
 ignore it.
 
 ## Commands
@@ -41,7 +41,7 @@ There is no test runner configured (no Jest/Vitest).
 ### Local configuration
 
 - Backend secrets go in `backend/appsettings.Local.json` (gitignored) or environment variables
-  (double-underscore syntax, see `backend/.env.example`) — `appsettings.json` in git only has
+  (double-underscore syntax, see `backend/.env.example`). `appsettings.json` in git only has
   placeholders. Required: `ConnectionStrings:DefaultConnection`, `JwtSettings:SecretKey` (32+
   chars), `Encryption:Key`, and for the Polp integration `Polp:ClientId`/`Polp:ClientSecret`.
 - Frontend reads `VITE_API_URL` (see `frontend/.env.example`); defaults to
@@ -63,16 +63,16 @@ Auth is **cookie-based**, not bearer-token-in-JS, despite still using JWTs inter
   `RevokedToken`/DB) by JTI, which is what makes logout actually invalidate a still-unexpired JWT.
 - Because the session cookie is `SameSite=None` in prod, a **double-submit CSRF cookie**
   (`XSRF-TOKEN`, readable by JS) is required on every unsafe (non-GET/HEAD/OPTIONS) request and
-  echoed back as the `X-XSRF-TOKEN` header — see `frontend/src/api/client.js`. Requests carrying an
+  echoed back as the `X-XSRF-TOKEN` header (see `frontend/src/api/client.js`). Requests carrying an
   `Authorization` header instead of relying on the cookie are exempt from this check (can't be
   forged cross-site), which is also what keeps Swagger working unmodified. `/api/auth/login` and
   `/api/auth/register` are exempt too (pre-auth).
 - `ApiControllerBase.UserId` is the standard way controllers read the authenticated user's id from
-  the `sub` claim — inherit from it rather than parsing claims manually.
+  the `sub` claim; inherit from it rather than parsing claims manually.
 
 ### Data protection / encryption
 
-- Sensitive columns (CPF/CNPJ, money amounts — `Balance`, `Amount`, `CreditLimit`, `UsedLimit`,
+- Sensitive columns (CPF/CNPJ, money amounts: `Balance`, `Amount`, `CreditLimit`, `UsedLimit`,
   `TotalAmount`, `InstallmentAmount`) are encrypted at rest with AES-256-GCM via
   `IEncryptionService`, wired in transparently as EF Core `ValueConverter`s in
   `AppDbContext.OnModelCreating`. Application code always reads/writes plaintext; only the DB
@@ -80,7 +80,7 @@ Auth is **cookie-based**, not bearer-token-in-JS, despite still using JWTs inter
 - `User.Document` (CPF/CNPJ) is encrypted and therefore not directly queryable; `DocumentHash` is a
   deterministic HMAC-SHA256 lookup hash used for uniqueness/search instead.
 - The ASP.NET Data Protection key ring (used for the antiforgery/CSRF tokens) is persisted to
-  Postgres (`PersistKeysToDbContext`), not the filesystem — required so CSRF tokens survive
+  Postgres (`PersistKeysToDbContext`), not the filesystem: required so CSRF tokens survive
   restarts/redeploys and work across multiple instances.
 
 ### Domain model (`backend/Models`, `backend/Data/AppDbContext.cs`)
@@ -106,12 +106,12 @@ of categories.
   (email/CPF) and IP for auth endpoints, to stop both credential stuffing and distributed attempts
   against one account.
 - `ScheduledEmailService` / `EmailService`: background hosted service sending transactional email
-  (via Resend) — e.g. due-date reminders.
+  (via Resend), e.g. due-date reminders.
 - `TokenRevocationService`: backs the logout flow described above.
 
 ### Frontend structure (`frontend/src`)
 
-- Routing in `App.jsx` (`react-router-dom` v7). Only the home page is in the initial bundle —
+- Routing in `App.jsx` (`react-router-dom` v7). Only the home page is in the initial bundle;
   every other route (auth, dashboard pages, legal pages) is `lazy()`-loaded per route.
 - `AuthContext` holds the current user in memory only; there is no client-readable session token to
   persist. On mount it calls `GET /api/auth/me` to discover whether a session cookie is already
@@ -123,13 +123,13 @@ of categories.
   investments, budget); `pages/home/sections/*` compose the public marketing landing page.
 - Some non-sensitive, per-user local state (investment goals, emergency reserve) is kept in
   `localStorage`, namespaced by the user id that `AuthContext` mirrors there
-  (`cf_current_user_id`) — see `utils/investmentStorage.js`, `utils/emergencyReserveStorage.js`.
+  (`cf_current_user_id`), see `utils/investmentStorage.js`, `utils/emergencyReserveStorage.js`.
 
 ## Conventions
 
 - Backend comments are in Portuguese and are used specifically to explain *why* a non-obvious
   security/infra decision was made (cookie flags, CSRF exemptions, forwarded-headers trust, index
-  choices) — match that style when touching this code rather than describing *what* the code does.
+  choices): match that style when touching this code rather than describing *what* the code does.
 - When adding a new encrypted column, add it via a value converter in `AppDbContext.OnModelCreating`
   (column name suffixed `Encrypted`) and generate a migration; don't encrypt/decrypt manually in
   controllers/services.

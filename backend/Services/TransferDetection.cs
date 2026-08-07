@@ -21,7 +21,7 @@ public static class TransferDetection
     };
 
     // A Polp manda essa categoria só quando já verificou (via CPF/CNPJ dos dois lados) que é uma
-    // transferência entre contas do mesmo titular — sinal mais forte que a heurística de nome
+    // transferência entre contas do mesmo titular. Sinal mais forte que a heurística de nome
     // abaixo, então confia direto nela em vez de exigir bater com ownerName. Sem esse caso, uma
     // transferência assim (ex.: "Pix enviado - <nome completo>", sem a palavra "transferência" no
     // nome da transação) caía no fallback de regex, não batia, e entrava como despesa de verdade.

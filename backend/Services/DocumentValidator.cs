@@ -1,6 +1,6 @@
 namespace ControlFinance.API.Services;
 
-// Valida o dígito verificador de CPF/CNPJ (algoritmo público, mod 11) — não confirma que o
+// Valida o dígito verificador de CPF/CNPJ (algoritmo público, mod 11). Não confirma que o
 // documento está de fato registrado na Receita Federal (isso exigiria um serviço externo pago,
 // tipo um KYC, fora do escopo daqui), só rejeita documentos estruturalmente inválidos:
 // sequências repetidas ("11111111111") e dígitos verificadores que não batem com o algoritmo.

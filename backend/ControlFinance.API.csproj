@@ -37,7 +37,7 @@
 
     <!-- Mesmo motivo dos dois pins acima: Microsoft.AspNetCore.DataProtection (usado pro key
          ring do CSRF/antiforgery) traz System.Security.Cryptography.Xml 8.0.0 transitivamente,
-         que por sua vez traz System.Formats.Asn1 8.0.0 — ambos com CVEs High conhecidos
+         que por sua vez traz System.Formats.Asn1 8.0.0, ambos com CVEs High conhecidos
          (GHSA-447r-wph3-92pm no Asn1; vários no Cryptography.Xml, incl. GHSA-37gx-xxp4-5rgx).
          Últimas versões 8.0.x disponíveis no momento do pin. -->
     <PackageReference Include="System.Security.Cryptography.Xml"              Version="8.0.4" />

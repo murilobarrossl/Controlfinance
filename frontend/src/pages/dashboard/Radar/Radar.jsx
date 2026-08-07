@@ -7,7 +7,7 @@ import { formatCurrency } from "../../../utils/financeMath.js";
 import "./Radar.css";
 
 // "Mixed" só aparece pra quem realmente tem uma conta marcada como mista (ver BankAccount.Ownership
-// no backend) — a maioria dos usuários (só PF ou só PJ) nunca vê essa seção.
+// no backend). A maioria dos usuários (só PF ou só PJ) nunca vê essa seção.
 const SECTIONS = [
   { key: "Personal", title: "Pessoais" },
   { key: "Business", title: "Empresa" },
@@ -29,7 +29,7 @@ export default function Radar() {
 
   // Sempre reconsulta o backend depois de uma decisão em vez de atualizar o item localmente: a
   // resposta de "o que aparece agora" depende de regras (dispensar remove, confirmar pode puxar
-  // uma recorrência que só tinha 1 ocorrência) que já existem no servidor — reimplementar isso no
+  // uma recorrência que só tinha 1 ocorrência) que já existem no servidor: reimplementar isso no
   // cliente só pra economizar uma requisição arriscaria os dois lados divergirem.
   async function handleDecision(recurrence, updates) {
     setActionError("");

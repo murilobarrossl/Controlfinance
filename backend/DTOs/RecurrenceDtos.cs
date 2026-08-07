@@ -27,12 +27,12 @@ public record RecurrenceDto(
     bool ReminderRequested
 );
 
-// Name vem cru (ex.: o DisplayName que a tela mostrou) — o backend normaliza pra achar/gravar a
+// Name vem cru (ex.: o DisplayName que a tela mostrou). O backend normaliza pra achar/gravar a
 // mesma chave que a detecção usa, a tela não precisa saber como a normalização funciona.
 //
 // Status e ReminderRequested são independentes e opcionais: omitir um deles não mexe no valor
 // atual gravado (update parcial). Isso existe pra "quero lembrete" não ser obrigado a também
-// confirmar a recorrência como assinatura — são perguntas diferentes (ver RecurrencesController).
+// confirmar a recorrência como assinatura. São perguntas diferentes (ver RecurrencesController).
 // AssumedFrequency só é exigida quando Status=Confirmed pra uma recorrência que a detecção
 // automática ainda não pegou sozinha.
 public record SetRecurrenceDecisionDto(

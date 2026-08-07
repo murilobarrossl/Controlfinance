@@ -36,7 +36,7 @@ export default function BreakdownRows({
                   {item.isInstallmentGroup && (
                     <span
                       className="breakdown-rows__installment-hint"
-                      title="Compra parcelada — clique pra ver as parcelas"
+                      title="Compra parcelada, clique pra ver as parcelas"
                     >
                       <span className="breakdown-rows__installment-label">Clique para expandir parcelas</span>
                       <span className={`breakdown-rows__chevron${isExpanded ? " breakdown-rows__chevron--open" : ""}`}>

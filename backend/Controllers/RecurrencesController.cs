@@ -35,7 +35,7 @@ public class RecurrencesController(AppDbContext db) : ApiControllerBase
         var detected = RecurrenceDetection.DetectGroups(transactions, now);
         var applied = RecurrenceDetection.ApplyDecisions(detected, transactions, decisions, now);
 
-        // Custo anual ao lado do mensal é a ideia central da feature (ver comentário no DTO) —
+        // Custo anual ao lado do mensal é a ideia central da feature (ver comentário no DTO):
         // ordenar por ele já deixa a lista no formato que a tela vai querer (maior impacto primeiro).
         var result = applied
             .Select(g =>
@@ -55,7 +55,7 @@ public class RecurrencesController(AppDbContext db) : ApiControllerBase
         return Ok(result);
     }
 
-    // Upsert parcial: Status e ReminderRequested são independentes (ver comentário no DTO) — só
+    // Upsert parcial: Status e ReminderRequested são independentes (ver comentário no DTO). Só
     // atualiza o que veio na requisição, preserva o resto da linha existente. A chave única em
     // RecurrenceDecisions (UserId, BankAccountId, NormalizedName) é quem garante que dispensar e
     // depois confirmar a mesma recorrência atualiza a linha existente em vez de duplicar.

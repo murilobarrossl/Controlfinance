@@ -219,11 +219,11 @@ public class PolpService : IPolpService
         var resp = await _http.GetAsync($"integrations/{integrationId}/accounts", ct);
         await EnsureSuccess(resp, "listar contas");
 
-        // TEMP — captura crua pra descobrir onde a Polp expõe limite/fatura/parcela de cartão de
+        // TEMP: captura crua pra descobrir onde a Polp expõe limite/fatura/parcela de cartão de
         // crédito: PolpAccountDto só declara os campos que já usamos, e a desserialização tipada
         // descarta silenciosamente qualquer campo extra que a Polp já esteja mandando (não tem
         // JsonExtensionData). Lê como string em vez de ReadFromJsonAsync direto só pra poder logar
-        // o corpo inteiro antes de desserializar — resultado do envelope é idêntico ao de antes.
+        // o corpo inteiro antes de desserializar. Resultado do envelope é idêntico ao de antes.
         // REMOVER esse bloco (as 2 linhas de log) depois do diagnóstico.
         var rawJson = await resp.Content.ReadAsStringAsync(ct);
         _logger.LogInformation("=== POLP RAW CARD JSON (accounts, integrationId={IntegrationId}) === {RawJson}", integrationId, rawJson);
@@ -249,7 +249,7 @@ public class PolpService : IPolpService
             var resp = await _http.GetAsync($"accounts/{accountId}/transactions?page={page}", ct);
             await EnsureSuccess(resp, "listar transações");
 
-            // TEMP — mesma captura crua da conta, agora pro extrato: parcela (ex.: "3/12") é da
+            // TEMP: mesma captura crua da conta, agora pro extrato: parcela (ex.: "3/12") é da
             // compra, não da conta, então é mais provável que apareça aqui do que no /accounts.
             // REMOVER junto com o bloco equivalente em GetAccountsAsync.
             var rawJson = await resp.Content.ReadAsStringAsync(ct);

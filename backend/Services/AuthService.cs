@@ -60,7 +60,7 @@ public class AuthService : IAuthService
 
         // Dígito verificador (mod 11): rejeita documento estruturalmente inválido (sequência
         // repetida, dígito verificador que não bate) antes de gastar uma consulta ao banco.
-        // Não confirma que o CPF/CNPJ existe de fato na Receita Federal — isso exigiria um
+        // Não confirma que o CPF/CNPJ existe de fato na Receita Federal: isso exigiria um
         // serviço externo pago, fora do escopo aqui.
         if (!DocumentValidator.IsValid(cleanDocument))
         {
@@ -106,7 +106,7 @@ public class AuthService : IAuthService
         // Rate limiting por identificador E por IP: só por identificador permitiria testar
         // senha em várias contas diferentes do mesmo IP sem nunca travar. Só marca a flag aqui
         // (sem retornar ainda): quando bloqueado, a resposta continua idêntica à de credenciais
-        // erradas — nem o texto nem o tempo de resposta (pula o BCrypt, que já falharia mesmo)
+        // erradas: nem o texto nem o tempo de resposta (pula o BCrypt, que já falharia mesmo)
         // deixam um atacante distinguir "bloqueado" de "senha errada".
         var blocked = _rateLimit.IsBlocked(identifier, ipAddress);
 

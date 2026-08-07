@@ -54,7 +54,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
     }
 
     // Pending "vencido" é calculado na leitura (TransactionDto.EffectiveStatus), não gravado no
-    // banco — então o filtro por status precisa enxergar a mesma coisa, senão status=Overdue não
+    // banco, então o filtro por status precisa enxergar a mesma coisa, senão status=Overdue não
     // acha nada (nenhuma linha guarda literalmente Overdue a não ser quando o usuário seta à mão)
     // e status=Pending mostra até pendências que a tela já rotula como Atrasado.
     private static IQueryable<Transaction> ApplyStatusFilter(IQueryable<Transaction> query, string? status)
@@ -81,6 +81,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         [FromQuery] string? status,
         [FromQuery] string? type,
         [FromQuery] string? search,
+        [FromQuery] Guid? bankAccountId = null,
         [FromQuery] int? year = null,
         [FromQuery] int? month = null,
         [FromQuery] string sortBy = "dueDate",
@@ -95,6 +96,9 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         var query = db.Transactions
             .Where(t => t.UserId == UserId)
             .Where(t => t.BankAccount == null || t.BankAccount.IsActive);
+
+        if (bankAccountId.HasValue)
+            query = query.Where(t => t.BankAccountId == bankAccountId);
 
         query = ApplyStatusFilter(query, status);
 
@@ -192,7 +196,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
     // Todo critério de ordenação termina com ThenBy(Id): DueDate (e os outros campos) frequentemente
     // se repetem entre transações, e sem um desempate estável o Postgres não garante a mesma ordem
-    // entre duas execuções do Skip/Take — a mesma linha podia aparecer em duas páginas do Relatórios
+    // entre duas execuções do Skip/Take. A mesma linha podia aparecer em duas páginas do Relatórios
     // (ou sumir de todas) só por causa disso.
     private static IQueryable<Transaction> ApplySort(IQueryable<Transaction> query, string sortBy, bool desc) => sortBy switch
     {
@@ -298,8 +302,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         return Ok(TransactionDto.FromEntity(transaction));
     }
 
-    // Endpoint dedicado só pra corrigir nome/categoria (ex.: categorização errada vinda da Polp) —
-    // ver comentário no SetTransactionDetailsDto sobre por que não dá pra reaproveitar o Update genérico.
+    // Endpoint dedicado só pra corrigir nome/categoria (ex.: categorização errada vinda da Polp).
+    // Ver comentário no SetTransactionDetailsDto sobre por que não dá pra reaproveitar o Update genérico.
     [HttpPut("{id}/details")]
     public async Task<IActionResult> SetDetails(Guid id, [FromBody] SetTransactionDetailsDto dto)
     {

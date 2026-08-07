@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { AccountProvider } from "../../context/AccountContext.jsx";
 import { logout as logoutRequest } from "../../api/auth.js";
 import ErrorBoundary from "../../components/ErrorBoundary/ErrorBoundary.jsx";
 import NavUserMenu from "../../components/dashboard/NavUserMenu/NavUserMenu.jsx";
@@ -20,6 +21,14 @@ const TABS = [
 ];
 
 export default function DashboardLayout() {
+  return (
+    <AccountProvider>
+      <DashboardLayoutContent />
+    </AccountProvider>
+  );
+}
+
+function DashboardLayoutContent() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);

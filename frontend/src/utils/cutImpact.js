@@ -2,7 +2,7 @@
 // emergência e a meta mais próxima de ser concluída.
 //
 // Fonte de metas/reserva, por enquanto: localStorage (getGoals/getReserve, ver
-// investmentStorage.js e emergencyReserveStorage.js) — dado só do navegador, não acompanha o
+// investmentStorage.js e emergencyReserveStorage.js). Dado só do navegador, não acompanha o
 // usuário entre dispositivos. Esta função só recebe os valores já carregados (reserveAmount,
 // goals), então quando essa fonte migrar pro backend (metas/reserva por usuário no Postgres),
 // só o carregamento na tela muda; a lógica de impacto abaixo continua igual.
@@ -15,7 +15,7 @@ export function calculateCutImpact({ categoryAmount, cutRate, reserveAmount, goa
   };
 
   // Entre as metas ainda não concluídas, a que está com menor valor faltando é a que o corte
-  // deixa visivelmente mais perto de bater — mais motivador do que diluir o valor numa meta
+  // deixa visivelmente mais perto de bater, mais motivador do que diluir o valor numa meta
   // distante.
   const openGoals = (goals || []).filter((g) => g.currentAmount < g.targetAmount);
   let goalImpact = null;

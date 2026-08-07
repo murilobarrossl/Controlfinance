@@ -1,7 +1,7 @@
 import { formatCurrency } from "../../../utils/financeMath.js";
 import "./RecurrenceCard.css";
 
-// "Há N meses" é só um rótulo aproximado pro olho humano — o valor em R$ que importa
+// "Há N meses" é só um rótulo aproximado pro olho humano. O valor em R$ que importa
 // (totalSinceFirst) vem pronto do backend, nunca recalculado aqui (currentAmount × meses erraria
 // toda vez que o valor mudou no meio do caminho, o próprio caso do "aumento silencioso").
 function monthsSince(dateStr) {
@@ -59,7 +59,7 @@ export default function RecurrenceCard({ recurrence, onDecision }) {
       </div>
 
       <p className="recurrence-card__summary">
-        {displayName} há {months} {months === 1 ? "mês" : "meses"} — já gastou{" "}
+        {displayName} há {months} {months === 1 ? "mês" : "meses"}, já gastou{" "}
         <strong>{formatCurrency(totalSinceFirst)}</strong> em {occurrenceCount} cobranças. Próxima cobrança esperada em{" "}
         {nextDateLabel}.
       </p>

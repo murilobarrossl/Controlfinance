@@ -12,7 +12,7 @@ namespace ControlFinance.API.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             // EF gerou defaultValue: "" aqui (o conversor HasConversion<string>() não roda o
-            // default CLR do enum antes de calcular o default da coluna) — "" não é um nome
+            // default CLR do enum antes de calcular o default da coluna). "" não é um nome
             // válido de AccountOwnership, e qualquer leitura de uma linha pré-existente quebraria
             // com Enum.Parse antes até do backfill (Program.cs) ter a chance de rodar. Trocado à
             // mão pro nome do valor 0 do enum (Personal), que o backfill logo em seguida sobrescreve

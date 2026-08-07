@@ -53,7 +53,7 @@ public static class InstallmentProgress
     }
 
     // Quantas datas de vencimento da sequência (from, from+1mês, from+2meses, ...) já passaram do
-    // dia de hoje — comparação por dia, não pelo instante exato: uma parcela que vence hoje ainda
+    // dia de hoje. Comparação por dia, não pelo instante exato: uma parcela que vence hoje ainda
     // não avança, só a partir de amanhã. Iterativo em vez de aritmética de calendário direta
     // porque AddMonths já resolve os casos de borda (dia 31 virando fim de mês mais curto) sozinho.
     private static int MonthsPassed(DateTime from, DateTime now)

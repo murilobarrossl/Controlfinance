@@ -78,9 +78,9 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
 
             // Fecha a corrida que ResolveCategoryIdAsync (PolpSyncService) já sabe recuperar de:
             // duas execuções de sync concorrentes não conseguem mais criar duas categorias com o
-            // mesmo nome pro mesmo usuário — a segunda leva 23505, e o catch já tratado busca a
+            // mesmo nome pro mesmo usuário: a segunda leva 23505, e o catch já tratado busca a
             // que a primeira criou. ATENÇÃO AO APLICAR EM PRODUÇÃO: só depois de rodar a limpeza
-            // dos 4 pares de categoria duplicada já existentes (ver plano da Fase C) — a migration
+            // dos 4 pares de categoria duplicada já existentes (ver plano da Fase C). A migration
             // desta constraint FALHA (Postgres não cria índice único sobre dado que já o viola)
             // se rodar antes da limpeza.
             e.HasIndex(c => new { c.UserId, c.Name }).IsUnique();

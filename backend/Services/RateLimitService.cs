@@ -5,8 +5,8 @@ namespace ControlFinance.API.Services;
 // Bloqueia tanto por identificador (email/CPF) quanto por IP, com propósitos diferentes:
 // - Por identificador: trava força bruta vertical (uma conta, muitas senhas).
 // - Por IP: trava um script martelando várias contas de uma máquina/rede só.
-// Nenhum dos dois sozinho (nem os dois juntos) impede um "password spraying" de verdade —
-// atacante rotacionando IPs, uma tentativa por conta — isso exige outra camada (detecção de
+// Nenhum dos dois sozinho (nem os dois juntos) impede um "password spraying" de verdade
+// (atacante rotacionando IPs, uma tentativa por conta). Isso exige outra camada (detecção de
 // senha vazada, CAPTCHA, WAF), fora do escopo deste serviço. O limite de IP é propositalmente
 // generoso (bem mais alto que o de identificador) pra não travar rede compartilhada legítima
 // (escritório, NAT, várias contas de teste na mesma rede).
@@ -31,7 +31,7 @@ public class RateLimitService : IDisposable
     }
 
     // De propósito, não existe um "RemainingAttempts" exposto pra API: sites grandes não avisam
-    // quantas tentativas restam nem que você foi bloqueado — a resposta de erro é sempre a mesma
+    // quantas tentativas restam nem que você foi bloqueado. A resposta de erro é sempre a mesma
     // esteja você só errando a senha ou já travado, senão dá pra um atacante calibrar o ataque
     // pela própria mensagem de erro.
     public bool IsBlocked(string identifier, string ipAddress) =>

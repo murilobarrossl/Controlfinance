@@ -151,7 +151,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
     // Precisa saber se a migration do Radar de Recorrências ainda não tinha rodado nessa base
-    // ANTES de aplicar (Migrate() abaixo já marca ela como aplicada) — é o gatilho do backfill
+    // ANTES de aplicar (Migrate() abaixo já marca ela como aplicada). É o gatilho do backfill
     // logo depois. Sem essa checagem, toda vez que o app subisse ele tentaria rodar de novo o
     // backfill em cima de linhas que o usuário já classificou manualmente como "conta mista"
     // (Mixed), sobrescrevendo a escolha dele com o chute. Lido via reflection (o [Migration] da
@@ -170,8 +170,8 @@ using (var scope = app.Services.CreateScope())
 
 // Chute inicial de pessoal/empresa/mista (ver AccountOwnershipDefault) pras contas que já
 // existiam antes da coluna Ownership existir (a coluna nasce com todas as linhas em Personal,
-// valor default do enum, então não precisa filtrar quem "ainda não tem" — é sempre todo mundo).
-// Roda uma única vez, no exato momento em que a migration acima é aplicada — nunca mais depois
+// valor default do enum, então não precisa filtrar quem "ainda não tem": é sempre todo mundo).
+// Roda uma única vez, no exato momento em que a migration acima é aplicada. Nunca mais depois
 // disso, então uma conta marcada como Mixed pelo usuário fica assim pra sempre, mesmo em
 // reinícios futuros do app.
 static async Task BackfillAccountOwnershipAsync(AppDbContext db)

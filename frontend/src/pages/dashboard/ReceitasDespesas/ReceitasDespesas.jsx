@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { getTransactions } from "../../../api/transactions.js";
+import { useAccount } from "../../../context/AccountContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
@@ -67,15 +68,16 @@ function closingSentence(totalIncome, totalExpense) {
     const pct = totalIncome > 0 ? (leftover / totalIncome) * 100 : 0;
     return `Você recebeu ${formatCurrency(totalIncome)} e gastou ${formatCurrency(
       totalExpense
-    )} neste período. Sobraram ${formatCurrency(leftover)} — ${formatPercentage(pct)} do que entrou.`;
+    )} neste período. Sobraram ${formatCurrency(leftover)}, ${formatPercentage(pct)} do que entrou.`;
   }
   return `Você recebeu ${formatCurrency(totalIncome)} mas gastou ${formatCurrency(
     totalExpense
-  )} neste período — ${formatCurrency(Math.abs(leftover))} a mais do que entrou.`;
+  )} neste período, ${formatCurrency(Math.abs(leftover))} a mais do que entrou.`;
 }
 
 export default function ReceitasDespesas() {
   const navigate = useNavigate();
+  const { effectiveAccountId, dataRefreshKey } = useAccount();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -83,11 +85,28 @@ export default function ReceitasDespesas() {
   const [expandedIncomeSources, setExpandedIncomeSources] = useState(() => new Set());
 
   useEffect(() => {
-    getTransactions()
-      .then(setTransactions)
-      .catch((err) => setError(err.message || "Não foi possível carregar as transações."))
-      .finally(() => setLoading(false));
-  }, []);
+    let cancelled = false;
+    // Mesmo padrão (guarda "cancelled" + reset condicional no finally) já usado sem aviso de
+    // lint em DashboardHome.jsx: necessário aqui pra mostrar "Carregando..." de novo ao trocar
+    // de conta, não só na carga inicial da página.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+
+    getTransactions({ bankAccountId: effectiveAccountId })
+      .then((data) => {
+        if (!cancelled) setTransactions(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Não foi possível carregar as transações.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveAccountId, dataRefreshKey]);
 
   const currentMonth = useMemo(() => getMonthsWindow(1, monthOffset)[0], [monthOffset]);
   const previousMonth = useMemo(() => getMonthsWindow(1, monthOffset + 1)[0], [monthOffset]);

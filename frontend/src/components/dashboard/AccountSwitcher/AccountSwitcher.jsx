@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ChevronDownIcon } from "../../ui/icons/FeatureIcons.jsx";
 import { syncIntegration } from "../../../api/polp.js";
+import { groupAccounts } from "../../../utils/accountGrouping.js";
 import "./AccountSwitcher.css";
 
 // Some tempo suficiente pro usuário ler o resultado ("Sincronização iniciada" ou o erro) antes
 // do botão voltar sozinho pro estado normal, sem precisar de um clique extra pra limpar o feedback.
 const SYNC_FEEDBACK_DURATION_MS = 4000;
 
-// O sync roda em background no servidor (a Polp já levou até 20s por chamada nos logs) — o
+// O sync roda em background no servidor (a Polp já levou até 20s por chamada nos logs). O
 // clique só confirma que foi enfileirado, não que já terminou. Espera um tempo plausível antes
 // de recarregar os dados do dashboard, em vez de recarregar na hora e mostrar o estado antigo
 // como se já fosse o resultado da sincronização.
@@ -20,23 +21,6 @@ function resolveAccountColor(account, connectorsById) {
   const raw = connectorsById.get(account.bankCode)?.color;
   if (!raw) return "var(--color-border-strong)";
   return raw.startsWith("#") ? raw : `#${raw}`;
-}
-
-// Contas com o mesmo polpIntegrationId vieram da mesma conexão bancária (ex.: conta corrente +
-// cartão de crédito do mesmo banco, sincronizados juntos) — agrupa só pra deixar isso visualmente
-// claro no seletor. Cada conta continua com sua própria visão de dados ao ser selecionada, nada é
-// somado entre elas; contas sem polpIntegrationId (criadas manualmente) formam grupo de uma só.
-function groupAccounts(accounts, connectorsById) {
-  const groups = new Map();
-  for (const account of accounts) {
-    const key = account.polpIntegrationId ?? `single-${account.id}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(account);
-  }
-  return [...groups.values()].map((group) => ({
-    accounts: group,
-    label: connectorsById.get(group[0].bankCode)?.name,
-  }));
 }
 
 export default function AccountSwitcher({ accounts, activeAccountId, connectors, onSelect, onDisconnect, onSynced }) {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { getCategories } from "../../../api/categories.js";
 import { getTransactions } from "../../../api/transactions.js";
+import { useAccount } from "../../../context/AccountContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
@@ -58,7 +59,7 @@ function topExpenseCategoryName(transactions, year) {
 
 // Parcela de compra no cartão vem da Polp com o número da parcela grudado no fim do nome da
 // compra original (ex.: "MERCADOLIVRE*OTHPR01/12", "MERCADOLIVRE*OTHPR02/12"...). Sem tratar
-// isso, cada parcela virava um "estabelecimento" separado no agrupamento — 12 linhas pra uma
+// isso, cada parcela virava um "estabelecimento" separado no agrupamento: 12 linhas pra uma
 // compra só. Extrai o nome base (sem o "01/12") pra juntar todas as parcelas na mesma linha.
 const INSTALLMENT_SUFFIX = /(\d{2}\/\d{2})$/;
 
@@ -90,6 +91,7 @@ function groupByEstablishment(transactions) {
 
 export default function Categorias() {
   const [searchParams] = useSearchParams();
+  const { effectiveAccountId, dataRefreshKey } = useAccount();
   const [categories, setCategories] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -102,12 +104,20 @@ export default function Categorias() {
   const [reserve] = useState(() => getReserve());
   const drilldownRef = useRef(null);
   const skipNextScrollRef = useRef(false);
+  // A pré-seleção de categoria (via link ou maior gasto do ano) só deve acontecer uma vez, na
+  // primeira carga. Trocar de conta depois não pode reabrir/trocar a categoria que o usuário já
+  // escolheu.
+  const hasAppliedInitialSelectionRef = useRef(false);
 
   useEffect(() => {
-    Promise.all([getCategories(), getTransactions()])
+    setLoading(true);
+    Promise.all([getCategories(), getTransactions({ bankAccountId: effectiveAccountId })])
       .then(([categoriesData, transactionsData]) => {
         setCategories(categoriesData);
         setTransactions(transactionsData);
+
+        if (hasAppliedInitialSelectionRef.current) return;
+        hasAppliedInitialSelectionRef.current = true;
 
         // Chegando de um link da aba Receitas e despesas (?categoria=Nome): abre direto nela,
         // com scroll até a seção, em vez de pré-selecionar a maior categoria do ano.
@@ -128,8 +138,8 @@ export default function Categorias() {
       })
       .catch((err) => setError(err.message || "Não foi possível carregar as categorias."))
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- só lê searchParams na carga inicial
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams só é lido na 1ª carga (ver ref acima)
+  }, [effectiveAccountId, dataRefreshKey]);
 
   const selectedYear = new Date().getUTCFullYear() - yearOffset;
 
@@ -231,7 +241,7 @@ export default function Categorias() {
       />
 
       <p className="categorias__section-hint">
-        Considerando todas as contas conectadas. Só despesas — receitas ficam em Receitas e despesas.
+        Considerando todas as contas conectadas. Só despesas. Receitas ficam em Receitas e despesas.
       </p>
 
       <div className="categorias__grid">
@@ -336,7 +346,7 @@ export default function Categorias() {
                   </div>
                 ) : (
                   <p className="categorias__hint">
-                    Você ainda não cadastrou metas — crie uma em Investimentos para ver o quanto esse corte te
+                    Você ainda não cadastrou metas. Crie uma em Investimentos para ver o quanto esse corte te
                     aproximaria dela.
                   </p>
                 )}

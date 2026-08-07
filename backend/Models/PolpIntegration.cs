@@ -29,7 +29,7 @@ public class PolpIntegration
     /// <summary>Marca se as contas/transações já foram sincronizadas localmente.</summary>
     public bool SyncedLocally { get; set; } = false;
 
-    /// <summary>Timestamp dedicado ao throttle de re-sync — não pode reusar UpdatedAt porque esse
+    /// <summary>Timestamp dedicado ao throttle de re-sync: não pode reusar UpdatedAt porque esse
     /// campo também é sobrescrito pelo polling de status (GetIntegrationStatus), que não conta
     /// como sincronização de dados.</summary>
     public DateTime? LastSyncedAt { get; set; }

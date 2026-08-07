@@ -7,6 +7,7 @@ import { getCategories } from "../../../api/categories.js";
 import { getTransactions, createTransaction, deleteTransaction, setTransactionFixed } from "../../../api/transactions.js";
 import { getInstallments, createInstallment, deleteInstallment } from "../../../api/installments.js";
 import { getCreditCards } from "../../../api/creditCards.js";
+import { useAccount } from "../../../context/AccountContext.jsx";
 import { getReserve, addToReserve, removeFromReserve, clearReserve } from "../../../utils/emergencyReserveStorage.js";
 import { formatCurrency } from "../../../utils/financeMath.js";
 import "./Orcamento.css";
@@ -31,6 +32,7 @@ function formatDate(dateStr) {
 }
 
 export default function Orcamento() {
+  const { effectiveAccountId, dataRefreshKey } = useAccount();
   const [categories, setCategories] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [installments, setInstallments] = useState([]);
@@ -48,7 +50,12 @@ export default function Orcamento() {
   const [withdrawInput, setWithdrawInput] = useState("");
 
   function loadAll() {
-    return Promise.all([getCategories(), getTransactions(), getInstallments(), getCreditCards()])
+    return Promise.all([
+      getCategories(),
+      getTransactions({ bankAccountId: effectiveAccountId }),
+      getInstallments(),
+      getCreditCards(),
+    ])
       .then(([categoriesData, transactionsData, installmentsData, creditCardsData]) => {
         setCategories(categoriesData);
         setTransactions(transactionsData);
@@ -60,11 +67,13 @@ export default function Orcamento() {
   }
 
   useEffect(() => {
+    setLoading(true);
     loadAll();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadAll já fecha sobre effectiveAccountId atual
+  }, [effectiveAccountId, dataRefreshKey]);
 
   function refreshTransactions() {
-    return getTransactions().then(setTransactions);
+    return getTransactions({ bankAccountId: effectiveAccountId }).then(setTransactions);
   }
 
   function refreshInstallments() {

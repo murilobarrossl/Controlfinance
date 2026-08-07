@@ -16,6 +16,21 @@
   margin-bottom: 0;
 }
 
+.dashboard-home__account-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.dashboard-home__account-hint {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  max-width: 18rem;
+  text-align: left;
+}
+
 .dashboard-home__hint {
   color: var(--color-text-secondary);
   font-size: 0.9rem;

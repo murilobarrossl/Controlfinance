@@ -13,7 +13,7 @@ export const getIntegrationStatus = async (integrationId) =>
   apiFetch(`/polp/integrations/${integrationId}`);
 
 // integrationId aqui é o Guid local (PolpIntegration.Id), não o id remoto da Polp guardado em
-// BankAccount.PolpIntegrationId — vem como localIntegrationId na resposta de getIntegrations().
+// BankAccount.PolpIntegrationId, que vem como localIntegrationId na resposta de getIntegrations().
 export const syncIntegration = async (integrationId) =>
   apiFetch(`/polp/integrations/${integrationId}/sync`, {
     method: "POST",

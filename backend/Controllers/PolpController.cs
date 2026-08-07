@@ -41,9 +41,9 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
 
     // UPDATING/WAITING_USER_INPUT só bloqueiam uma conexão nova se atualizados há menos de 1h:
     // autenticar um banco aqui leva 5-10min no máximo, então uma integração parada há mais tempo
-    // que isso foi abandonada (aba fechada, MFA nunca completado) — bloquear pra sempre trancaria
+    // que isso foi abandonada (aba fechada, MFA nunca completado). Bloquear pra sempre trancaria
     // o usuário de tentar de novo. UPDATED sempre bloqueia (já está conectado de verdade). A linha
-    // antiga abandonada fica órfã no banco até a limpeza — fora do escopo deste guard.
+    // antiga abandonada fica órfã no banco até a limpeza, o que foge do escopo deste guard.
     private static readonly TimeSpan StaleIntegrationThreshold = TimeSpan.FromHours(1);
 
     // Throttle do "sincronizar agora" (manual e automático no mount do dashboard): já tivemos um
@@ -60,7 +60,7 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
             : 0;
 
     // Impede o clique duplo (ou um retry depois de um timeout) de criar uma segunda
-    // PolpIntegration local pro mesmo banco — e, pior, uma segunda integração do lado da Polp
+    // PolpIntegration local pro mesmo banco e, pior, uma segunda integração do lado da Polp
     // também, que depois recusa com 422 ITEM_IS_ALREADY_UPDATING.
     private async Task<PolpIntegration?> FindBlockingIntegrationAsync(int institutionId, CancellationToken ct)
     {
@@ -130,7 +130,7 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
     public async Task<IActionResult> GetIntegrations(CancellationToken ct)
     {
         // PolpIntegrationId vai junto só pra agrupar visualmente no seletor de contas (ex.: conta
-        // corrente + cartão de crédito do mesmo banco, sincronizados na mesma conexão) — cada
+        // corrente + cartão de crédito do mesmo banco, sincronizados na mesma conexão). Cada
         // conta continua com sua própria visão de dados, nada é somado entre elas.
         var accounts = await db.BankAccounts
             .Where(b => b.UserId == UserId && b.IsActive)
@@ -139,7 +139,7 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
 
         // BankAccount.PolpIntegrationId guarda o id remoto (int) da Polp, mas o botão de
         // "sincronizar agora" precisa do Guid local (PolpIntegration.Id) pra chamar o endpoint de
-        // sync — busca esse mapeamento de uma vez em vez de uma query por conta.
+        // sync. Por isso busca esse mapeamento de uma vez em vez de uma query por conta.
         var localByRemoteId = await db.PolpIntegrations
             .Where(p => p.UserId == UserId)
             .ToDictionaryAsync(p => p.PolpIntegrationId, p => new { p.Id, p.LastSyncedAt }, ct);
@@ -212,7 +212,7 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
     // Só deve ser chamado quando o status já é UPDATED (senão a Polp ainda não tem contas prontas
     // pra buscar). Dispara o sync em background e responde na hora (202): segurar a conexão HTTP
     // até o sync inteiro terminar estourava o timeout do gateway (Railway/DigitalOcean, ~30-60s)
-    // bem antes da Polp acabar de responder — uma chamada sozinha já levou até 20s nos logs, e o
+    // bem antes da Polp acabar de responder: uma chamada sozinha já levou até 20s nos logs, e o
     // sync passa por várias contas e páginas de transação.
     [HttpPost("integrations/{id:guid}/sync")]
     public async Task<IActionResult> Sync(Guid id, CancellationToken ct)
@@ -234,7 +234,7 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
         // Reserva a janela de throttle já aqui, antes de disparar em background: sem isso, dois
         // cliques rápidos (ou o clique cruzando com o sync-all automático do dashboard) passavam
         // os dois pela checagem acima antes de qualquer um marcar LastSyncedAt, e disparavam dois
-        // syncs da mesma integração em paralelo — o lock em PolpSyncService evita corrupção de
+        // syncs da mesma integração em paralelo. O lock em PolpSyncService evita corrupção de
         // dado nesse caso, mas não evita bater na Polp duas vezes à toa.
         local.LastSyncedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
@@ -270,7 +270,7 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
 
     // Roda com seu próprio escopo de DI (próprio DbContext, próprio PolpSyncService): o
     // DbContext desta requisição é descartado assim que ela responde, e usá-lo depois disso numa
-    // Task solta derrubaria com ObjectDisposedException. CancellationToken.None de propósito — a
+    // Task solta derrubaria com ObjectDisposedException. CancellationToken.None de propósito: a
     // requisição que disparou isso já terminou (e cancelaria o token dela), mas o sync em si deve
     // seguir até o fim mesmo assim.
     private void QueueBackgroundSync(Guid integrationId, Guid userId)

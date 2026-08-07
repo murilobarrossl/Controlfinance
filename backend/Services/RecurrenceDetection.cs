@@ -21,12 +21,12 @@ public record RecurrenceGroup(
 );
 
 // Detecta recorrências (assinaturas, mensalidades) a partir do histórico de despesas: agrupa por
-// (nome normalizado, conta) — conta entra na chave pra não misturar a mesma assinatura cobrada de
-// uma conta pessoal e de uma conta da empresa numa soma só — exige pelo menos 2 ocorrências pra
+// (nome normalizado, conta): conta entra na chave pra não misturar a mesma assinatura cobrada de
+// uma conta pessoal e de uma conta da empresa numa soma só. Exige pelo menos 2 ocorrências pra
 // virar candidato, e classifica a frequência pela mediana do intervalo entre cobranças.
 //
 // Pura: nenhum método toca DbContext, só recebem as transações já buscadas (e, em ApplyDecisions,
-// as decisões do usuário já buscadas) — testável com listas montadas à mão, sem Postgres. Isso é
+// as decisões do usuário já buscadas). Testável com listas montadas à mão, sem Postgres. Isso é
 // o que permite reaproveitar essa mesma lógica depois na previsão de fim de mês e no resumo
 // semanal por e-mail, sem reescrever nada: quem chama é que muda, a conta continua igual.
 public static class RecurrenceDetection
@@ -67,7 +67,7 @@ public static class RecurrenceDetection
     // Aplica as decisões do usuário sobre o resultado "cru" da detecção: dispensado some de vez
     // (mesmo que o algoritmo continue achando que é recorrente); confirmado manualmente entra
     // mesmo que o algoritmo sozinho não teria batido o critério (poucas ocorrências, ou intervalo
-    // fora da janela mensal/anual) — nesse caso usa a frequência que o usuário assumiu ao confirmar,
+    // fora da janela mensal/anual). Nesse caso usa a frequência que o usuário assumiu ao confirmar,
     // já que não dá pra calcular a partir de pouco histórico.
     public static List<RecurrenceGroup> ApplyDecisions(
         List<RecurrenceGroup> detected,
@@ -106,7 +106,7 @@ public static class RecurrenceDetection
                 .OrderBy(t => t.DueDate)
                 .ToList();
 
-            if (occurrences.Count == 0) continue; // decisão órfã (transações somem do histórico) — nada pra mostrar
+            if (occurrences.Count == 0) continue; // decisão órfã (transações somem do histórico): nada pra mostrar
 
             var frequency = decision.AssumedFrequency.Value;
             var intervalDays = frequency == RecurrenceFrequency.Monthly ? 30 : 365;

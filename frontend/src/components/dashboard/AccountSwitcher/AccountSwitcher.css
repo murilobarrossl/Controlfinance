@@ -59,7 +59,7 @@
   z-index: 10;
   top: calc(100% + 0.5rem);
   /* O seletor fica na borda direita do header (justify-content: space-between), então o menu
-     abre alinhado pela direita do botão — se abrisse pela esquerda (padrão de dropdown), ele
+     abre alinhado pela direita do botão. Se abrisse pela esquerda (padrão de dropdown), ele
      estourava a viewport pra fora da tela e forçava rolagem horizontal na página inteira. */
   right: 0;
   min-width: 220px;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getTransactionsReport, setTransactionDetails } from "../../../api/transactions.js";
 import { getCategories } from "../../../api/categories.js";
+import { useAccount } from "../../../context/AccountContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
@@ -64,6 +65,7 @@ function groupByDate(items) {
 }
 
 export default function Relatorios() {
+  const { effectiveAccountId, dataRefreshKey } = useAccount();
   const [report, setReport] = useState(null);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +78,7 @@ export default function Relatorios() {
   const [page, setPage] = useState(1);
   // "all" mantém o comportamento antigo (histórico completo, sem filtro de data). Sem isso os
   // cards de "Entradas/Saídas do período" somavam o histórico inteiro mesmo quando o rótulo
-  // dizia "do período" — nada aqui limitava por mês.
+  // dizia "do período". Nada aqui limitava por mês.
   const [periodMode, setPeriodMode] = useState("all");
   const [monthOffset, setMonthOffset] = useState(0);
   const [editingId, setEditingId] = useState(null);
@@ -104,6 +106,7 @@ export default function Relatorios() {
       status: statusFilter === "all" ? undefined : statusFilter,
       type: typeFilter === "all" ? undefined : typeFilter,
       search: search || undefined,
+      bankAccountId: effectiveAccountId,
       year: periodMode === "month" ? currentMonth.getUTCFullYear() : undefined,
       month: periodMode === "month" ? currentMonth.getUTCMonth() + 1 : undefined,
       sortBy: sort.key,
@@ -131,10 +134,10 @@ export default function Relatorios() {
       cancelled = true;
     };
     // loadReport não entra nas deps de propósito: ela fecha sobre os mesmos filtros já listados
-    // aqui, mas é uma função nova a cada render — listar ela faria o efeito rodar de novo em
+    // aqui, mas é uma função nova a cada render: listar ela faria o efeito rodar de novo em
     // qualquer render (ex.: ao editar um lançamento), não só quando um filtro muda de verdade.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, typeFilter, search, periodMode, currentMonth, sort, page]);
+  }, [statusFilter, typeFilter, search, effectiveAccountId, dataRefreshKey, periodMode, currentMonth, sort, page]);
 
   function startEdit(t) {
     const match = categories.find((c) => c.name === t.categoryName);

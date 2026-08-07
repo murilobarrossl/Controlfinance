@@ -7,11 +7,11 @@ using Npgsql;
 
 namespace ControlFinance.API.Services;
 
-// Trabalho pesado de puxar contas + transações da Polp e gravar no banco — extraído do
+// Trabalho pesado de puxar contas + transações da Polp e gravar no banco. Extraído do
 // PolpController pra poder rodar em background, fora do ciclo de vida da requisição HTTP que
 // disparou o sync. Uma chamada à Polp já levou de 800ms a 20s nos logs; somando várias contas e
 // páginas de transações, o sync inteiro passa fácil dos 30-60s que a maioria dos gateways
-// (Railway, DigitalOcean App Platform) tolera antes de devolver 504 — por isso o controller só
+// (Railway, DigitalOcean App Platform) tolera antes de devolver 504. Por isso o controller só
 // dispara esse serviço e responde na hora, sem esperar terminar.
 public class PolpSyncService(AppDbContext db, IPolpService polp)
 {
@@ -98,7 +98,7 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
         //
         // GroupBy + First em vez de ToDictionaryAsync: duas execuções concorrentes deste método
         // (ex.: dois syncs disparados ao mesmo tempo) podiam criar a mesma categoria em paralelo
-        // antes de qualquer uma commitar, gerando duas linhas com o mesmo Name — e ToDictionaryAsync
+        // antes de qualquer uma commitar, gerando duas linhas com o mesmo Name, e ToDictionaryAsync
         // estourava ArgumentException na segunda ocorrência, derrubando o sync inteiro. Fica com a
         // mais antiga de cada nome (critério consistente com a limpeza dos dados já existentes).
         // Caso normal (sem duplicata) dá o resultado idêntico de antes.
@@ -134,7 +134,7 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
             foreach (var rt in remoteTransactions)
             {
                 var polpTransactionId = rt.Id.ToString();
-                // A Polp já manda a direção explícita ("DEBIT"/"CREDIT") — usa ela em vez de
+                // A Polp já manda a direção explícita ("DEBIT"/"CREDIT"): usa ela em vez de
                 // inferir pelo sinal do valor. Pra conta corrente as duas coisas coincidiam, mas
                 // em cartão de crédito o sinal vinha invertido do que a gente assumia (compra
                 // normal virando "Receita", pagamento de fatura virando "Despesa"). Sinal só entra
@@ -156,7 +156,7 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
                     // pré-autorização de cartão que confirma com um valor final diferente, ou
                     // PENDING que vira PAID). Sem atualizar aqui, o valor exibido ficava congelado
                     // no que veio na primeira sincronização mesmo depois de o banco confirmar outro
-                    // valor — CategoryId/Name ficam de fora de propósito, pra não sobrescrever uma
+                    // valor. CategoryId/Name ficam de fora de propósito, pra não sobrescrever uma
                     // recategorização/renomeação feita manualmente no app.
                     existing.Amount = amount;
                     existing.Type = type;
@@ -211,18 +211,18 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
 
     // Cinza fixo que toda categoria criada automaticamente recebia antes desse ajuste (a Polp
     // quase sempre manda a cor da categoria, mas isso nunca era usado). Serve só pra identificar
-    // e corrigir categorias antigas presas nesse cinza — não é mais atribuído a categoria nova.
+    // e corrigir categorias antigas presas nesse cinza. Não é mais atribuído a categoria nova.
     private const string LegacyFallbackColor = "#999999";
 
     // Mesma paleta usada no fallback dos gráficos no frontend (frontend/src/components/charts/chartTheme.js,
-    // FALLBACK_COLORS) — mantém as duas em sincronia se uma mudar.
+    // FALLBACK_COLORS). Mantém as duas em sincronia se uma mudar.
     private static readonly string[] FallbackPalette =
     [
         "#ED4A31", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#B39DDB", "#F4A261"
     ];
 
     // Categoria de fallback pra quando a própria Polp não manda nenhuma categoria pra uma
-    // transação. Antes ficava CategoryId=null e a tela mostrava o texto "Sem categoria" — só que
+    // transação. Antes ficava CategoryId=null e a tela mostrava o texto "Sem categoria". Só que
     // isso não é uma categoria de verdade, então não dava pra editar/reatribuir. "Outros" é uma
     // Category normal (mesmo fluxo de criação/cor das demais), então o usuário pode renomeá-la ou
     // mover a transação pra outra categoria como qualquer outra.
