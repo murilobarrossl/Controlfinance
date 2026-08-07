@@ -44,12 +44,12 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
         if (!await db.Categories.AnyAsync(c => c.UserId == userId, ct))
         {
             db.Categories.AddRange(
-                new Category { UserId = userId, Name = "Alimentação", Color = "#FF6B6B" },
-                new Category { UserId = userId, Name = "Transporte",  Color = "#4ECDC4" },
-                new Category { UserId = userId, Name = "Salário",     Color = "#45B7D1" },
-                new Category { UserId = userId, Name = "Lazer",       Color = "#96CEB4" },
-                new Category { UserId = userId, Name = "Saúde",       Color = "#FFEAA7" },
-                new Category { UserId = userId, Name = "Outros",      Color = "#B39DDB" }
+                new Category { UserId = userId, Name = "Alimentação", Color = "#3987E5" },
+                new Category { UserId = userId, Name = "Transporte",  Color = "#D95926" },
+                new Category { UserId = userId, Name = "Salário",     Color = "#199E70" },
+                new Category { UserId = userId, Name = "Lazer",       Color = "#C98500" },
+                new Category { UserId = userId, Name = "Saúde",       Color = "#D55181" },
+                new Category { UserId = userId, Name = "Outros",      Color = "#008300" }
             );
             await db.SaveChangesAsync(ct);
         }
@@ -218,7 +218,7 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
     // FALLBACK_COLORS). Mantém as duas em sincronia se uma mudar.
     private static readonly string[] FallbackPalette =
     [
-        "#ED4A31", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#B39DDB", "#F4A261"
+        "#3987E5", "#D95926", "#199E70", "#C98500", "#D55181", "#008300", "#9085E9", "#E66767"
     ];
 
     // Categoria de fallback pra quando a própria Polp não manda nenhuma categoria pra uma

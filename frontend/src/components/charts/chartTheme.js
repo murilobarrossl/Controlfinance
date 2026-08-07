@@ -12,4 +12,13 @@ export const TOOLTIP_ITEM_STYLE = {
   color: "#ffffff",
 };
 
-export const FALLBACK_COLORS = ["#ED4A31", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#B39DDB", "#F4A261"];
+export const FALLBACK_COLORS = [
+  "#3987E5",
+  "#D95926",
+  "#199E70",
+  "#C98500",
+  "#D55181",
+  "#008300",
+  "#9085E9",
+  "#E66767",
+];
