@@ -105,7 +105,22 @@ builder.Services.AddCors(options =>
 // ──────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddHttpClient<IPolpService, PolpService>();
+// Plano com a Polp pode ficar sem renovar (credenciais ausentes do .env/appsettings) sem que isso
+// derrube a aplicação: sem essa checagem, PolpService.ctor lança assim que o ASP.NET tenta montar
+// PolpController pra QUALQUER ação dele, inclusive as que só leem do banco (ex.: listar contas já
+// sincronizadas pro seletor lateral). NullPolpService devolve listas vazias pras leituras e recusa
+// com uma mensagem clara as ações que exigiriam falar de verdade com a Polp (conectar banco novo,
+// sincronizar) — reversível: voltando a preencher as duas chaves, a integração real volta sozinha.
+var polpClientId = builder.Configuration["Polp:ClientId"];
+var polpClientSecret = builder.Configuration["Polp:ClientSecret"];
+if (!string.IsNullOrWhiteSpace(polpClientId) && !string.IsNullOrWhiteSpace(polpClientSecret))
+{
+    builder.Services.AddHttpClient<IPolpService, PolpService>();
+}
+else
+{
+    builder.Services.AddScoped<IPolpService, NullPolpService>();
+}
 builder.Services.AddSwaggerGen(c =>
 
 {

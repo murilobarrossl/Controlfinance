@@ -3,6 +3,7 @@ using System;
 using ControlFinance.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ControlFinance.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260808025205_DeletePolpSyncedData")]
+    partial class DeletePolpSyncedData
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -98,7 +101,7 @@ namespace ControlFinance.API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("BankAccounts", (string)null);
+                    b.ToTable("BankAccounts");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.Category", b =>
@@ -126,7 +129,7 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("UserId", "Name")
                         .IsUnique();
 
-                    b.ToTable("Categories", (string)null);
+                    b.ToTable("Categories");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.CreditCard", b =>
@@ -172,7 +175,7 @@ namespace ControlFinance.API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("CreditCards", (string)null);
+                    b.ToTable("CreditCards");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.Installment", b =>
@@ -223,7 +226,7 @@ namespace ControlFinance.API.Migrations
 
                     b.HasIndex("CreditCardId");
 
-                    b.ToTable("Installments", (string)null);
+                    b.ToTable("Installments");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.PolpIntegration", b =>
@@ -267,7 +270,7 @@ namespace ControlFinance.API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("PolpIntegrations", (string)null);
+                    b.ToTable("PolpIntegrations");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.RecurrenceDecision", b =>
@@ -309,7 +312,7 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("UserId", "BankAccountId", "NormalizedName")
                         .IsUnique();
 
-                    b.ToTable("RecurrenceDecisions", (string)null);
+                    b.ToTable("RecurrenceDecisions");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.RevokedToken", b =>
@@ -322,7 +325,7 @@ namespace ControlFinance.API.Migrations
 
                     b.HasKey("Jti");
 
-                    b.ToTable("RevokedTokens", (string)null);
+                    b.ToTable("RevokedTokens");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.Transaction", b =>
@@ -384,7 +387,7 @@ namespace ControlFinance.API.Migrations
 
                     b.HasIndex("UserId", "DueDate");
 
-                    b.ToTable("Transactions", (string)null);
+                    b.ToTable("Transactions");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.User", b =>
@@ -438,7 +441,7 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
@@ -457,7 +460,7 @@ namespace ControlFinance.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DataProtectionKeys", (string)null);
+                    b.ToTable("DataProtectionKeys");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.BankAccount", b =>
