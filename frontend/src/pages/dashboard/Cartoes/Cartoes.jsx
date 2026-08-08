@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { getCreditCardsSummary, createCreditCard, updateCreditCard } from "../../../api/creditCards.js";
+import { setBankAccountCardDetails } from "../../../api/bankAccounts.js";
 import { getInstallments } from "../../../api/installments.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
-import { useAccount } from "../../../context/AccountContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
@@ -13,22 +13,15 @@ import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/Cre
 import { formatCurrency, formatDate } from "../../../utils/financeMath.js";
 import "./Cartoes.css";
 
-const EMPTY_DETAIL_FORM = { key: null, brand: "", creditLimit: "", closingDay: "1", dueDay: "10" };
-const EMPTY_MANUAL_FORM = { name: "", brand: "", creditLimit: "", closingDay: "1", dueDay: "10", bankAccountId: "" };
+const EMPTY_DETAIL_FORM = { id: null, brand: "", creditLimit: "", closingDay: "1", dueDay: "10" };
+const EMPTY_MANUAL_FORM = { name: "", brand: "", creditLimit: "", closingDay: "1", dueDay: "10" };
 
-// Identifica cada item da lista unificada (RecognizedCardDto): uma conta reconhecida ainda sem
-// CreditCard usa o id da conta; com CreditCard (reconhecida ou 100% manual) usa o id do cartão.
-function cardKey(item) {
-  return item.bankAccountId ?? item.details?.card?.id;
-}
-
-// Só lê accounts do AccountContext (não selectedAccountId/effectiveAccountId): serve só pra
-// popular o formulário de cadastro manual (seção secundária, pra cartão não sincronizado). Os
-// dados principais da página (cartões reconhecidos, parcelamentos) são independentes de qual
-// conta está selecionada no seletor lateral.
+// Esta página não depende da conta selecionada no seletor lateral (useAccount()): cartões
+// reconhecidos (card.isSynced) já vêm prontos de getCreditCardsSummary(), independente de qual
+// conta está ativa no seletor — a mesma BankAccount aparece aqui sempre que for identificada como
+// cartão, sem relação com qual conta o usuário escolheu ver no Dashboard Inteligente.
 export default function Cartoes() {
   const { user } = useAuth();
-  const { accounts } = useAccount();
   const [cards, setCards] = useState([]);
   const [installments, setInstallments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,27 +45,21 @@ export default function Cartoes() {
     loadAll();
   }, []);
 
-  function openComplete(item) {
-    setDetailForm({ key: cardKey(item), brand: "", creditLimit: "", closingDay: "1", dueDay: "10" });
-  }
-
-  function openEdit(item) {
-    const c = item.details.card;
+  function openDetailForm(card) {
     setDetailForm({
-      key: cardKey(item),
-      brand: c.brand || "",
-      creditLimit: String(c.creditLimit),
-      closingDay: String(c.closingDay),
-      dueDay: String(c.dueDay),
+      id: card.id,
+      brand: card.brand || "",
+      creditLimit: card.creditLimit != null ? String(card.creditLimit) : "",
+      closingDay: card.closingDay != null ? String(card.closingDay) : "1",
+      dueDay: card.dueDay != null ? String(card.dueDay) : "10",
     });
   }
 
-  async function handleSubmitDetail(e, item) {
+  async function handleSubmitDetail(e, card) {
     e.preventDefault();
     if (!detailForm.creditLimit) return;
 
     const payload = {
-      brand: detailForm.brand || null,
       creditLimit: Math.max(0.01, Number(detailForm.creditLimit)),
       closingDay: Math.min(31, Math.max(1, Number(detailForm.closingDay) || 1)),
       dueDay: Math.min(31, Math.max(1, Number(detailForm.dueDay) || 1)),
@@ -80,10 +67,10 @@ export default function Cartoes() {
 
     setSaving(true);
     try {
-      if (item.hasDetails) {
-        await updateCreditCard(item.details.card.id, payload);
+      if (card.isSynced) {
+        await setBankAccountCardDetails(card.id, payload);
       } else {
-        await createCreditCard({ ...payload, name: item.bankAccountName, bankAccountId: item.bankAccountId });
+        await updateCreditCard(card.id, { ...payload, brand: detailForm.brand || null });
       }
       setDetailForm(EMPTY_DETAIL_FORM);
       await loadAll();
@@ -106,7 +93,6 @@ export default function Cartoes() {
         creditLimit: Math.max(0.01, Number(manualForm.creditLimit)),
         closingDay: Math.min(31, Math.max(1, Number(manualForm.closingDay) || 1)),
         dueDay: Math.min(31, Math.max(1, Number(manualForm.dueDay) || 1)),
-        bankAccountId: manualForm.bankAccountId || null,
       });
       setManualForm(EMPTY_MANUAL_FORM);
       await loadAll();
@@ -118,12 +104,6 @@ export default function Cartoes() {
   }
 
   if (loading) return <p className="cartoes__hint">Carregando...</p>;
-
-  // Contas já reconhecidas (aparecem em `cards`, com ou sem detalhes) saem da lista do cadastro
-  // manual: ou já têm um card automático acima, ou (se vinculadas via esse mesmo formulário) o
-  // backend rejeitaria uma 2ª vinculação de qualquer forma.
-  const linkedAccountIds = new Set(cards.map((c) => c.bankAccountId).filter(Boolean));
-  const availableAccounts = accounts.filter((a) => !linkedAccountIds.has(a.id));
 
   return (
     <div className="cartoes">
@@ -139,24 +119,23 @@ export default function Cartoes() {
           </p>
         ) : (
           <div className="cartoes__grid">
-            {cards.map((item) => {
-              const key = cardKey(item);
-              return (
-                <div key={key} className="cartoes__card-block">
-                  <CreditCardVisual
-                    recognized={item}
-                    cardholderName={user?.name}
-                    onComplete={!item.hasDetails ? () => openComplete(item) : undefined}
-                  />
+            {cards.map((card) => (
+              <div key={card.id} className="cartoes__card-block">
+                <CreditCardVisual
+                  card={card}
+                  cardholderName={user?.name}
+                  onCompleteFields={!card.hasFullDetails ? () => openDetailForm(card) : undefined}
+                />
 
-                  {item.hasDetails && detailForm.key !== key && (
-                    <button type="button" className="cartoes__edit-link" onClick={() => openEdit(item)}>
-                      Editar limite/fatura
-                    </button>
-                  )}
+                {card.hasFullDetails && detailForm.id !== card.id && (
+                  <button type="button" className="cartoes__edit-link" onClick={() => openDetailForm(card)}>
+                    Editar limite/fatura
+                  </button>
+                )}
 
-                  {detailForm.key === key && (
-                    <form className="cartoes__form" onSubmit={(e) => handleSubmitDetail(e, item)}>
+                {detailForm.id === card.id && (
+                  <form className="cartoes__form" onSubmit={(e) => handleSubmitDetail(e, card)}>
+                    {!card.isSynced && (
                       <label className="cartoes__field">
                         <span className="cartoes__field-label">Bandeira (opcional)</span>
                         <input
@@ -167,68 +146,65 @@ export default function Cartoes() {
                           onChange={(e) => setDetailForm({ ...detailForm, brand: e.target.value })}
                         />
                       </label>
-                      <label className="cartoes__field">
-                        <span className="cartoes__field-label">Limite de crédito</span>
-                        <CurrencyInput
-                          placeholder="Ex: 5000"
-                          value={detailForm.creditLimit}
-                          onChange={(e) => setDetailForm({ ...detailForm, creditLimit: e.target.value })}
-                          required
-                        />
-                      </label>
-                      <label className="cartoes__field">
-                        <span className="cartoes__field-label">Dia de fechamento</span>
-                        <input
-                          type="number"
-                          min="1"
-                          max="31"
-                          step="1"
-                          value={detailForm.closingDay}
-                          onChange={(e) => setDetailForm({ ...detailForm, closingDay: e.target.value })}
-                          required
-                        />
-                      </label>
-                      <label className="cartoes__field">
-                        <span className="cartoes__field-label">Dia de vencimento</span>
-                        <input
-                          type="number"
-                          min="1"
-                          max="31"
-                          step="1"
-                          value={detailForm.dueDay}
-                          onChange={(e) => setDetailForm({ ...detailForm, dueDay: e.target.value })}
-                          required
-                        />
-                      </label>
+                    )}
+                    <label className="cartoes__field">
+                      <span className="cartoes__field-label">Limite de crédito</span>
+                      <CurrencyInput
+                        placeholder="Ex: 5000"
+                        value={detailForm.creditLimit}
+                        onChange={(e) => setDetailForm({ ...detailForm, creditLimit: e.target.value })}
+                        required
+                      />
+                    </label>
+                    <label className="cartoes__field">
+                      <span className="cartoes__field-label">Dia de fechamento</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="31"
+                        step="1"
+                        value={detailForm.closingDay}
+                        onChange={(e) => setDetailForm({ ...detailForm, closingDay: e.target.value })}
+                        required
+                      />
+                    </label>
+                    <label className="cartoes__field">
+                      <span className="cartoes__field-label">Dia de vencimento</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="31"
+                        step="1"
+                        value={detailForm.dueDay}
+                        onChange={(e) => setDetailForm({ ...detailForm, dueDay: e.target.value })}
+                        required
+                      />
+                    </label>
 
-                      <div className="cartoes__form-actions">
-                        <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
-                          {saving ? "Salvando..." : "Salvar"}
-                        </Button>
-                        <Button
-                          as="button"
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setDetailForm(EMPTY_DETAIL_FORM)}
-                        >
-                          Cancelar
-                        </Button>
-                      </div>
-                    </form>
-                  )}
-                </div>
-              );
-            })}
+                    <div className="cartoes__form-actions">
+                      <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
+                        {saving ? "Salvando..." : "Salvar"}
+                      </Button>
+                      <Button
+                        as="button"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDetailForm(EMPTY_DETAIL_FORM)}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </Card>
 
       <Card title="Cadastrar cartão não sincronizado">
-        <p className="cartoes__hint">
-          Pra um cartão que não veio de nenhum banco conectado (ou que a sincronização ainda não
-          reconheceu automaticamente).
-        </p>
+        <p className="cartoes__hint">Pra um cartão que não veio de nenhum banco conectado.</p>
         <form className="cartoes__form" onSubmit={handleCreateManualCard}>
           <label className="cartoes__field">
             <span className="cartoes__field-label">Nome</span>
@@ -284,20 +260,6 @@ export default function Cartoes() {
               required
             />
           </label>
-          <label className="cartoes__field">
-            <span className="cartoes__field-label">Conta vinculada (opcional)</span>
-            <select
-              value={manualForm.bankAccountId}
-              onChange={(e) => setManualForm({ ...manualForm, bankAccountId: e.target.value })}
-            >
-              <option value="">Nenhuma (só cadastro manual)</option>
-              {availableAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </label>
 
           <div className="cartoes__form-actions">
             <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
@@ -338,11 +300,12 @@ export default function Cartoes() {
         <p className="cartoes__hint">
           Cartões reconhecidos automaticamente (pela sua conta sincronizada) já têm extrato real
           disponível: selecione essa conta no seletor do cabeçalho e veja transações/categorias em
-          Relatórios ou Categorias. Limite, fechamento e vencimento continuam vindo de cadastro
-          manual — a Polp não expõe esses dados hoje. Um relatório de gastos por categoria dentro do
-          próprio cartão ainda não é possível de forma confiável (falta vínculo entre lançamentos e
-          cartão no sistema) — é um ponto de integração pra evoluir mais adiante, não algo que esta
-          tela tenta simular.
+          Relatórios ou Categorias. Limite, fechamento, vencimento e fatura tentam vir direto da
+          Polp; quando ela não manda algum desses dados pra um banco específico, só o que faltar
+          pede preenchimento manual aqui. Um relatório de gastos por categoria dentro do próprio
+          cartão ainda não é possível de forma confiável (falta vínculo entre lançamentos e cartão
+          no sistema) — é um ponto de integração pra evoluir mais adiante, não algo que esta tela
+          tenta simular.
         </p>
       </Card>
     </div>

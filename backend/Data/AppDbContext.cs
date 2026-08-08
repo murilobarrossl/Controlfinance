@@ -45,6 +45,13 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             v => _encryption.EncryptDecimal(v),
             v => _encryption.DecryptDecimal(v));
 
+        // Nula-segura, mesmo motivo do nullableTextConverter: os campos de cartão em BankAccount
+        // (CreditLimit/UsedLimit/CurrentInvoiceAmount) só existem quando a Polp manda esse dado
+        // (ou o usuário completa manualmente) — a maioria das contas nunca vai ter valor aqui.
+        var nullableDecimalConverter = new ValueConverter<decimal?, string?>(
+            v => v == null ? null : _encryption.EncryptDecimal(v.Value),
+            v => v == null ? null : _encryption.DecryptDecimal(v));
+
         modelBuilder.Entity<User>(e =>
         {
             e.HasKey(u => u.Id);
@@ -72,6 +79,12 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             // conversor de User.Document. PolpAccountType/Subtype são só rótulos categóricos
             // ("BANK", "CREDIT"), ficam em texto puro, mesmo tratamento de BankCode.
             e.Property(b => b.Number).HasConversion(nullableTextConverter).HasColumnName("NumberEncrypted");
+            // Campos de cartão (só preenchidos quando esta conta é reconhecida como cartão de
+            // crédito): CreditLimit/UsedLimit/CurrentInvoiceAmount são valor monetário, mesmo
+            // tratamento de Balance. ClosingDay/DueDay/InvoiceDueDate não são segredo, texto puro.
+            e.Property(b => b.CreditLimit).HasConversion(nullableDecimalConverter).HasColumnName("CreditLimitEncrypted");
+            e.Property(b => b.UsedLimit).HasConversion(nullableDecimalConverter).HasColumnName("UsedLimitEncrypted");
+            e.Property(b => b.CurrentInvoiceAmount).HasConversion(nullableDecimalConverter).HasColumnName("CurrentInvoiceAmountEncrypted");
             e.HasOne(b => b.User)
              .WithMany()
              .HasForeignKey(b => b.UserId)
@@ -133,16 +146,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
              .WithMany()
              .HasForeignKey(c => c.UserId)
              .OnDelete(DeleteBehavior.Cascade);
-
-            // SetNull (não Cascade): desconectar a conta na Polp não pode apagar o cadastro
-            // manual do cartão (limite/fatura/parcelas), só desfazer o vínculo entre os dois.
-            // Índice único: Postgres trata cada NULL como distinto, então isso só impede duas
-            // CreditCard apontarem pra mesma BankAccount — várias sem vínculo nenhum continuam ok.
-            e.HasOne(c => c.BankAccount)
-             .WithMany()
-             .HasForeignKey(c => c.BankAccountId)
-             .OnDelete(DeleteBehavior.SetNull);
-            e.HasIndex(c => c.BankAccountId).IsUnique();
         });
 
         modelBuilder.Entity<Installment>(e =>
@@ -154,6 +157,10 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasOne(i => i.CreditCard)
              .WithMany(c => c.Installments)
              .HasForeignKey(i => i.CreditCardId)
+             .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(i => i.BankAccount)
+             .WithMany()
+             .HasForeignKey(i => i.BankAccountId)
              .OnDelete(DeleteBehavior.SetNull);
         });
 

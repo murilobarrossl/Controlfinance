@@ -6,7 +6,7 @@ import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.js
 import { getCategories } from "../../../api/categories.js";
 import { getTransactions, createTransaction, deleteTransaction, setTransactionFixed } from "../../../api/transactions.js";
 import { getInstallments, createInstallment, deleteInstallment } from "../../../api/installments.js";
-import { getCreditCards } from "../../../api/creditCards.js";
+import { getCreditCardsSummary } from "../../../api/creditCards.js";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import { getReserve, addToReserve, removeFromReserve, clearReserve } from "../../../utils/emergencyReserveStorage.js";
 import { formatCurrency } from "../../../utils/financeMath.js";
@@ -20,7 +20,10 @@ const EMPTY_INSTALLMENT_FORM = {
   currentInstallment: "1",
   installmentAmount: "",
   nextDueDate: todayIso(),
-  creditCardId: "",
+  // Codifica tipo+id num valor só de <select> ("synced:<bankAccountId>" ou "manual:<creditCardId>")
+  // pra dropdown misturar cartão reconhecido (BankAccount) e cartão manual (CreditCard) numa lista
+  // só, já que agora são duas fontes diferentes.
+  cardKey: "",
 };
 
 function todayIso() {
@@ -36,7 +39,7 @@ export default function Orcamento() {
   const [categories, setCategories] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [installments, setInstallments] = useState([]);
-  const [creditCards, setCreditCards] = useState([]);
+  const [cards, setCards] = useState([]);
   const [reserve, setReserve] = useState(() => getReserve());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -54,13 +57,13 @@ export default function Orcamento() {
       getCategories(),
       getTransactions({ bankAccountId: effectiveAccountId }),
       getInstallments(),
-      getCreditCards(),
+      getCreditCardsSummary(),
     ])
-      .then(([categoriesData, transactionsData, installmentsData, creditCardsData]) => {
+      .then(([categoriesData, transactionsData, installmentsData, cardsData]) => {
         setCategories(categoriesData);
         setTransactions(transactionsData);
         setInstallments(installmentsData);
-        setCreditCards(creditCardsData);
+        setCards(cardsData);
       })
       .catch((err) => setError(err.message || "Não foi possível carregar o orçamento."))
       .finally(() => setLoading(false));
@@ -151,13 +154,16 @@ export default function Orcamento() {
 
   async function handleCreateInstallment(e) {
     e.preventDefault();
-    const { description, totalAmount, totalInstallments: totalCount, currentInstallment, installmentAmount, nextDueDate, creditCardId } =
+    const { description, totalAmount, totalInstallments: totalCount, currentInstallment, installmentAmount, nextDueDate, cardKey } =
       installmentForm;
     if (!description || !totalAmount || !installmentAmount) return;
 
+    const [cardType, cardId] = cardKey ? cardKey.split(":") : [null, null];
+
     try {
       await createInstallment({
-        creditCardId: creditCardId || null,
+        creditCardId: cardType === "manual" ? cardId : null,
+        bankAccountId: cardType === "synced" ? cardId : null,
         description,
         totalAmount: Math.max(0.01, Number(totalAmount)),
         totalInstallments: Math.max(1, Number(totalCount)),
@@ -406,12 +412,12 @@ export default function Orcamento() {
             <label className="orcamento__field">
               <span className="orcamento__field-label">Cartão (opcional)</span>
               <select
-                value={installmentForm.creditCardId}
-                onChange={(e) => setInstallmentForm({ ...installmentForm, creditCardId: e.target.value })}
+                value={installmentForm.cardKey}
+                onChange={(e) => setInstallmentForm({ ...installmentForm, cardKey: e.target.value })}
               >
                 <option value="">Sem cartão</option>
-                {creditCards.map((c) => (
-                  <option key={c.id} value={c.id}>
+                {cards.map((c) => (
+                  <option key={c.id} value={`${c.isSynced ? "synced" : "manual"}:${c.id}`}>
                     {c.name}
                   </option>
                 ))}

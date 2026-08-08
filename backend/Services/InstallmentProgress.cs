@@ -31,11 +31,14 @@ public static class InstallmentProgress
             {
                 // Todas as parcelas restantes já venceram: quitado. Libera o limite do cartão
                 // (mesma conta usada em InstallmentsController.Delete) e remove a linha.
-                if (installment.CreditCard is not null)
+                if (installment.CreditCard is not null || installment.BankAccount is { UsedLimit: not null })
                 {
                     var remaining = installment.TotalInstallments - installment.CurrentInstallment + 1;
                     var committed = installment.InstallmentAmount * remaining;
-                    installment.CreditCard.UsedLimit = Math.Max(0, installment.CreditCard.UsedLimit - committed);
+                    if (installment.CreditCard is not null)
+                        installment.CreditCard.UsedLimit = Math.Max(0, installment.CreditCard.UsedLimit - committed);
+                    if (installment.BankAccount is { UsedLimit: not null } account)
+                        account.UsedLimit = Math.Max(0, account.UsedLimit.Value - committed);
                 }
                 db.Installments.Remove(installment);
                 changed = true;

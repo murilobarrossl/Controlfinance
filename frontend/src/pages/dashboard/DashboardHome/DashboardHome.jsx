@@ -171,7 +171,7 @@ export default function DashboardHome() {
   // A conta selecionada agora é a mesma que o sistema reconheceu automaticamente como cartão
   // (ver CreditCardAccountDetector) — fecha o ciclo apontando de volta pra Cartões, já que
   // fatura/limite/parcelas dessa conta só aparecem naquela tela.
-  const isActiveAccountLinkedCard = activeCard?.bankAccountId === activeAccount.id;
+  const isActiveAccountLinkedCard = activeCard?.isSynced && activeCard.id === activeAccount.id;
 
   return (
     <div className="dashboard-home">
@@ -298,7 +298,7 @@ export default function DashboardHome() {
         {activeCard && (
           <Card title="Seu cartão">
             <CreditCardVisual
-              recognized={activeCard}
+              card={activeCard}
               cardholderName={user?.name}
               onClick={() => setCardConfirmOpen(true)}
             />

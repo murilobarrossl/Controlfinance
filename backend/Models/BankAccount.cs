@@ -38,5 +38,17 @@ public class BankAccount
     /// sensível, criptografado como NumberEncrypted. Antes era descartado na sincronização.</summary>
     public string? Number { get; set; }
 
+    /// <summary>Só fazem sentido quando esta conta é reconhecida como cartão de crédito
+    /// (CreditCardAccountDetector). Vêm de PolpService.GetCreditCardsAsync/GetBillsAsync quando a
+    /// Polp expõe esses dados pra esse banco; nulos até lá (a UI de Cartões pede pra completar só
+    /// o que faltar). Nenhuma tabela separada representa o cartão — é esta mesma BankAccount.</summary>
+    public string? Brand { get; set; }
+    public decimal? CreditLimit { get; set; }
+    public decimal? UsedLimit { get; set; }
+    public int? ClosingDay { get; set; }
+    public int? DueDay { get; set; }
+    public decimal? CurrentInvoiceAmount { get; set; }
+    public DateTime? InvoiceDueDate { get; set; }
+
     public ICollection<Transaction> Transactions { get; set; } = [];
 }

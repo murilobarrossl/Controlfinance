@@ -98,6 +98,69 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
 
         await db.SaveChangesAsync(ct);
 
+        // Pra cada conta já reconhecida como cartão (CreditCardAccountDetector), busca limite/dia
+        // de fechamento/vencimento (endpoint /credit-cards) e a fatura atual (endpoint /bills,
+        // aninhado no cartão). Uma integração sem cartão nenhum, ou uma falha pontual na Polp, não
+        // pode travar o resto do sync — só essa parte fica sem dado, os campos continuam null e a
+        // UI pede pra completar manualmente (ver CreditCardsController/BankAccountsController).
+        var cardAccounts = createdAccounts.Where(CreditCardAccountDetector.LooksLikeCreditCard).ToList();
+        if (cardAccounts.Count > 0)
+        {
+            List<PolpCreditCardDto> remoteCreditCards;
+            try
+            {
+                remoteCreditCards = await polp.GetCreditCardsAsync(local.PolpIntegrationId, ct);
+            }
+            catch (HttpRequestException)
+            {
+                remoteCreditCards = [];
+            }
+
+            foreach (var account in cardAccounts)
+            {
+                // AccountId é o campo que deveria cruzar de volta pro id de /accounts, mas o schema
+                // ainda não está confirmado — cai pro próprio Id do cartão como segunda tentativa.
+                var remoteCard = remoteCreditCards.FirstOrDefault(c => c.AccountId == account.PolpAccountId)
+                    ?? remoteCreditCards.FirstOrDefault(c => c.Id == account.PolpAccountId);
+                if (remoteCard is null) continue;
+
+                account.Brand = remoteCard.BrandName;
+                account.CreditLimit = remoteCard.CreditLimit;
+                account.UsedLimit = remoteCard.UsedCreditLimit
+                    ?? (remoteCard.CreditLimit.HasValue && remoteCard.AvailableCreditLimit.HasValue
+                        ? remoteCard.CreditLimit - remoteCard.AvailableCreditLimit
+                        : null);
+                account.ClosingDay = remoteCard.CloseDay;
+                account.DueDay = remoteCard.DueDay;
+
+                try
+                {
+                    var bills = await polp.GetBillsAsync(remoteCard.Id, ct);
+                    // Fatura "atual" = a de vencimento mais próximo que ainda não passou; se todas
+                    // já venceram (ou não vier nenhuma), cai pra mais recente disponível.
+                    var today = DateTime.UtcNow.Date;
+                    var parsedBills = bills
+                        .Select(b => (bill: b, dueDate: ParseDateAsUtc(b.DueDate)))
+                        .OrderBy(x => x.dueDate)
+                        .ToList();
+                    var current = parsedBills.FirstOrDefault(x => x.dueDate.Date >= today);
+                    if (current.bill is null && parsedBills.Count > 0) current = parsedBills[^1];
+
+                    if (current.bill is not null)
+                    {
+                        account.CurrentInvoiceAmount = current.bill.TotalAmount;
+                        account.InvoiceDueDate = current.dueDate;
+                    }
+                }
+                catch (HttpRequestException)
+                {
+                    // segue sem fatura; limite/dias já foram gravados acima mesmo assim
+                }
+            }
+
+            await db.SaveChangesAsync(ct);
+        }
+
         // Categorias do usuário carregadas uma única vez (entidade completa, não só o id: precisa
         // pra poder corrigir a cor de categorias antigas presas no cinza legado); novas categorias
         // entram no mesmo dicionário conforme são criadas, sem round-trip ao banco por transação.

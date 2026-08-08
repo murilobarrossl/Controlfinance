@@ -90,6 +90,24 @@ public class BankAccountsController(AppDbContext db) : ApiControllerBase
         return Ok(new BankAccountDto(account.Id, account.Name, account.BankCode, account.Balance, account.IsActive, account.Ownership.ToString()));
     }
 
+    // Só completa campos de cartão que a Polp não mandou (ficaram null) — nunca sobrescreve um
+    // valor que já veio real da sincronização. Pra uma conta que a Polp não reconheceu como
+    // cartão, esses campos continuam sem uso nenhum, mas nada impede de gravar (ex.: uma conta
+    // que a heurística de tipo ainda não pegou).
+    [HttpPut("{id}/card-details")]
+    public async Task<IActionResult> SetCardDetails(Guid id, [FromBody] UpdateBankAccountCardDetailsDto dto)
+    {
+        var account = await db.BankAccounts.FirstOrDefaultAsync(b => b.Id == id && b.UserId == UserId && b.IsActive);
+        if (account is null) return NotFound();
+
+        if (!account.CreditLimit.HasValue) account.CreditLimit = dto.CreditLimit;
+        if (!account.ClosingDay.HasValue) account.ClosingDay = dto.ClosingDay;
+        if (!account.DueDay.HasValue) account.DueDay = dto.DueDay;
+
+        await db.SaveChangesAsync();
+        return Ok(await CreditCardSummaryBuilder.BuildRecognizedListAsync(db, UserId));
+    }
+
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {

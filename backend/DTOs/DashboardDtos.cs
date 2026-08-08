@@ -94,18 +94,15 @@ public record TransactionDto(
             : status.ToString();
 }
 
-// ── CREDIT CARD ───────────────────────────────────────
+// ── CREDIT CARD (só cartão 100% manual — não sincronizado por nenhum banco) ────
 public record CreateCreditCardDto(
     [Required(ErrorMessage = "Nome é obrigatório."), MaxLength(80)] string Name,
     [MaxLength(50)] string? Brand,
     [Range(0, double.MaxValue, ErrorMessage = "Limite não pode ser negativo.")] decimal CreditLimit,
     [Range(1, 31, ErrorMessage = "Dia de fechamento deve ser entre 1 e 31.")] int ClosingDay,
-    [Range(1, 31, ErrorMessage = "Dia de vencimento deve ser entre 1 e 31.")] int DueDay,
-    Guid? BankAccountId = null
+    [Range(1, 31, ErrorMessage = "Dia de vencimento deve ser entre 1 e 31.")] int DueDay
 );
 
-// BankAccountId e Name ficam de fora de propósito: o vínculo com a conta e o nome (quando vêm de
-// uma conta reconhecida da Polp) não são editáveis à mão, só os campos que a Polp não manda.
 public record UpdateCreditCardDto(
     [MaxLength(50)] string? Brand,
     [Range(0, double.MaxValue, ErrorMessage = "Limite não pode ser negativo.")] decimal CreditLimit,
@@ -121,23 +118,31 @@ public record CreditCardDto(
     decimal UsedLimit,
     decimal AvailableLimit,
     int ClosingDay,
-    int DueDay,
-    Guid? BankAccountId,
-    string? BankAccountName
+    int DueDay
 )
 {
     public static CreditCardDto FromEntity(CreditCard c) => new(
         c.Id, c.Name, c.Brand,
         c.CreditLimit, c.UsedLimit,
         c.CreditLimit - c.UsedLimit,
-        c.ClosingDay, c.DueDay,
-        c.BankAccountId, c.BankAccount?.Name
+        c.ClosingDay, c.DueDay
     );
 }
 
+// Só os campos que a Polp não mandou (ver BankAccountsController.SetCardDetails). Não edita
+// nome/número/limite já vindos da Polp — só completa o que estiver null.
+public record UpdateBankAccountCardDetailsDto(
+    [Range(0, double.MaxValue, ErrorMessage = "Limite não pode ser negativo.")] decimal? CreditLimit,
+    [Range(1, 31, ErrorMessage = "Dia de fechamento deve ser entre 1 e 31.")] int? ClosingDay,
+    [Range(1, 31, ErrorMessage = "Dia de vencimento deve ser entre 1 e 31.")] int? DueDay
+);
+
 // ── INSTALLMENT ───────────────────────────────────────
+// CreditCardId (cartão manual) e BankAccountId (conta reconhecida como cartão) são mutuamente
+// exclusivos — o formulário manda um ou outro, nunca os dois.
 public record CreateInstallmentDto(
     Guid? CreditCardId,
+    Guid? BankAccountId,
     [Required(ErrorMessage = "Descrição é obrigatória."), MaxLength(150)] string Description,
     [Range(0.01, double.MaxValue, ErrorMessage = "Valor total deve ser maior que zero.")] decimal TotalAmount,
     [Range(1, int.MaxValue, ErrorMessage = "Total de parcelas deve ser maior que zero.")] int TotalInstallments,
@@ -159,7 +164,7 @@ public record InstallmentDto(
     public static InstallmentDto FromEntity(Installment i) => new(
         i.Id, i.Description, i.InstallmentAmount,
         i.CurrentInstallment, i.TotalInstallments, i.NextDueDate,
-        i.CreditCard?.Name
+        i.CreditCard?.Name ?? i.BankAccount?.Name
     );
 }
 
@@ -175,21 +180,22 @@ public record DashboardSummaryDto(
 
 public record CategoryExpenseDto(string CategoryName, decimal Amount, decimal Percentage);
 
-public record CreditCardDashboardDto(
-    CreditCardDto Card,
-    decimal CurrentInvoice,
-    DateTime InvoiceDueDate,
-    IEnumerable<InstallmentDto> Installments
-);
-
-// Um cartão "reconhecido": pode vir de uma BankAccount sincronizada da Polp identificada como
-// cartão (CreditCardAccountDetector) — com ou sem CreditCard (limite/fatura) cadastrado ainda —
-// ou de um CreditCard 100% manual, sem nenhuma conta vinculada. HasDetails=false é o estado
-// "reconhecemos a conta, faltam os dados que a Polp não manda".
+// Um cartão "reconhecido": IsSynced=true vem de uma BankAccount identificada como cartão pela
+// Polp (CreditCardAccountDetector) — sem entidade separada, é a própria conta. IsSynced=false vem
+// de um CreditCard 100% manual. HasFullDetails=false é o estado "reconhecemos o cartão, faltam os
+// campos que a Polp não mandou pra esse banco" — a UI pede só o que estiver null.
 public record RecognizedCardDto(
-    Guid? BankAccountId,
-    string? BankAccountName,
+    Guid Id,
+    bool IsSynced,
+    string Name,
+    string? Brand,
     string? Number,
-    bool HasDetails,
-    CreditCardDashboardDto? Details
+    decimal? CreditLimit,
+    decimal? UsedLimit,
+    int? ClosingDay,
+    int? DueDay,
+    decimal? CurrentInvoice,
+    DateTime? InvoiceDueDate,
+    bool HasFullDetails,
+    IEnumerable<InstallmentDto> Installments
 );

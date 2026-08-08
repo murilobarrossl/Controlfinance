@@ -80,6 +80,33 @@ public class PolpAccountDto
     [JsonPropertyName("owner")] public string? Owner { get; set; }
 }
 
+// Schema ainda não confirmado (documentação da Polp não ficou acessível pra conferir os nomes de
+// campo exatos) — nomes abaixo são o melhor palpite (convenção Open Finance Brasil / mesmo estilo
+// snake_case já usado em PolpAccountDto). Tudo nullable de propósito: um campo que não bater com o
+// nome real simplesmente fica null em vez de quebrar a desserialização. O log cru em
+// GetCreditCardsAsync/GetBillsAsync serve pra confirmar/corrigir isso depois do primeiro sync real.
+public class PolpCreditCardDto
+{
+    [JsonPropertyName("id")] public int Id { get; set; }
+    [JsonPropertyName("account_id")] public int? AccountId { get; set; }
+    [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("brand_name")] public string? BrandName { get; set; }
+    [JsonPropertyName("credit_limit")] public decimal? CreditLimit { get; set; }
+    [JsonPropertyName("available_credit_limit")] public decimal? AvailableCreditLimit { get; set; }
+    [JsonPropertyName("used_credit_limit")] public decimal? UsedCreditLimit { get; set; }
+    [JsonPropertyName("close_day")] public int? CloseDay { get; set; }
+    [JsonPropertyName("due_day")] public int? DueDay { get; set; }
+}
+
+public class PolpBillDto
+{
+    [JsonPropertyName("id")] public int Id { get; set; }
+    [JsonPropertyName("due_date")] public string? DueDate { get; set; }
+    [JsonPropertyName("total_amount")] public decimal? TotalAmount { get; set; }
+    [JsonPropertyName("minimum_amount")] public decimal? MinimumAmount { get; set; }
+    [JsonPropertyName("status")] public string? Status { get; set; }
+}
+
 public class PolpTransactionDto
 {
     [JsonPropertyName("id")] public int Id { get; set; }
@@ -133,6 +160,8 @@ public interface IPolpService
     Task<PolpIntegrationDto> GetIntegrationAsync(int integrationId, CancellationToken ct = default);
     Task<List<PolpAccountDto>> GetAccountsAsync(int integrationId, CancellationToken ct = default);
     Task<List<PolpTransactionDto>> GetTransactionsAsync(int accountId, CancellationToken ct = default);
+    Task<List<PolpCreditCardDto>> GetCreditCardsAsync(int integrationId, CancellationToken ct = default);
+    Task<List<PolpBillDto>> GetBillsAsync(int creditCardId, CancellationToken ct = default);
 }
 
 public class PolpService : IPolpService
@@ -229,6 +258,36 @@ public class PolpService : IPolpService
         _logger.LogInformation("=== POLP RAW CARD JSON (accounts, integrationId={IntegrationId}) === {RawJson}", integrationId, rawJson);
 
         var envelope = JsonSerializer.Deserialize<PolpListEnvelope<PolpAccountDto>>(rawJson, JsonOptions);
+        return envelope?.Data ?? [];
+    }
+
+    // Nomes de campo em PolpCreditCardDto ainda não confirmados contra um payload real — por isso
+    // o mesmo log cru dos outros endpoints TEMP. Uma integração sem cartão nenhum (ou que a Polp
+    // não exponha esse recurso pra aquele banco) pode voltar 404/lista vazia; ver PolpSyncService.
+    public async Task<List<PolpCreditCardDto>> GetCreditCardsAsync(int integrationId, CancellationToken ct = default)
+    {
+        var resp = await _http.GetAsync($"integrations/{integrationId}/credit-cards", ct);
+        await EnsureSuccess(resp, "listar cartões de crédito");
+
+        // TEMP: mesmo motivo do bloco de /accounts acima — schema ainda não confirmado.
+        // REMOVER esse bloco (as 2 linhas de log) depois do diagnóstico.
+        var rawJson = await resp.Content.ReadAsStringAsync(ct);
+        _logger.LogInformation("=== POLP RAW CARD JSON (credit-cards, integrationId={IntegrationId}) === {RawJson}", integrationId, rawJson);
+
+        var envelope = JsonSerializer.Deserialize<PolpListEnvelope<PolpCreditCardDto>>(rawJson, JsonOptions);
+        return envelope?.Data ?? [];
+    }
+
+    public async Task<List<PolpBillDto>> GetBillsAsync(int creditCardId, CancellationToken ct = default)
+    {
+        var resp = await _http.GetAsync($"credit-cards/{creditCardId}/bills", ct);
+        await EnsureSuccess(resp, "listar faturas do cartão");
+
+        // TEMP: mesmo motivo dos blocos acima. REMOVER junto com os outros depois do diagnóstico.
+        var rawJson = await resp.Content.ReadAsStringAsync(ct);
+        _logger.LogInformation("=== POLP RAW CARD JSON (bills, creditCardId={CreditCardId}) === {RawJson}", creditCardId, rawJson);
+
+        var envelope = JsonSerializer.Deserialize<PolpListEnvelope<PolpBillDto>>(rawJson, JsonOptions);
         return envelope?.Data ?? [];
     }
 
