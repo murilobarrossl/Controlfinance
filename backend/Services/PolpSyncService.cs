@@ -71,6 +71,9 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
             if (existingAccounts.TryGetValue(remoteAccount.Id, out var account))
             {
                 account.Balance = remoteAccount.Balance;
+                account.PolpAccountType = remoteAccount.Type;
+                account.PolpAccountSubtype = remoteAccount.Subtype;
+                account.Number = remoteAccount.Number;
             }
             else
             {
@@ -82,7 +85,10 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
                     PolpAccountId = remoteAccount.Id,
                     PolpIntegrationId = local.PolpIntegrationId,
                     Balance = remoteAccount.Balance,
-                    Ownership = AccountOwnershipDefault.FromDocument(ownerDocument)
+                    Ownership = AccountOwnershipDefault.FromDocument(ownerDocument),
+                    PolpAccountType = remoteAccount.Type,
+                    PolpAccountSubtype = remoteAccount.Subtype,
+                    Number = remoteAccount.Number
                 };
                 db.BankAccounts.Add(account);
             }

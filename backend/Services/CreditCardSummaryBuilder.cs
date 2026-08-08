@@ -1,6 +1,7 @@
 using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
 using ControlFinance.API.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace ControlFinance.API.Services;
 
@@ -32,5 +33,44 @@ public static class CreditCardSummaryBuilder
             .ToList();
 
         return new CreditCardDashboardDto(cardInfo, currentInvoice, dueDate, installments);
+    }
+
+    // Lista unificada de "cartões reconhecidos" de um usuário: contas da Polp identificadas como
+    // cartão (CreditCardAccountDetector), com ou sem CreditCard cadastrado ainda, seguidas dos
+    // CreditCard 100% manuais (sem nenhuma conta vinculada). Reaproveitada por
+    // CreditCardsController.GetSummary (lista completa) e DashboardController (pega o primeiro).
+    public static async Task<List<RecognizedCardDto>> BuildRecognizedListAsync(
+        AppDbContext db, Guid userId, CancellationToken ct = default)
+    {
+        var accounts = await db.BankAccounts
+            .Where(a => a.UserId == userId && a.IsActive)
+            .OrderBy(a => a.CreatedAt)
+            .ToListAsync(ct);
+        var cardAccounts = accounts.Where(CreditCardAccountDetector.LooksLikeCreditCard).ToList();
+
+        var creditCards = await db.CreditCards
+            .Include(c => c.Installments)
+            .Include(c => c.BankAccount)
+            .Where(c => c.UserId == userId && c.IsActive)
+            .OrderBy(c => c.CreatedAt)
+            .ToListAsync(ct);
+
+        var result = new List<RecognizedCardDto>();
+
+        foreach (var account in cardAccounts)
+        {
+            var linked = creditCards.FirstOrDefault(c => c.BankAccountId == account.Id);
+            result.Add(new RecognizedCardDto(
+                account.Id, account.Name, account.Number,
+                HasDetails: linked is not null,
+                Details: linked is not null ? await BuildAsync(db, linked, ct) : null));
+        }
+
+        var cardAccountIds = cardAccounts.Select(a => a.Id).ToHashSet();
+        var manualCards = creditCards.Where(c => c.BankAccountId is null || !cardAccountIds.Contains(c.BankAccountId.Value));
+        foreach (var manual in manualCards)
+            result.Add(new RecognizedCardDto(null, null, null, true, await BuildAsync(db, manual, ct)));
+
+        return result;
     }
 }

@@ -27,24 +27,12 @@ public class CreditCardsController(AppDbContext db) : ApiControllerBase
         return Ok(cards.Select(CreditCardDto.FromEntity));
     }
 
-    // Fatura/vencimento/parcelas ativas de cada cartão do usuário (não só o primeiro, como o
-    // resumo do Dashboard Inteligente usa) — alimenta a área de Cartões, que lista todos.
+    // Cartões reconhecidos do usuário: contas da Polp identificadas como cartão (com ou sem
+    // limite/fatura cadastrado ainda) + cartões 100% manuais — alimenta a área de Cartões, que
+    // lista todos. Ver CreditCardSummaryBuilder.BuildRecognizedListAsync.
     [HttpGet("summary")]
-    public async Task<IActionResult> GetSummary(CancellationToken ct)
-    {
-        var cards = await db.CreditCards
-            .Include(c => c.Installments)
-            .Include(c => c.BankAccount)
-            .Where(c => c.UserId == UserId && c.IsActive)
-            .OrderBy(c => c.CreatedAt)
-            .ToListAsync(ct);
-
-        var result = new List<CreditCardDashboardDto>();
-        foreach (var card in cards)
-            result.Add(await CreditCardSummaryBuilder.BuildAsync(db, card, ct));
-
-        return Ok(result);
-    }
+    public async Task<IActionResult> GetSummary(CancellationToken ct) =>
+        Ok(await CreditCardSummaryBuilder.BuildRecognizedListAsync(db, UserId, ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCreditCardDto dto)
@@ -80,6 +68,26 @@ public class CreditCardsController(AppDbContext db) : ApiControllerBase
         if (card.BankAccountId.HasValue) await db.Entry(card).Reference(c => c.BankAccount).LoadAsync();
 
         return CreatedAtAction(nameof(GetAll), new { id = card.Id }, CreditCardDto.FromEntity(card));
+    }
+
+    // Name e BankAccountId não são editáveis aqui de propósito: quando o cartão vem de uma conta
+    // reconhecida da Polp, a identidade (nome/vínculo) é real e não deve ser sobrescrita à mão —
+    // só os campos que a Polp não manda ficam abertos pra completar/corrigir.
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCreditCardDto dto)
+    {
+        var card = await db.CreditCards
+            .Include(c => c.BankAccount)
+            .FirstOrDefaultAsync(c => c.Id == id && c.UserId == UserId && c.IsActive);
+        if (card is null) return NotFound();
+
+        card.Brand = dto.Brand;
+        card.CreditLimit = dto.CreditLimit;
+        card.ClosingDay = dto.ClosingDay;
+        card.DueDay = dto.DueDay;
+        await db.SaveChangesAsync();
+
+        return Ok(CreditCardDto.FromEntity(card));
     }
 
     [HttpDelete("{id}")]

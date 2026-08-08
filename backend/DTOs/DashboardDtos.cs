@@ -104,6 +104,15 @@ public record CreateCreditCardDto(
     Guid? BankAccountId = null
 );
 
+// BankAccountId e Name ficam de fora de propósito: o vínculo com a conta e o nome (quando vêm de
+// uma conta reconhecida da Polp) não são editáveis à mão, só os campos que a Polp não manda.
+public record UpdateCreditCardDto(
+    [MaxLength(50)] string? Brand,
+    [Range(0, double.MaxValue, ErrorMessage = "Limite não pode ser negativo.")] decimal CreditLimit,
+    [Range(1, 31, ErrorMessage = "Dia de fechamento deve ser entre 1 e 31.")] int ClosingDay,
+    [Range(1, 31, ErrorMessage = "Dia de vencimento deve ser entre 1 e 31.")] int DueDay
+);
+
 public record CreditCardDto(
     Guid Id,
     string Name,
@@ -161,7 +170,7 @@ public record DashboardSummaryDto(
     decimal TotalExpense,
     IEnumerable<TransactionDto> PendingTransactions,
     IEnumerable<CategoryExpenseDto> CategoryExpenses,
-    CreditCardDashboardDto? ActiveCard
+    RecognizedCardDto? ActiveCard
 );
 
 public record CategoryExpenseDto(string CategoryName, decimal Amount, decimal Percentage);
@@ -171,4 +180,16 @@ public record CreditCardDashboardDto(
     decimal CurrentInvoice,
     DateTime InvoiceDueDate,
     IEnumerable<InstallmentDto> Installments
+);
+
+// Um cartão "reconhecido": pode vir de uma BankAccount sincronizada da Polp identificada como
+// cartão (CreditCardAccountDetector) — com ou sem CreditCard (limite/fatura) cadastrado ainda —
+// ou de um CreditCard 100% manual, sem nenhuma conta vinculada. HasDetails=false é o estado
+// "reconhecemos a conta, faltam os dados que a Polp não manda".
+public record RecognizedCardDto(
+    Guid? BankAccountId,
+    string? BankAccountName,
+    string? Number,
+    bool HasDetails,
+    CreditCardDashboardDto? Details
 );

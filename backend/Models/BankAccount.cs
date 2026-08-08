@@ -28,5 +28,15 @@ public class BankAccount
 
     public AccountOwnership Ownership { get; set; }
 
+    /// <summary>"type"/"subtype" crus que a Polp manda pra essa conta (ex.: "BANK", "CREDIT") —
+    /// usados só pra reconhecer automaticamente quando essa conta é um cartão de crédito
+    /// (ver CreditCardAccountDetector). Antes eram descartados na sincronização.</summary>
+    public string? PolpAccountType { get; set; }
+    public string? PolpAccountSubtype { get; set; }
+
+    /// <summary>"number" cru que a Polp manda (mascarado, o formato que a Polp mandar) — dado
+    /// sensível, criptografado como NumberEncrypted. Antes era descartado na sincronização.</summary>
+    public string? Number { get; set; }
+
     public ICollection<Transaction> Transactions { get; set; } = [];
 }

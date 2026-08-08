@@ -168,10 +168,10 @@ export default function DashboardHome() {
   );
   const isMultiAccountGroup = (activeGroup?.accounts.length ?? 0) > 1;
 
-  // A conta selecionada agora é a mesma que o usuário vinculou a um CreditCard cadastrado
-  // (ver "Sobre os dados desta página" em Cartões) — fecha o ciclo apontando de volta pra lá,
-  // já que fatura/limite/parcelas dessa conta só aparecem naquela tela.
-  const isActiveAccountLinkedCard = activeCard?.card?.bankAccountId === activeAccount.id;
+  // A conta selecionada agora é a mesma que o sistema reconheceu automaticamente como cartão
+  // (ver CreditCardAccountDetector) — fecha o ciclo apontando de volta pra Cartões, já que
+  // fatura/limite/parcelas dessa conta só aparecem naquela tela.
+  const isActiveAccountLinkedCard = activeCard?.bankAccountId === activeAccount.id;
 
   return (
     <div className="dashboard-home">
@@ -185,7 +185,7 @@ export default function DashboardHome() {
         <div className="dashboard-home__account-controls">
           {isActiveAccountLinkedCard ? (
             <span className="dashboard-home__account-hint">
-              Esta conta está vinculada a um cartão cadastrado: veja fatura, limite e parcelas em{" "}
+              Reconhecemos esta conta como um cartão: veja fatura, limite e parcelas em{" "}
               <Link to="/dashboard/cartoes">Cartões</Link>.
             </span>
           ) : (
@@ -298,12 +298,8 @@ export default function DashboardHome() {
         {activeCard && (
           <Card title="Seu cartão">
             <CreditCardVisual
-              card={activeCard.card}
+              recognized={activeCard}
               cardholderName={user?.name}
-              currentInvoice={activeCard.currentInvoice}
-              invoiceDueDate={activeCard.invoiceDueDate}
-              activeInstallmentsCount={activeCard.installments?.length ?? 0}
-              linkedAccountName={activeCard.card.bankAccountName}
               onClick={() => setCardConfirmOpen(true)}
             />
           </Card>

@@ -34,6 +34,13 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             v => _encryption.Encrypt(v),
             v => _encryption.Decrypt(v));
 
+        // Mesma criptografia do textConverter acima, mas nula-segura: BankAccount.Number (ao
+        // contrário de User.Document) é opcional de verdade — nem toda conta sincronizada manda
+        // um número, e Encrypt/Decrypt não aceitam null.
+        var nullableTextConverter = new ValueConverter<string?, string?>(
+            v => v == null ? null : _encryption.Encrypt(v),
+            v => v == null ? null : _encryption.Decrypt(v));
+
         var decimalConverter = new ValueConverter<decimal, string>(
             v => _encryption.EncryptDecimal(v),
             v => _encryption.DecryptDecimal(v));
@@ -61,6 +68,10 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(b => b.Name).IsRequired().HasMaxLength(100);
             e.Property(b => b.Balance).HasConversion(decimalConverter).HasColumnName("BalanceEncrypted");
             e.Property(b => b.Ownership).HasConversion<string>();
+            // Number é dado sensível (mesmo nível de CPF/CNPJ), criptografado com o mesmo
+            // conversor de User.Document. PolpAccountType/Subtype são só rótulos categóricos
+            // ("BANK", "CREDIT"), ficam em texto puro, mesmo tratamento de BankCode.
+            e.Property(b => b.Number).HasConversion(nullableTextConverter).HasColumnName("NumberEncrypted");
             e.HasOne(b => b.User)
              .WithMany()
              .HasForeignKey(b => b.UserId)

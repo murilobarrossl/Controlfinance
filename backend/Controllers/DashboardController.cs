@@ -93,20 +93,11 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             totalExpenseForCategories > 0 ? Math.Round(e.Amount / totalExpenseForCategories * 100, 1) : 0
         )).ToList();
 
-        // Sem OrderBy antes o resultado era indefinido quando o usuário tinha mais de um cartão
-        // (Postgres/EF não garantem ordem sem ela); CreatedAt deixa determinístico: o cartão mais
-        // antigo é o que aparece aqui. Ver CreditCardSummaryBuilder pro cálculo de fatura/vencimento
-        // (compartilhado com a listagem de todos os cartões em CreditCardsController.GetSummary).
-        var card = await db.CreditCards
-            .Include(c => c.Installments)
-            .Include(c => c.BankAccount)
-            .Where(c => c.UserId == UserId && c.IsActive)
-            .OrderBy(c => c.CreatedAt)
-            .FirstOrDefaultAsync();
-
-        CreditCardDashboardDto? cardDto = card is not null
-            ? await CreditCardSummaryBuilder.BuildAsync(db, card, ct)
-            : null;
+        // Prioriza uma conta reconhecida como cartão (com ou sem limite/fatura cadastrado ainda);
+        // cai pro cartão manual mais antigo se não houver nenhuma conta reconhecida. Mesma lista
+        // que CreditCardsController.GetSummary usa pra listar todos — aqui só pega o primeiro.
+        var recognizedCards = await CreditCardSummaryBuilder.BuildRecognizedListAsync(db, UserId, ct);
+        var cardDto = recognizedCards.FirstOrDefault();
 
         var summary = new DashboardSummaryDto(
             accountDto,

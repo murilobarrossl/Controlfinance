@@ -19,6 +19,29 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 1.5rem;
+  align-items: start;
+}
+
+.cartoes__card-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cartoes__edit-link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.cartoes__edit-link:hover {
+  color: var(--color-text-primary);
 }
 
 .cartoes__form {
