@@ -6,7 +6,7 @@ import { EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
 import { getConnectors, createIntegration, getIntegrationStatus } from "../../api/polp.js";
 import { groupConnectorsByType } from "../../utils/bankSorting.js";
 import { setPendingIntegrationId, watchPolpConnection, wait } from "../../services/polpConnection.js";
-import logo from "../../assets/images/control-finance-transparente-branco.svg";
+import logo from "../../assets/images/cflogobranco.svg";
 import "./ConectarBanco.css";
 
 const POLL_MAX_ATTEMPTS = 10;

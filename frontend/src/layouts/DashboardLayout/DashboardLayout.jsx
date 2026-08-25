@@ -7,7 +7,7 @@ import ErrorBoundary from "../../components/ErrorBoundary/ErrorBoundary.jsx";
 import NavUserMenu from "../../components/dashboard/NavUserMenu/NavUserMenu.jsx";
 import Avatar from "../../components/ui/Avatar/Avatar.jsx";
 import { MenuIcon, CloseIcon } from "../../components/ui/icons/FeatureIcons.jsx";
-import logo from "../../assets/images/control-finance-transparente-branco.svg";
+import logo from "../../assets/images/cflogobranco.svg";
 import "./DashboardLayout.css";
 
 const TABS = [

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import Button from "../../ui/Button/Button.jsx";
 import { MenuIcon, CloseIcon } from "../../ui/icons/FeatureIcons.jsx";
-import logo from "../../../assets/images/control-finance-transparente-branco.svg";
+import logo from "../../../assets/images/cflogobranco.svg";
 import "./Navbar.css";
 
 const NAV_LINKS = [
@@ -10,7 +10,6 @@ const NAV_LINKS = [
   { label: "Funcionalidades", href: "#funcionalidades" },
   { label: "Planos", href: "#planos" },
   { label: "Agente de IA", href: "#agente-ia" },
-  { label: "Time", href: "#time" },
   { label: "Dúvidas", href: "#faq" },
 ];
 

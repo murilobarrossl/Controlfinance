@@ -7,7 +7,7 @@ import { login } from "../../api/auth.js";
 import { getIntegrations } from "../../api/polp.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { applyMask, CNPJ_MASK, getCpfCnpjMask } from "../../utils/masks.js";
-import logo from "../../assets/images/control-finance-transparente-branco.svg";
+import logo from "../../assets/images/cflogobranco.svg";
 import "./Login.css";
 
 const DESTAQUES = [

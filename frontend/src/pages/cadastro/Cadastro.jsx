@@ -5,7 +5,7 @@ import { EyeIcon, EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
 import { register } from "../../api/auth.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { applyMask, CNPJ_MASK, getCpfCnpjMask, PHONE_MASK_MOBILE, getPhoneMask } from "../../utils/masks.js";
-import logo from "../../assets/images/control-finance-transparente-branco.svg";
+import logo from "../../assets/images/cflogobranco.svg";
 import "./Cadastro.css";
 
 const STEPS = [
