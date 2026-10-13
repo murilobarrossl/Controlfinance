@@ -21,7 +21,6 @@ export default function Planos() {
 
           <ul className="planos__benefits">
             <li><span className="planos__check">✓</span> Relatórios e dashboards.</li>
-            <li><span className="planos__check">✓</span> Agente de IA financeiro.</li>
             <li><span className="planos__check">✓</span> Planejamentos e metas.</li>
             <li><span className="planos__check">✓</span> Sincronização bancária.</li>
             <li><span className="planos__check">✓</span> Suporte a PF e PJ</li>

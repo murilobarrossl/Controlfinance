@@ -27,12 +27,6 @@ const FUNCIONALIDADES = [
     Icon: SyncIcon,
   },
   {
-    titulo: "Agente de IA Financeiro",
-    descricao:
-      "análise personalizada, simulações de investimento, cálculo de financiamentos e planejamento baseado na sua realidade financeira",
-    Icon: SparkleIcon,
-  },
-  {
     titulo: "Planejamentos e Metas",
     descricao:
       "defina objetivos financeiros e acompanhe sua evolução com projeções inteligentes",

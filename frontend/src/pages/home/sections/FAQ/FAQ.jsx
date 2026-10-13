@@ -24,11 +24,6 @@ const PERGUNTAS = [
       "Sim. Suas informações financeiras são criptografadas e a sincronização acontece via Open Finance, regulado pelo Banco Central. A Control Finance nunca tem acesso à senha do seu banco e não compartilha seus dados com terceiros.",
   },
   {
-    pergunta: "O Agente de IA funciona para pequenos negócios?",
-    resposta:
-      "Sim. A plataforma foi pensada para pessoa física e jurídica: o Agente de IA analisa receitas, despesas e fluxo de caixa tanto de quem organiza as finanças pessoais quanto de quem administra um pequeno negócio.",
-  },
-  {
     pergunta: "Como entro em contato com o suporte?",
     resposta:
       "Pelo e-mail suporte@controlfinance.app.br, nosso time responde por lá. Quem assina o plano trimestral ou anual conta com suporte prioritário.",

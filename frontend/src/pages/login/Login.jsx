@@ -13,7 +13,6 @@ import "./Login.css";
 const DESTAQUES = [
   { Icon: ShieldIcon, texto: "Dados protegidos com criptografia" },
   { Icon: SyncIcon, texto: "Sincronização via Open Finance" },
-  { Icon: SparkleIcon, texto: "Agente de IA incluso" },
 ];
 
 export default function LoginPage({ mode = "email" }) {

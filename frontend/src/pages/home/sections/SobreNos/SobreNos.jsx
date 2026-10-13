@@ -2,7 +2,6 @@ import SectionHeading from "../../../../components/ui/SectionHeading/SectionHead
 import "./SobreNos.css";
 
 const DIFERENCIAIS = [
-  "Agente de IA financeiro integrado",
   "Sincronização bancária em tempo real",
   "Preço acessível comparado aos concorrentes",
   "Tudo em um só lugar, PF e PJ",

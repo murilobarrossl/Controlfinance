@@ -192,13 +192,6 @@ export default function Investimentos() {
           </div>
         )}
       </Card>
-
-      <Card className="investimentos__ai-notice">
-        <p>
-          Em breve, o agente de IA da Control Finance vai acompanhar o progresso das suas metas e tirar dúvidas sobre
-          financiamentos, consórcios e investimentos diretamente aqui.
-        </p>
-      </Card>
     </div>
   );
 }

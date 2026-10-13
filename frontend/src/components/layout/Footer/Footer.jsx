@@ -6,7 +6,6 @@ import "./Footer.css";
 const PRODUTO_LINKS = [
   { label: "Funcionalidades", href: "#funcionalidades" },
   { label: "Planos", href: "#planos" },
-  { label: "Agente de IA", href: "#agente-ia" },
   { label: "Sincronização bancária", href: "#funcionalidades" },
 ];
 

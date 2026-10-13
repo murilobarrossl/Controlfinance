@@ -19,12 +19,6 @@ const STEPS = [
     title: "Conecte seus bancos",
     description: "Sincronize suas contas bancárias com segurança total.",
   },
-  {
-    number: 3,
-    title: "Converse com o agente de IA",
-    description:
-      "Receba planejamento financeiro personalizado para você.",
-  },
 ];
 
 export default function RegisterPage() {
