@@ -17,8 +17,7 @@ const ReceitasDespesas = lazy(() => import("./pages/dashboard/ReceitasDespesas/R
 const Relatorios = lazy(() => import("./pages/dashboard/Relatorios/Relatorios.jsx"));
 const Categorias = lazy(() => import("./pages/dashboard/Categorias/Categorias.jsx"));
 const Investimentos = lazy(() => import("./pages/dashboard/Investimentos/Investimentos.jsx"));
-const Orcamento = lazy(() => import("./pages/dashboard/Orcamento/Orcamento.jsx"));
-const Radar = lazy(() => import("./pages/dashboard/Radar/Radar.jsx"));
+const Privacidade = lazy(() => import("./pages/dashboard/Privacidade/Privacidade.jsx"));
 const TermosDeUso = lazy(() => import("./pages/legal/TermosDeUso.jsx"));
 const PoliticaDePrivacidade = lazy(() => import("./pages/legal/PoliticaDePrivacidade.jsx"));
 
@@ -62,8 +61,7 @@ export default function App() {
               <Route path="relatorios" element={<Relatorios />} />
               <Route path="categorias" element={<Categorias />} />
               <Route path="investimentos" element={<Investimentos />} />
-              <Route path="orcamento" element={<Orcamento />} />
-              <Route path="radar" element={<Radar />} />
+              <Route path="privacidade" element={<Privacidade />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

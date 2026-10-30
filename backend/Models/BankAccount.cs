@@ -1,6 +1,6 @@
 namespace ControlFinance.API.Models;
 
-// Usado pelo Radar de Recorrências pra separar pessoal de empresa. Mixed = conta mista (o usuário
+// Usado pelo Radar de Recorrências (endpoint ainda existente no backend) pra separar pessoal de empresa. Mixed = conta mista (o usuário
 // disse explicitamente que não dá pra separar). Nesse caso a detecção continua funcionando
 // normalmente, só não entra em nenhum dos dois lados na tela. Chutado a partir do documento do
 // dono na criação da conta (CNPJ = Business, CPF = Personal); o usuário pode corrigir depois.
@@ -34,8 +34,10 @@ public class BankAccount
     public string? PolpAccountType { get; set; }
     public string? PolpAccountSubtype { get; set; }
 
-    /// <summary>"number" cru que a Polp manda (mascarado, o formato que a Polp mandar) — dado
-    /// sensível, criptografado como NumberEncrypted. Antes era descartado na sincronização.</summary>
+    /// <summary>Só os 4 últimos dígitos do "number" que a Polp manda, já no formato de exibição
+    /// ("•••• 1234"), cifrado como NumberEncrypted. O número completo nunca é gravado: a única
+    /// função dele aqui é ajudar o usuário a reconhecer qual cartão/conta é qual
+    /// (ver AccountNumberMask).</summary>
     public string? Number { get; set; }
 
     /// <summary>Só fazem sentido quando esta conta é reconhecida como cartão de crédito

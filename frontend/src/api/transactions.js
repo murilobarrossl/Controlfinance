@@ -29,6 +29,10 @@ export const getTransactions = async (filters = {}) => {
 
 const invalidateCache = () => cache.clear();
 
+// Também chamado ao sair, desconectar um banco ou excluir a conta: sem isso, até 15 s depois o
+// cache em memória ainda podia devolver o extrato de uma conexão já apagada (ou de outra sessão).
+export const clearTransactionsCache = invalidateCache;
+
 const buildReportQuery = ({ status, type, search, bankAccountId, year, month, sortBy, sortDir, page, pageSize } = {}) => {
   const params = new URLSearchParams();
   if (status) params.set("status", status);

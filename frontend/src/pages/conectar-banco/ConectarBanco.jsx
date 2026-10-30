@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import Button from "../../components/ui/Button/Button.jsx";
 import { ShieldIcon, SyncIcon } from "../../components/ui/icons/FeatureIcons.jsx";
 import { EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
 import { getConnectors, createIntegration, getIntegrationStatus } from "../../api/polp.js";
 import { groupConnectorsByType } from "../../utils/bankSorting.js";
+import { applyMask, getCpfCnpjMask, CNPJ_MASK } from "../../utils/masks.js";
+import { BANK_CONNECTION_NOTICE_VERSION } from "../../legal/versions.js";
 import { setPendingIntegrationId, watchPolpConnection, wait } from "../../services/polpConnection.js";
 import logo from "../../assets/images/cflogobranco.svg";
 import "./ConectarBanco.css";
@@ -29,6 +31,10 @@ export default function ConnectBankPage() {
   const [connectingId, setConnectingId] = useState(null);
   const [connectingStage, setConnectingStage] = useState(null); // "creating" | "waiting"
   const [error, setError] = useState("");
+  // CPF/CNPJ só vive neste estado, durante a conexão: vai pra Polp na criação da integração e é
+  // apagado em seguida. Não é guardado no navegador nem no backend.
+  const [document, setDocument] = useState("");
+  const [noticeAccepted, setNoticeAccepted] = useState(false);
 
   const { personal, business } = useMemo(
     () => groupConnectorsByType(connectors),
@@ -37,8 +43,19 @@ export default function ConnectBankPage() {
 
   const visibleConnectors = personType === "personal" ? personal : business;
 
-  async function handleStart() {
+  function handleDocumentChange(e) {
+    const digits = e.target.value.replace(/\D/g, "").slice(0, 14);
+    setDocument(applyMask(digits, getCpfCnpjMask(digits), document.replace(/\D/g, "")));
+  }
+
+  async function handleStart(e) {
+    e.preventDefault();
     setError("");
+    const digits = document.replace(/\D/g, "");
+    if (digits.length !== 11 && digits.length !== 14) {
+      setError("Informe o CPF ou CNPJ do titular da conta.");
+      return;
+    }
     setLoadingConnectors(true);
     try {
       const data = await getConnectors();
@@ -90,7 +107,8 @@ export default function ConnectBankPage() {
     authWindow.document.close();
 
     try {
-      const data = await createIntegration(connectorId);
+      const data = await createIntegration(connectorId, document.replace(/\D/g, ""), BANK_CONNECTION_NOTICE_VERSION);
+      setDocument("");
       if (data?.urlToAuthenticate) {
         await openAuthAndWait(data.integrationId, data.urlToAuthenticate, authWindow);
       } else {
@@ -161,7 +179,8 @@ export default function ConnectBankPage() {
 
         <h1 className="connect-bank__title">Conecte sua conta</h1>
         <p className="connect-bank__subtitle">
-          Para continuar, vincule seu banco via Open Finance.
+          Conectar um banco é opcional. Sem conexão, você ainda pode usar o painel com contas, cartões
+          e lançamentos cadastrados manualmente.
         </p>
 
         {connectingStage === "waiting" && (
@@ -175,17 +194,93 @@ export default function ConnectBankPage() {
         {error && <p className="connect-bank__error">{error}</p>}
 
         {step === "intro" && (
-          <Button
-            as="button"
-            type="button"
-            variant="primary"
-            size="md"
-            className="connect-bank__button"
-            onClick={handleStart}
-            disabled={loadingConnectors}
-          >
-            {loadingConnectors ? "Carregando bancos..." : "Conectar banco"}
-          </Button>
+          <form className="connect-bank__consent" onSubmit={handleStart}>
+            <h2 className="connect-bank__consent-title">Antes de conectar, veja o que acontece</h2>
+            <dl className="connect-bank__facts">
+              <dt>O que vamos acessar</dt>
+              <dd>
+                Contas, saldos, extrato de transações e, se houver, cartões de crédito (limite, fatura e
+                vencimento) do banco que você escolher.
+              </dd>
+
+              <dt>Para quê</dt>
+              <dd>
+                Só para montar o seu painel: saldo, receitas e despesas, categorias, cartões e relatórios.
+                Não vendemos seus dados e não usamos para publicidade.
+              </dd>
+
+              <dt>Quem participa</dt>
+              <dd>
+                Você faz login direto no seu banco, pelo Open Finance. A conexão é intermediada pela Polp
+                Tecnologia, nossa fornecedora, que recebe os dados por uma instituição participante do Open
+                Finance e repassa ao Control Finance. Não recebemos a senha do seu banco. Para criar a
+                conexão, a Polp precisa do seu CPF/CNPJ.
+              </dd>
+
+              <dt>O que guardamos</dt>
+              <dd>
+                Saldos, extrato, dados de cartão e só os 4 últimos dígitos do número da conta, cifrados no
+                nosso banco de dados, enquanto a conexão estiver ativa.
+              </dd>
+
+              <dt>Como a sincronização funciona</dt>
+              <dd>
+                Os dados são atualizados quando você abre o painel ou pede uma sincronização (no máximo a
+                cada 5 minutos por banco). Não é em tempo real.
+              </dd>
+
+              <dt>Como desconectar</dt>
+              <dd>
+                A qualquer momento, no seletor de contas ou em Privacidade e dados. Ao desconectar,
+                apagamos na hora tudo que veio desse banco e pedimos à Polp que exclua a conexão. Você
+                também pode revogar a autorização no aplicativo do seu banco, na área de Open Finance.
+              </dd>
+            </dl>
+
+            <label className="connect-bank__field">
+              <span className="connect-bank__field-label">CPF/CNPJ do titular</span>
+              <input
+                type="text"
+                value={document}
+                onChange={handleDocumentChange}
+                inputMode="numeric"
+                maxLength={CNPJ_MASK.length}
+                autoComplete="off"
+                placeholder="O mesmo informado no cadastro"
+                required
+              />
+            </label>
+
+            <label className="connect-bank__checkbox">
+              <input
+                type="checkbox"
+                checked={noticeAccepted}
+                onChange={(e) => setNoticeAccepted(e.target.checked)}
+                required
+              />
+              <span>
+                Li as informações acima e autorizo a conexão com o banco que vou escolher. Detalhes na{" "}
+                <Link to="/politica-de-privacidade" target="_blank" rel="noopener noreferrer">
+                  Política de privacidade
+                </Link>
+                .
+              </span>
+            </label>
+
+            <Button
+              as="button"
+              type="submit"
+              variant="primary"
+              size="md"
+              className="connect-bank__button"
+              disabled={loadingConnectors || !noticeAccepted}
+            >
+              {loadingConnectors ? "Carregando bancos..." : "Escolher banco"}
+            </Button>
+            <Link to="/dashboard" className="connect-bank__skip">
+              Agora não, usar sem conectar
+            </Link>
+          </form>
         )}
 
         {step === "choosing" && (
@@ -233,7 +328,7 @@ export default function ConnectBankPage() {
                           style={{ backgroundColor: stripeColor }}
                         />
                         {logoUrl && (
-                          <img src={logoUrl} alt="" className="connect-bank__connector-icon" />
+                          <img src={logoUrl} alt="" className="connect-bank__connector-icon" referrerPolicy="no-referrer" />
                         )}
                         <span className="connect-bank__connector-name">{connector.name}</span>
                         {connectingId === connector.id && (
@@ -258,15 +353,16 @@ export default function ConnectBankPage() {
       <ul className="connect-bank__security">
         <li>
           <ShieldIcon />
-          Conexão via Open Finance, regulamentada pelo Banco Central
+          O login acontece no ambiente do seu banco, pelo Open Finance (sistema regulado pelo Banco
+          Central). O Control Finance não é instituição financeira.
         </li>
         <li>
           <EyeSlashIcon />
-          Nunca vemos nem guardamos a senha do seu banco
+          A senha do banco não passa pelo Control Finance
         </li>
         <li>
           <SyncIcon />
-          Você pode desconectar sua conta quando quiser
+          Desconectar apaga do Control Finance os dados que vieram do banco
         </li>
       </ul>
     </div>

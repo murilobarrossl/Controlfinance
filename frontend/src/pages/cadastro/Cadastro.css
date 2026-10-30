@@ -245,7 +245,7 @@
   display: flex;
   align-items: flex-start;
   gap: 0.65rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   cursor: pointer;
 }
 
@@ -350,4 +350,11 @@
   .register__card {
     padding: 1.5rem 1.25rem;
   }
+}
+
+.register__privacy-note {
+  margin: 0 0 2rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+  line-height: 1.5;
 }

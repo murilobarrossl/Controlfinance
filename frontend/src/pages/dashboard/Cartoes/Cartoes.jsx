@@ -1,20 +1,80 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useMemo, useState } from "react";
 import { getCreditCardsSummary, createCreditCard, updateCreditCard } from "../../../api/creditCards.js";
 import { setBankAccountCardDetails } from "../../../api/bankAccounts.js";
-import { getInstallments } from "../../../api/installments.js";
+import { getInstallments, createInstallment, deleteInstallment } from "../../../api/installments.js";
+import { getTransactions } from "../../../api/transactions.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
 import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
+import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import { formatCurrency, formatDate } from "../../../utils/financeMath.js";
 import "./Cartoes.css";
 
 const EMPTY_DETAIL_FORM = { id: null, brand: "", creditLimit: "", closingDay: "1", dueDay: "10" };
 const EMPTY_MANUAL_FORM = { name: "", brand: "", creditLimit: "", closingDay: "1", dueDay: "10" };
+const EMPTY_INSTALLMENT_FORM = {
+  description: "",
+  totalAmount: "",
+  totalInstallments: "1",
+  currentInstallment: "1",
+  installmentAmount: "",
+  nextDueDate: todayIso(),
+  // Codifica tipo+id num valor só de <select> ("synced:<bankAccountId>" ou "manual:<creditCardId>")
+  // pra dropdown misturar cartão reconhecido (BankAccount) e cartão manual (CreditCard) numa lista
+  // só, já que são duas fontes diferentes.
+  cardKey: "",
+};
+const MAX_UPCOMING = 8;
+const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
+const KIND_CLASS = { Fatura: "invoice", Parcela: "installment", Conta: "bill" };
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// "Próximos vencimentos" (antes no Dashboard inteligente) junta as três coisas que vencem e que
+// esta tela já conhece: fatura de cada cartão (só quando o banco mandou a data de verdade, sem
+// estimar a partir do dia de vencimento), a próxima parcela de cada parcelamento e as contas
+// pendentes/atrasadas de todas as contas, já que esta página não depende da conta selecionada.
+function buildUpcoming(cards, installments, pendingTransactions) {
+  const invoices = cards
+    .filter((c) => c.invoiceDueDate)
+    .map((c) => ({
+      key: `invoice-${c.id}`,
+      kind: "Fatura",
+      name: `Fatura ${c.name}`,
+      meta: c.brand || "Cartão de crédito",
+      date: c.invoiceDueDate,
+      amount: c.currentInvoice,
+      status: "Pending",
+    }));
+  const nextInstallments = installments.map((i) => ({
+    key: `installment-${i.id}`,
+    kind: "Parcela",
+    name: i.description,
+    meta: `${i.currentInstallment}/${i.totalInstallments} · ${i.creditCardName || "Sem cartão vinculado"}`,
+    date: i.nextDueDate,
+    amount: i.installmentAmount,
+    status: "Pending",
+  }));
+  const bills = pendingTransactions.map((t) => ({
+    key: `transaction-${t.id}`,
+    kind: "Conta",
+    name: t.name,
+    meta: `${t.categoryName || "Sem categoria"}${t.bankAccountName ? ` · ${t.bankAccountName}` : ""}`,
+    date: t.dueDate,
+    amount: t.amount,
+    status: t.status,
+  }));
+
+  return [...invoices, ...nextInstallments, ...bills]
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(0, MAX_UPCOMING);
+}
 
 // Esta página não depende da conta selecionada no seletor lateral (useAccount()): cartões
 // reconhecidos (card.isSynced) já vêm prontos de getCreditCardsSummary(), independente de qual
@@ -24,17 +84,26 @@ export default function Cartoes() {
   const { user } = useAuth();
   const [cards, setCards] = useState([]);
   const [installments, setInstallments] = useState([]);
+  const [pendingTransactions, setPendingTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [detailForm, setDetailForm] = useState(EMPTY_DETAIL_FORM);
   const [manualForm, setManualForm] = useState(EMPTY_MANUAL_FORM);
   const [saving, setSaving] = useState(false);
+  const [showInstallmentForm, setShowInstallmentForm] = useState(false);
+  const [installmentForm, setInstallmentForm] = useState(EMPTY_INSTALLMENT_FORM);
 
   function loadAll() {
-    return Promise.all([getCreditCardsSummary(), getInstallments()])
-      .then(([cardsData, installmentsData]) => {
+    return Promise.all([
+      getCreditCardsSummary(),
+      getInstallments(),
+      getTransactions({ status: "Overdue", type: "Expense" }),
+      getTransactions({ status: "Pending", type: "Expense" }),
+    ])
+      .then(([cardsData, installmentsData, overdueData, pendingData]) => {
         setCards(cardsData);
         setInstallments(installmentsData);
+        setPendingTransactions([...overdueData, ...pendingData]);
       })
       .catch((err) => setError(err.message || "Não foi possível carregar os cartões."))
       .finally(() => setLoading(false));
@@ -103,6 +172,55 @@ export default function Cartoes() {
     }
   }
 
+  async function handleCreateInstallment(e) {
+    e.preventDefault();
+    const { description, totalAmount, totalInstallments: totalCount, currentInstallment, installmentAmount, nextDueDate, cardKey } =
+      installmentForm;
+    if (!description || !totalAmount || !installmentAmount) return;
+
+    const [cardType, cardId] = cardKey ? cardKey.split(":") : [null, null];
+
+    setSaving(true);
+    try {
+      await createInstallment({
+        creditCardId: cardType === "manual" ? cardId : null,
+        bankAccountId: cardType === "synced" ? cardId : null,
+        description,
+        totalAmount: Math.max(0.01, Number(totalAmount)),
+        totalInstallments: Math.max(1, Number(totalCount)),
+        currentInstallment: Math.max(1, Number(currentInstallment)),
+        installmentAmount: Math.max(0.01, Number(installmentAmount)),
+        nextDueDate,
+      });
+      setInstallmentForm(EMPTY_INSTALLMENT_FORM);
+      setShowInstallmentForm(false);
+      await loadAll();
+    } catch (err) {
+      setError(err.message || "Não foi possível criar esse parcelamento.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleCancelInstallment() {
+    setShowInstallmentForm(false);
+    setInstallmentForm(EMPTY_INSTALLMENT_FORM);
+  }
+
+  async function handleDeleteInstallment(id) {
+    try {
+      await deleteInstallment(id);
+      await loadAll();
+    } catch (err) {
+      setError(err.message || "Não foi possível remover esse parcelamento.");
+    }
+  }
+
+  const upcoming = useMemo(
+    () => buildUpcoming(cards, installments, pendingTransactions),
+    [cards, installments, pendingTransactions]
+  );
+
   if (loading) return <p className="cartoes__hint">Carregando...</p>;
 
   return (
@@ -110,6 +228,12 @@ export default function Cartoes() {
       <SectionHeading kicker="Fatura, limite e parcelamentos" title="Cartões" align="left" />
 
       {error && <p className="cartoes__error">{error}</p>}
+
+      <p className="cartoes__intro">
+        Aqui ficam só os cartões de crédito: o que você gastou no crédito e ainda vai pagar na fatura. O saldo
+        da conta corrente (dinheiro que você já tem) continua no Dashboard inteligente, sem ser somado com os
+        cartões.
+      </p>
 
       <Card title="Seus cartões">
         {cards.length === 0 ? (
@@ -203,6 +327,30 @@ export default function Cartoes() {
         )}
       </Card>
 
+      <Card title="Próximos vencimentos">
+        {upcoming.length === 0 ? (
+          <p className="cartoes__hint">Nenhuma fatura, parcela ou conta pendente por enquanto.</p>
+        ) : (
+          <ul className="cartoes__list">
+            {upcoming.map((item) => (
+              <li key={item.key} className="cartoes__list-item">
+                <span className={`cartoes__kind cartoes__kind--${KIND_CLASS[item.kind]}`}>
+                  {item.kind}
+                </span>
+                <div className="cartoes__list-info">
+                  <span className="cartoes__list-name">{item.name}</span>
+                  <span className="cartoes__list-meta">
+                    {item.meta} · {formatDate(item.date)}
+                  </span>
+                </div>
+                <StatusPill status={item.status}>{STATUS_LABELS[item.status] || item.status}</StatusPill>
+                <span className="cartoes__list-amount">{item.amount != null ? formatCurrency(item.amount) : "—"}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
       <Card title="Cadastrar cartão não sincronizado">
         <p className="cartoes__hint">Pra um cartão que não veio de nenhum banco conectado.</p>
         <form className="cartoes__form" onSubmit={handleCreateManualCard}>
@@ -285,15 +433,112 @@ export default function Cartoes() {
                   </span>
                 </div>
                 <span className="cartoes__list-amount">{formatCurrency(i.installmentAmount)}</span>
+                <button
+                  type="button"
+                  className="cartoes__remove"
+                  onClick={() => handleDeleteInstallment(i.id)}
+                  aria-label="Remover parcelamento"
+                  title="Remover parcelamento"
+                >
+                  ×
+                </button>
               </li>
             ))}
           </ul>
         )}
 
-        <p className="cartoes__form-hint">
-          Pra adicionar ou remover um parcelamento, use a aba{" "}
-          <Link to="/dashboard/orcamento">Orçamento</Link>.
-        </p>
+        {showInstallmentForm ? (
+          <form className="cartoes__form cartoes__form--spaced" onSubmit={handleCreateInstallment}>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Descrição</span>
+              <input
+                type="text"
+                placeholder="Ex: Notebook"
+                maxLength={150}
+                value={installmentForm.description}
+                onChange={(e) => setInstallmentForm({ ...installmentForm, description: e.target.value })}
+                required
+              />
+            </label>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Valor total</span>
+              <CurrencyInput
+                placeholder="Ex: 3000"
+                value={installmentForm.totalAmount}
+                onChange={(e) => setInstallmentForm({ ...installmentForm, totalAmount: e.target.value })}
+                required
+              />
+            </label>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Total de parcelas</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={installmentForm.totalInstallments}
+                onChange={(e) => setInstallmentForm({ ...installmentForm, totalInstallments: e.target.value })}
+                required
+              />
+            </label>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Parcela atual</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={installmentForm.currentInstallment}
+                onChange={(e) => setInstallmentForm({ ...installmentForm, currentInstallment: e.target.value })}
+                required
+              />
+            </label>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Valor da parcela</span>
+              <CurrencyInput
+                placeholder="Ex: 250"
+                value={installmentForm.installmentAmount}
+                onChange={(e) => setInstallmentForm({ ...installmentForm, installmentAmount: e.target.value })}
+                required
+              />
+            </label>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Próximo vencimento</span>
+              <input
+                type="date"
+                value={installmentForm.nextDueDate}
+                onChange={(e) => setInstallmentForm({ ...installmentForm, nextDueDate: e.target.value })}
+                required
+              />
+            </label>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Cartão (opcional)</span>
+              <select
+                value={installmentForm.cardKey}
+                onChange={(e) => setInstallmentForm({ ...installmentForm, cardKey: e.target.value })}
+              >
+                <option value="">Sem cartão vinculado</option>
+                {cards.map((c) => (
+                  <option key={c.id} value={`${c.isSynced ? "synced" : "manual"}:${c.id}`}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="cartoes__form-actions">
+              <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
+                {saving ? "Adicionando..." : "Adicionar"}
+              </Button>
+              <Button as="button" type="button" variant="outline" size="sm" onClick={handleCancelInstallment}>
+                Cancelar
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <div className="cartoes__form-hint">
+            <Button as="button" type="button" variant="outline" size="sm" onClick={() => setShowInstallmentForm(true)}>
+              + Adicionar parcelamento
+            </Button>
+          </div>
+        )}
       </Card>
 
       <Card title="Sobre os dados desta página">

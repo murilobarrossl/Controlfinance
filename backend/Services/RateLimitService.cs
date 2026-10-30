@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ControlFinance.API.Services;
 
@@ -25,6 +27,19 @@ public class RateLimitService : IDisposable
     // no dicionário para sempre; essa varredura periódica evita esse vazamento lento de memória.
     private readonly Timer _cleanupTimer;
 
+    // As chaves dos dicionários eram o e-mail/CPF e o IP digitados, em texto puro, na memória do
+    // processo por até 15 min (inclusive identificadores de quem nem tem conta). Agora são HMAC
+    // com uma chave aleatória gerada a cada inicialização e nunca gravada: a contagem funciona
+    // igual, e um dump de memória não revela quem tentou entrar. A chave some quando o processo
+    // reinicia, o que só zera os contadores (mesmo efeito de antes, que já eram só em memória).
+    private readonly byte[] _keyHmacSecret = RandomNumberGenerator.GetBytes(32);
+
+    private string Key(string value)
+    {
+        using var hmac = new HMACSHA256(_keyHmacSecret);
+        return Convert.ToBase64String(hmac.ComputeHash(Encoding.UTF8.GetBytes(value)));
+    }
+
     public RateLimitService()
     {
         _cleanupTimer = new Timer(_ => PurgeStale(), null, Window, Window);
@@ -35,19 +50,19 @@ public class RateLimitService : IDisposable
     // esteja você só errando a senha ou já travado, senão dá pra um atacante calibrar o ataque
     // pela própria mensagem de erro.
     public bool IsBlocked(string identifier, string ipAddress) =>
-        IsBlocked(_byIdentifier, identifier, MaxAttemptsPerIdentifier) ||
-        IsBlocked(_byIp, ipAddress, MaxAttemptsPerIp);
+        IsBlocked(_byIdentifier, Key(identifier), MaxAttemptsPerIdentifier) ||
+        IsBlocked(_byIp, Key(ipAddress), MaxAttemptsPerIp);
 
     public void RegisterFailure(string identifier, string ipAddress)
     {
-        RegisterFailure(_byIdentifier, identifier);
-        RegisterFailure(_byIp, ipAddress);
+        RegisterFailure(_byIdentifier, Key(identifier));
+        RegisterFailure(_byIp, Key(ipAddress));
     }
 
     public void RegisterSuccess(string identifier, string ipAddress)
     {
-        _byIdentifier.TryRemove(identifier, out _);
-        _byIp.TryRemove(ipAddress, out _);
+        _byIdentifier.TryRemove(Key(identifier), out _);
+        _byIp.TryRemove(Key(ipAddress), out _);
     }
 
     private static bool IsBlocked(ConcurrentDictionary<string, (int attempts, DateTime lastAttempt)> store, string key, int maxAttempts)

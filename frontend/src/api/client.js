@@ -1,17 +1,38 @@
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000/api";
 
-export const apiFetch = async (endpoint, options = {}) => {
-  const token = localStorage.getItem("token");
+// Segredo anti-CSRF da sessão atual (ver backend/Services/CsrfProtection.cs). Só em memória:
+// nunca em localStorage/sessionStorage. Some ao recarregar a página e é recuperado por
+// GET /auth/me, que o AuthContext chama na abertura.
+let csrfToken = null;
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
+export function setCsrfToken(token) {
+  csrfToken = token || null;
+}
+
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+// Endpoints em que 401 é resposta esperada (credencial errada, ou só checando se existe
+// sessão), não "a sessão caiu": não disparam o redirecionamento pro login.
+const NO_REDIRECT_ENDPOINTS = ["/auth/login", "/auth/register", "/auth/me"];
+
+// A sessão vive num cookie httpOnly que o JavaScript não lê: `credentials: "include"` faz o
+// navegador mandá-lo sozinho. Nenhum token é guardado no navegador por este código.
+export async function apiRequest(endpoint, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+
+  return fetch(`${API_URL}${endpoint}`, {
     ...options,
+    method,
+    credentials: "include",
     headers: {
-      "Content-Type": "application/json",
-      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(options.body !== undefined && { "Content-Type": "application/json" }),
+      ...(UNSAFE_METHODS.has(method) && csrfToken && { "X-CSRF-Token": csrfToken }),
       ...options.headers,
     },
   });
+}
 
+export async function readError(response) {
   const text = await response.text();
   let data = {};
   try {
@@ -19,25 +40,35 @@ export const apiFetch = async (endpoint, options = {}) => {
   } catch {
     // resposta não é JSON válido, segue com data = {}
   }
+  // Erros de validação (ex: ModelState do ASP.NET) trazem a causa específica em "errors":
+  // isso é mais útil pro usuário do que o "title" genérico ("One or more validation errors...").
+  const fieldErrors = data.errors ? Object.values(data.errors).flat().join(" ") : "";
+  return fieldErrors || data.message || data.title || `Erro ${response.status}`;
+}
+
+export const apiFetch = async (endpoint, options = {}) => {
+  const response = await apiRequest(endpoint, options);
 
   if (!response.ok) {
-    // 401 num endpoint autenticado significa sessão inválida/expirada/revogada: limpa o token
-    // morto e manda pro login, senão a tela fica presa mostrando erro genérico pra sempre.
-    // Login/registro ficam de fora: ali um 401 é "credencial errada", não "sessão caiu".
-    const isAuthEndpoint = endpoint.startsWith("/auth/login") || endpoint.startsWith("/auth/register");
-    if (response.status === 401 && !isAuthEndpoint) {
-      localStorage.removeItem("token");
+    // 401 num endpoint autenticado significa sessão expirada, revogada ou encerrada em outro
+    // aparelho: manda pro login, senão a tela fica presa mostrando erro genérico pra sempre.
+    const skipRedirect = NO_REDIRECT_ENDPOINTS.some((path) => endpoint.startsWith(path));
+    if (response.status === 401 && !skipRedirect) {
+      setCsrfToken(null);
       if (!window.location.pathname.startsWith("/login") && window.location.pathname !== "/") {
         window.location.href = "/loginemail";
       }
     }
 
-    // Erros de validação (ex: ModelState do ASP.NET) trazem a causa específica em "errors":
-    // isso é mais útil pro usuário do que o "title" genérico ("One or more validation errors...").
-    const fieldErrors = data.errors ? Object.values(data.errors).flat().join(" ") : "";
-    const msg = fieldErrors || data.message || data.title || `Erro ${response.status}`;
-    throw new Error(msg);
+    const error = new Error(await readError(response));
+    error.status = response.status;
+    throw error;
   }
 
-  return data;
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return {};
+  }
 };

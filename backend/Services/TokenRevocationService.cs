@@ -8,7 +8,7 @@ namespace ControlFinance.API.Services;
 public interface ITokenRevocationService
 {
     Task RevokeAsync(string jti, DateTime expiresAt);
-    Task<bool> IsRevokedAsync(string jti);
+    Task<bool> IsRevokedAsync(string jti, bool bypassCache = false);
 }
 
 public class TokenRevocationService : ITokenRevocationService
@@ -16,7 +16,7 @@ public class TokenRevocationService : ITokenRevocationService
     // TTL curto porque essa checagem roda em toda requisição autenticada (OnTokenValidated):
     // sem cache seria um SELECT a mais em 100% do tráfego. Curto o bastante pra um logout se
     // propagar rápido para outras instâncias, que não recebem o Set direto do RevokeAsync abaixo.
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(10);
 
     private readonly AppDbContext _db;
     private readonly IMemoryCache _cache;
@@ -43,9 +43,12 @@ public class TokenRevocationService : ITokenRevocationService
         _cache.Set(CacheKey(jti), true, CacheTtl);
     }
 
-    public async Task<bool> IsRevokedAsync(string jti)
+    // bypassCache: requisições que alteram dados (ou exportam tudo) consultam o banco direto,
+    // então um token revogado em OUTRA instância não consegue escrever nem exportar nada nem
+    // durante a janela do cache. Leituras comuns continuam com cache curto.
+    public async Task<bool> IsRevokedAsync(string jti, bool bypassCache = false)
     {
-        if (_cache.TryGetValue(CacheKey(jti), out bool cached))
+        if (!bypassCache && _cache.TryGetValue(CacheKey(jti), out bool cached))
             return cached;
 
         var revoked = await _db.RevokedTokens.AnyAsync(t => t.Jti == jti);

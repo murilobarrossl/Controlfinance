@@ -25,7 +25,6 @@ dist-ssr
 *.suo
 *.ntvs*
 *.njsproj
-*.sln
 *.sw?
 
 #backend
@@ -34,8 +33,19 @@ dist-ssr
 ##
 ## Get latest from `dotnet new gitignore`
 
-# dotenv files
+# Segredos (dotenv, configs locais do ASP.NET, certificados)
 .env
+.env.*
+!.env.example
+appsettings.Development.json
+appsettings.Production.json
+appsettings.Local.json
+*.pem
+*.key
+*.p12
+
+# Auditoria jurídica interna, não publicada no repositório
+AUDITORIA_JURIDICA_CONTROL_FINANCE.md
 
 # User-specific files
 *.rsuser
@@ -512,4 +522,3 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 
-.vscode/

@@ -120,6 +120,9 @@
   margin: 0 auto;
   color: var(--color-text-tertiary);
   font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 @media (max-width: 900px) {

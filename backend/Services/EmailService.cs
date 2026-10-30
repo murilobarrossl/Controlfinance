@@ -1,18 +1,14 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
 namespace ControlFinance.API.Services;
 
-public interface IEmailService
-{
-    Task SendWelcomeEmailAsync(string toEmail, string userName);
-    Task SendTransactionAlertEmailAsync(string toEmail, string userName, string transactionName, decimal amount, DateTime dueDate);
-    Task SendMonthlySummaryEmailAsync(string toEmail, string userName, decimal totalIncome, decimal totalExpense, decimal balance);
-}
-
-public class EmailService : IEmailService
+// E-mails passam por um provedor externo (Resend, com processamento nos EUA). Por isso nenhum
+// e-mail leva nome da pessoa, nome de transação, valor ou saldo: só o endereço de destino (sem
+// ele não há e-mail) e um aviso genérico pra abrir o painel. Antes os lembretes levavam nome e
+// valor de cada conta, e o resumo mensal levava receitas, despesas e saldo do mês.
+public class EmailService
 {
     private readonly HttpClient _httpClient;
     private readonly string _fromEmail;
@@ -37,14 +33,14 @@ public class EmailService : IEmailService
     //  EMAILS
     // ──────────────────────────────────────────
 
-    public Task SendWelcomeEmailAsync(string toEmail, string userName) =>
-        SendAsync(toEmail, $"Bem-vindo ao Control Finance, {userName}!", WelcomeHtml(userName));
+    public Task SendWelcomeEmailAsync(string toEmail) =>
+        SendAsync(toEmail, "Sua conta no Control Finance foi criada", WelcomeHtml());
 
-    public Task SendTransactionAlertEmailAsync(string toEmail, string userName, string transactionName, decimal amount, DateTime dueDate) =>
-        SendAsync(toEmail, $"Lembrete: {transactionName} vence em breve", TransactionAlertHtml(userName, transactionName, amount, dueDate));
+    public Task SendDueReminderAsync(string toEmail, int pendingCount, DateTime nearestDueDate) =>
+        SendAsync(toEmail, "Você tem contas perto do vencimento", DueReminderHtml(pendingCount, nearestDueDate));
 
-    public Task SendMonthlySummaryEmailAsync(string toEmail, string userName, decimal totalIncome, decimal totalExpense, decimal balance) =>
-        SendAsync(toEmail, $"Seu resumo financeiro de {DateTime.UtcNow.AddMonths(-1):MMMM}", MonthlySummaryHtml(userName, totalIncome, totalExpense, balance));
+    public Task SendMonthlyNoticeAsync(string toEmail) =>
+        SendAsync(toEmail, "Seu mês fechou: veja o resumo no Control Finance", MonthlyNoticeHtml());
 
     // ──────────────────────────────────────────
     //  CORE
@@ -65,11 +61,10 @@ public class EmailService : IEmailService
 
         var response = await _httpClient.PostAsync("emails", content);
 
+        // Só o status na exceção: o corpo de erro do provedor pode repetir o destinatário, e essa
+        // mensagem acaba em log.
         if (!response.IsSuccessStatusCode)
-        {
-            var error = await response.Content.ReadAsStringAsync();
-            throw new Exception($"Resend error {response.StatusCode}: {error}");
-        }
+            throw new HttpRequestException($"Falha no envio de e-mail (HTTP {(int)response.StatusCode}).", null, response.StatusCode);
     }
 
     // ──────────────────────────────────────────
@@ -88,21 +83,19 @@ public class EmailService : IEmailService
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:40px 0;">
             <tr><td align="center">
               <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;">
-                <!-- HEADER -->
                 <tr>
                   <td style="background:#1a1a2e;padding:24px 32px;">
-                    <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">
-                      💰 Control Finance
-                    </h1>
+                    <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Control Finance</h1>
                   </td>
                 </tr>
-                <!-- BODY -->
                 <tr><td style="padding:32px;">{body}</td></tr>
-                <!-- FOOTER -->
                 <tr>
                   <td style="background:#f4f6f8;padding:16px 32px;text-align:center;">
+                    <p style="margin:0 0 6px;color:#999;font-size:12px;">
+                      Por privacidade, este e-mail não traz nomes nem valores. Os detalhes ficam só no painel.
+                    </p>
                     <p style="margin:0;color:#999;font-size:12px;">
-                      © {DateTime.UtcNow.Year} Control Finance · MI Tech
+                      Você pode desligar os avisos automáticos em Privacidade e dados, no painel.
                     </p>
                   </td>
                 </tr>
@@ -113,72 +106,38 @@ public class EmailService : IEmailService
         </html>
         """;
 
-    // Nome e nome de transação vêm de dados do próprio usuário (cadastro, transações manuais)
-    // e são interpolados direto no HTML do e-mail: sem encode, um nome como "<img onerror=...>"
-    // seria injetado sem tratamento no corpo enviado pela Resend.
-    private static string WelcomeHtml(string name)
-    {
-        var safeName = WebUtility.HtmlEncode(name);
-        return BaseHtml("Bem-vindo!", $"""
-        <h2 style="color:#1a1a2e;margin-top:0;">Olá, {safeName}! 👋</h2>
+    private static string WelcomeHtml() => BaseHtml("Conta criada", """
+        <h2 style="color:#1a1a2e;margin-top:0;">Olá!</h2>
         <p style="color:#444;line-height:1.6;">
-          Sua conta no <strong>Control Finance</strong> foi criada com sucesso.
-          Agora você tem controle total das suas finanças em um só lugar.
+          Sua conta no <strong>Control Finance</strong> foi criada.
         </p>
-        <ul style="color:#444;line-height:2;">
-          <li>📊 Dashboard com visão geral do seu financeiro</li>
-          <li>💳 Controle de receitas e despesas</li>
-          <li>🔔 Alertas de vencimento</li>
-          <li>📈 Relatórios mensais</li>
-        </ul>
-        <p style="color:#444;">Qualquer dúvida, estamos aqui.</p>
-        <p style="color:#444;">Equipe Control Finance 🚀</p>
+        <p style="color:#444;line-height:1.6;">
+          No painel você pode conectar seus bancos (via Open Finance, com a sua autorização),
+          ver receitas, despesas, cartões e relatórios, e acompanhar metas.
+        </p>
+        <p style="color:#444;line-height:1.6;">
+          Se não foi você quem criou esta conta, responda a este e-mail para avisar o suporte.
+        </p>
         """);
-    }
 
-    private static string TransactionAlertHtml(string name, string txName, decimal amount, DateTime due)
+    private static string DueReminderHtml(int pendingCount, DateTime nearestDueDate)
     {
-        var safeName = WebUtility.HtmlEncode(name);
-        var safeTxName = WebUtility.HtmlEncode(txName);
+        var countText = pendingCount == 1 ? "1 conta pendente" : $"{pendingCount} contas pendentes";
         return BaseHtml("Lembrete de vencimento", $"""
-        <h2 style="color:#1a1a2e;margin-top:0;">Olá, {safeName}!</h2>
-        <p style="color:#444;line-height:1.6;">
-          Você tem uma conta vencendo em breve:
-        </p>
-        <div style="background:#fff8e1;border-left:4px solid #f59e0b;padding:16px 20px;border-radius:4px;margin:16px 0;">
-          <p style="margin:0;font-weight:700;color:#1a1a2e;font-size:16px;">{safeTxName}</p>
-          <p style="margin:4px 0 0;color:#444;">
-            Valor: <strong>R$ {amount:N2}</strong> · Vencimento: <strong>{due:dd/MM/yyyy}</strong>
-          </p>
-        </div>
-        <p style="color:#444;">Acesse o app para registrar o pagamento e manter seu controle em dia.</p>
-        """);
+            <h2 style="color:#1a1a2e;margin-top:0;">Lembrete de vencimento</h2>
+            <p style="color:#444;line-height:1.6;">
+              Você tem <strong>{countText}</strong> com vencimento nos próximos dias. A mais próxima
+              vence em <strong>{nearestDueDate:dd/MM/yyyy}</strong>.
+            </p>
+            <p style="color:#444;">Abra o painel do Control Finance para ver quais são.</p>
+            """);
     }
 
-    private static string MonthlySummaryHtml(string name, decimal income, decimal expense, decimal balance)
-    {
-        var safeName = WebUtility.HtmlEncode(name);
-        return BaseHtml("Resumo mensal", $"""
-        <h2 style="color:#1a1a2e;margin-top:0;">Olá, {safeName}! Aqui está seu resumo 📊</h2>
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;">
-          <tr>
-            <td style="background:#ecfdf5;border-radius:8px;padding:16px;text-align:center;width:33%;">
-              <p style="margin:0;color:#666;font-size:12px;">RECEITAS</p>
-              <p style="margin:4px 0 0;color:#10b981;font-size:22px;font-weight:700;">R$ {income:N2}</p>
-            </td>
-            <td width="8"></td>
-            <td style="background:#fef2f2;border-radius:8px;padding:16px;text-align:center;width:33%;">
-              <p style="margin:0;color:#666;font-size:12px;">DESPESAS</p>
-              <p style="margin:4px 0 0;color:#ef4444;font-size:22px;font-weight:700;">R$ {expense:N2}</p>
-            </td>
-            <td width="8"></td>
-            <td style="background:#eff6ff;border-radius:8px;padding:16px;text-align:center;width:33%;">
-              <p style="margin:0;color:#666;font-size:12px;">SALDO</p>
-              <p style="margin:4px 0 0;color:#3b82f6;font-size:22px;font-weight:700;">R$ {balance:N2}</p>
-            </td>
-          </tr>
-        </table>
-        <p style="color:#444;">Acesse o app para ver o relatório completo com detalhes por categoria.</p>
+    private static string MonthlyNoticeHtml() => BaseHtml("Resumo do mês", """
+        <h2 style="color:#1a1a2e;margin-top:0;">Seu mês fechou</h2>
+        <p style="color:#444;line-height:1.6;">
+          O resumo de receitas, despesas e categorias do mês passado já está disponível no painel
+          do Control Finance.
+        </p>
         """);
-    }
 }

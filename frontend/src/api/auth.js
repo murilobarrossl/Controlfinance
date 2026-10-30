@@ -12,11 +12,12 @@ export const register = async (payload) =>
     body: JSON.stringify(payload),
   });
 
-// Dados do usuário autenticado, independe de ter acabado de logar/cadastrar: funciona
-// pra qualquer sessão válida (inclusive uma já aberta antes, sobrevivendo a um refresh).
+// Descobre se já existe sessão (o cookie é httpOnly, o JavaScript não consegue olhar). Devolve
+// { user, csrfToken }.
 export const getCurrentUser = async () => apiFetch("/auth/me");
 
-// Revoga o token atual no backend: sem isso, "sair" só esquecia o token no
-// navegador, mas ele continuava válido (JWT é stateless) até expirar sozinho.
-export const logout = async () =>
-  apiFetch("/auth/logout", { method: "POST" });
+// Revoga o token da sessão atual e apaga o cookie no backend.
+export const logout = async () => apiFetch("/auth/logout", { method: "POST" });
+
+// Encerra todas as sessões abertas, em qualquer aparelho.
+export const logoutAllSessions = async () => apiFetch("/auth/logout-all", { method: "POST" });

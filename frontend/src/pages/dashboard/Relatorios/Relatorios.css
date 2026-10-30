@@ -11,6 +11,14 @@
   gap: 0.6rem;
 }
 
+.relatorios__period-hint {
+  margin: -0.75rem 0 0;
+  color: var(--color-text-tertiary);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  max-width: 52rem;
+}
+
 /* Pílula única reaproveitada pelos três filtros da página (período, tipo, status): dá pra tela
    uma identidade própria de "chips clicáveis", em vez dos <select> que a aba Categorias também
    usa pro seletor de ordenação. */
@@ -386,4 +394,50 @@
   .relatorios__search {
     min-width: 0;
   }
+}
+
+/* Etiqueta de categoria: fundo e borda tingidos com a cor da própria categoria (a mesma usada nos
+   gráficos), mais as iniciais, pra dar pra bater o olho na coluna e separar uma categoria da outra. */
+.relatorios__category {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  padding: 0.15rem 0.55rem 0.15rem 0.2rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--category-color) 55%, transparent);
+  background-color: color-mix(in srgb, var(--category-color) 14%, transparent);
+  color: var(--color-text-primary);
+  font-size: 0.78rem;
+  vertical-align: middle;
+}
+
+.relatorios__category-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--category-color);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.relatorios__category-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relatorios__category--empty {
+  padding: 0.15rem 0.55rem;
+  border-style: dashed;
+  border-color: var(--color-border-strong);
+  background-color: transparent;
+  color: var(--color-text-tertiary);
 }

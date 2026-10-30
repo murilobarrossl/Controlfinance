@@ -28,17 +28,6 @@ export function SyncIcon() {
   );
 }
 
-export function SparkleIcon() {
-  return (
-    <svg {...BASE_PROPS}>
-      <path
-        d="M12 2 L14 10 L22 12 L14 14 L12 22 L10 14 L2 12 L10 10 Z"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 export function TargetIcon() {
   return (
     <svg {...BASE_PROPS}>
@@ -156,6 +145,38 @@ export function CloseIcon() {
   return (
     <svg {...BASE_PROPS}>
       <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
+export function PiggyBankIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <path d="M5 11a6 5 0 0 1 6-5h2a6 5 0 0 1 5.6 3.2L21 9v3l-2 .8A6 5 0 0 1 16 15.6V19h-2.5v-2.2h-3V19H8v-3.3A6 5 0 0 1 5 11z" />
+      <path d="M5 11H3.5" />
+      <path d="M10 6.2V5h3v1" />
+      <circle cx="15.5" cy="10" r="0.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function BoxIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <path d="M3 8l9-4 9 4-9 4-9-4z" />
+      <path d="M3 8v8l9 4 9-4V8" />
+      <path d="M12 12v8" />
+    </svg>
+  );
+}
+
+export function CoinsIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <ellipse cx="9" cy="7" rx="5" ry="2.5" />
+      <path d="M4 7v4c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5V7" />
+      <path d="M10 15.4c.9 1.2 3 2.1 5 2.1 2.8 0 5-1.1 5-2.5v-4c0-1.2-1.6-2.2-3.8-2.4" />
+      <path d="M14 13.6c.6.3 1.6.5 2 .5" />
     </svg>
   );
 }

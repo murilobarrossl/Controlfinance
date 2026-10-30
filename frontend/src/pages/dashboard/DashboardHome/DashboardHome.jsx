@@ -10,23 +10,22 @@ import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
-import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
-import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
 import AreaTrendChart from "../../../components/charts/AreaTrendChart.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
 import AccountSwitcher from "../../../components/dashboard/AccountSwitcher/AccountSwitcher.jsx";
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import { groupAccounts } from "../../../utils/accountGrouping.js";
-import { WalletIcon, TrendUpIcon, TrendDownIcon, TargetIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
-import { formatCurrency, formatPercentage, formatDate } from "../../../utils/financeMath.js";
+import { isCreditCardAccount } from "../../../utils/accountKind.js";
+import { resolveCategoryColor, OTHERS_COLOR } from "../../../utils/categoryColors.js";
+import { WalletIcon, TrendUpIcon, TrendDownIcon, TargetIcon, CardIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
+import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import { getMonthsWindow, buildMonthlyTrend, buildPreviousMonthSamePeriod } from "../../../utils/monthlyTrend.js";
 import { computeTrend } from "../../../utils/trend.js";
 import "./DashboardHome.css";
 
 const MAX_DONUT_SLICES = 4;
 const TREND_MONTHS = 6;
-const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
 
 // Usa a mesma cor cadastrada na categoria (a que aparece no gráfico de Categorias), em vez de
 // deixar o gráfico sortear uma cor qualquer, pra uma categoria não parecer "outra" de uma tela
@@ -40,9 +39,9 @@ function buildDonutData(categoryExpenses, categories) {
   const data = top.map((c) => ({
     name: c.categoryName,
     value: c.amount,
-    color: categories.find((cat) => cat.name === c.categoryName)?.color,
+    color: resolveCategoryColor(c.categoryName, categories),
   }));
-  if (restTotal > 0) data.push({ name: "Outros", value: restTotal, color: "#808080" });
+  if (restTotal > 0) data.push({ name: "Outros", value: restTotal, color: OTHERS_COLOR });
 
   return data;
 }
@@ -50,8 +49,16 @@ function buildDonutData(categoryExpenses, categories) {
 export default function DashboardHome() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { accounts, connectors, selectedAccountId, setSelectedAccountId, dataRefreshKey, bumpDataRefresh, disconnectAccount } =
-    useAccount();
+  const {
+    accounts,
+    connectors,
+    selectedAccountId,
+    setSelectedAccountId,
+    dataRefreshKey,
+    bumpDataRefresh,
+    disconnectConnection,
+    removeManualAccount,
+  } = useAccount();
   const [categories, setCategories] = useState([]);
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -130,16 +137,13 @@ export default function DashboardHome() {
     );
   }
 
-  const { activeAccount, totalIncome, totalExpense, pendingTransactions, categoryExpenses, activeCard } = summary;
+  const { activeAccount, totalIncome, totalExpense, categoryExpenses, activeCard } = summary;
   const monthlyBalance = totalIncome - totalExpense;
   const percentageSpent = totalIncome > 0 ? (totalExpense / totalIncome) * 100 : 0;
   const savingsRate =
     currentMonthTrend?.Receitas > 0
       ? ((currentMonthTrend.Receitas - currentMonthTrend.Despesas) / currentMonthTrend.Receitas) * 100
       : 0;
-  const upcoming = [...pendingTransactions]
-    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
-    .slice(0, 5);
   const donutData = buildDonutData(categoryExpenses, categories);
   const firstName = user?.name?.split(" ")[0];
 
@@ -172,6 +176,11 @@ export default function DashboardHome() {
   // (ver CreditCardAccountDetector) — fecha o ciclo apontando de volta pra Cartões, já que
   // fatura/limite/parcelas dessa conta só aparecem naquela tela.
   const isActiveAccountLinkedCard = activeCard?.isSynced && activeCard.id === activeAccount.id;
+  // O seletor também sabe (pelo tipo que a Polp manda) quando a conta ativa é um cartão, mesmo que
+  // não seja o cartão mostrado em "Seu cartão". Nesse caso o "saldo" que o banco manda é do cartão,
+  // não dinheiro disponível em conta, e o card de saldo precisa dizer isso.
+  const isActiveAccountCard =
+    isActiveAccountLinkedCard || isCreditCardAccount(accounts.find((a) => a.id === activeAccount.id));
 
   return (
     <div className="dashboard-home">
@@ -183,16 +192,16 @@ export default function DashboardHome() {
         />
 
         <div className="dashboard-home__account-controls">
-          {isActiveAccountLinkedCard ? (
+          {isActiveAccountCard ? (
             <span className="dashboard-home__account-hint">
-              Reconhecemos esta conta como um cartão: veja fatura, limite e parcelas em{" "}
+              Você está vendo um cartão de crédito, não uma conta bancária: veja fatura, limite e parcelas em{" "}
               <Link to="/dashboard/cartoes">Cartões</Link>.
             </span>
           ) : (
             isMultiAccountGroup && (
               <span className="dashboard-home__account-hint">
-                A conta corrente e o cartão de crédito aparecem separados no seletor ao lado: escolha
-                um deles pra ver só os dados dele, sem somar os dois.
+                No seletor ao lado, o cartão de crédito aparece dentro do banco, abaixo da conta corrente:
+                escolha um deles pra ver só os dados dele, sem somar os dois.
               </span>
             )
           )}
@@ -202,7 +211,8 @@ export default function DashboardHome() {
             activeAccountId={activeAccount.id}
             connectors={connectors}
             onSelect={setSelectedAccountId}
-            onDisconnect={disconnectAccount}
+            onDisconnect={disconnectConnection}
+            onRemoveManual={removeManualAccount}
             onSynced={bumpDataRefresh}
           />
         </div>
@@ -210,10 +220,10 @@ export default function DashboardHome() {
 
       <div className="dashboard-home__stats">
         <StatCard
-          icon={<WalletIcon />}
-          label="Saldo da conta"
+          icon={isActiveAccountCard ? <CardIcon /> : <WalletIcon />}
+          label={isActiveAccountCard ? "Saldo do cartão (informado pelo banco)" : "Saldo da conta corrente"}
           value={formatCurrency(activeAccount.balance)}
-          trend={balanceTrend}
+          trend={isActiveAccountCard ? undefined : balanceTrend}
         />
         <StatCard
           icon={<TrendUpIcon />}
@@ -236,7 +246,62 @@ export default function DashboardHome() {
           valueTone={monthlyBalance >= 0 ? "income" : "expense"}
           secondaryLines={[{ label: "% da receita gasta", value: formatPercentage(percentageSpent) }]}
         />
+        <StatCard
+          icon={<CardIcon />}
+          label="Tipo de cartão"
+          value={activeCard ? `Crédito${activeCard.brand ? ` · ${activeCard.brand}` : ""}` : "Nenhum cartão"}
+          secondaryLines={
+            activeCard
+              ? [
+                  { label: "Cartão", value: activeCard.name },
+                  { label: "Origem", value: activeCard.isSynced ? "Sincronizado pelo banco" : "Cadastrado manualmente" },
+                ]
+              : [{ label: "Cadastre ou conecte em", value: "Cartões" }]
+          }
+        />
       </div>
+
+      <Card className="dashboard-home__explainer" title="Conta corrente x cartão de crédito">
+        <div className="dashboard-home__explainer-grid">
+          <div className="dashboard-home__explainer-item">
+            <span className="dashboard-home__explainer-icon dashboard-home__explainer-icon--account">
+              <WalletIcon />
+            </span>
+            <div>
+              <strong>Conta corrente</strong>
+              <p>
+                É o dinheiro que você tem hoje no banco. O saldo sobe com o que entra (salário, Pix recebido) e desce
+                com o que sai (pagamentos, transferências, débito).
+              </p>
+            </div>
+          </div>
+          <div className="dashboard-home__explainer-item">
+            <span className="dashboard-home__explainer-icon dashboard-home__explainer-icon--card">
+              <CardIcon />
+            </span>
+            <div>
+              <strong>Cartão de crédito</strong>
+              <p>
+                São compras feitas com crédito do banco que você paga depois, na fatura. O valor do cartão não é dinheiro
+                disponível e nunca é somado ao saldo da conta corrente.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="dashboard-home__cards-callout">
+          <span className="dashboard-home__cards-callout-icon" aria-hidden="true">
+            <CardIcon />
+          </span>
+          <p>
+            Seus cartões têm uma aba própria: fatura, limite, <strong>próximos vencimentos</strong> e parcelamentos ficam
+            em <strong>Cartões</strong>.
+          </p>
+          <Button as={Link} to="/dashboard/cartoes" variant="outline" size="sm">
+            Abrir aba Cartões
+          </Button>
+        </div>
+      </Card>
 
       <div className="dashboard-home__grid">
         <Card title={`Receitas x despesas (últimos ${TREND_MONTHS} meses)`}>
@@ -260,41 +325,16 @@ export default function DashboardHome() {
               height={220}
               formatValue={formatCurrency}
               data={donutData}
-              centerLabel={formatCurrency(totalExpense)}
+              // Soma das próprias fatias, não totalExpense: despesas sem categoria não entram em
+              // categoryExpenses, e o centro mostrava um total maior do que a rosca representava.
+              centerLabel={formatCurrency(donutData.reduce((sum, d) => sum + d.value, 0))}
+              centerCaption="Categorizado"
             />
           )}
         </Card>
       </div>
 
       <div className="dashboard-home__grid">
-        <Card title="Próximos vencimentos">
-          {upcoming.length === 0 ? (
-            <p className="dashboard-home__hint">Nenhuma conta pendente.</p>
-          ) : (
-            <ul className="dashboard-home__list">
-              {upcoming.map((t) => (
-                <li key={t.id} className="dashboard-home__list-item">
-                  <IconAvatar type={t.type === "Income" ? "income" : "expense"} />
-                  <div className="dashboard-home__list-info">
-                    <span className="dashboard-home__list-name">{t.name}</span>
-                    <span className="dashboard-home__list-meta">
-                      {t.categoryName || "Sem categoria"} · {formatDate(t.dueDate)}
-                    </span>
-                  </div>
-                  <StatusPill status={t.status}>{STATUS_LABELS[t.status] || t.status}</StatusPill>
-                  <span
-                    className={`dashboard-home__list-amount ${
-                      t.type === "Income" ? "dashboard-home__stat-value--income" : "dashboard-home__stat-value--expense"
-                    }`}
-                  >
-                    {formatCurrency(t.amount)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
         {activeCard && (
           <Card title="Seu cartão">
             <CreditCardVisual

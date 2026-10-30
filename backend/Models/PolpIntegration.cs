@@ -23,9 +23,6 @@ public class PolpIntegration
     /// </summary>
     public string Status { get; set; } = "UPDATING";
 
-    /// <summary>URL de autenticação (MFA/redirect), quando aplicável.</summary>
-    public string? UrlToAuthenticate { get; set; }
-
     /// <summary>Marca se as contas/transações já foram sincronizadas localmente.</summary>
     public bool SyncedLocally { get; set; } = false;
 

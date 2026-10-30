@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { AccountProvider } from "../../context/AccountContext.jsx";
+import { AccountProvider, useAccount } from "../../context/AccountContext.jsx";
 import { logout as logoutRequest } from "../../api/auth.js";
 import ErrorBoundary from "../../components/ErrorBoundary/ErrorBoundary.jsx";
 import NavUserMenu from "../../components/dashboard/NavUserMenu/NavUserMenu.jsx";
@@ -17,8 +17,6 @@ const TABS = [
   { label: "Relatórios", to: "/dashboard/relatorios" },
   { label: "Categorias", to: "/dashboard/categorias" },
   { label: "Investimentos", to: "/dashboard/investimentos" },
-  { label: "Orçamento", to: "/dashboard/orcamento" },
-  { label: "Radar", to: "/dashboard/radar" },
 ];
 
 export default function DashboardLayout() {
@@ -31,6 +29,7 @@ export default function DashboardLayout() {
 
 function DashboardLayoutContent() {
   const { user, logout } = useAuth();
+  const { notice, dismissNotice } = useAccount();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -114,7 +113,7 @@ function DashboardLayoutContent() {
           </button>
         </div>
 
-        <nav className="dashboard-sidebar__tabs">
+        <nav className="dashboard-sidebar__tabs" aria-label="Seções do painel">
           {TABS.map((tab) => (
             <NavLink
               key={tab.to}
@@ -133,6 +132,13 @@ function DashboardLayoutContent() {
         <div className="dashboard-sidebar__profile">
           <Avatar name={user?.name} size="md" />
           <span className="dashboard-sidebar__profile-name">{user?.name || "Conta"}</span>
+          <NavLink
+            to="/dashboard/privacidade"
+            onClick={() => setSidebarOpen(false)}
+            className="dashboard-sidebar__privacy-link"
+          >
+            Privacidade e dados
+          </NavLink>
           {/* Único jeito de sair no mobile: o menu do avatar (com a opção "Sair") some da
               barra de topo aqui, então esse botão precisa cobrir a função dele. */}
           <button type="button" className="dashboard-sidebar__logout" onClick={handleLogout}>
@@ -142,6 +148,14 @@ function DashboardLayoutContent() {
       </aside>
 
       <main className="dashboard-content">
+        {notice && (
+          <div className={`dashboard-notice dashboard-notice--${notice.tone}`} role="status">
+            <p>{notice.text}</p>
+            <button type="button" onClick={dismissNotice} aria-label="Fechar aviso">
+              ×
+            </button>
+          </div>
+        )}
         <ErrorBoundary>
           <Outlet />
         </ErrorBoundary>

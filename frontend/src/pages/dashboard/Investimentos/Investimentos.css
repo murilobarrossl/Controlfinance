@@ -125,15 +125,237 @@
   font-weight: 500;
 }
 
-.investimentos__ai-notice p {
+.investimentos__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.investimentos__form--inline {
+  margin: 1rem 0 0;
+}
+
+.investimentos__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.investimentos__reserve-value {
+  margin: 0 0 1rem;
+  color: var(--color-income);
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.investimentos__grand-total {
+  margin: 0 0 1rem;
   color: var(--color-text-secondary);
   font-size: 0.88rem;
-  line-height: 1.6;
+}
+
+.investimentos__grand-total strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+/* ── Instituições ── */
+.investimentos__institutions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+/* Tarja na cor do banco (a mesma do seletor de contas e da tela de conectar banco), pra cada
+   bloco ser reconhecido como "aquela instituição" antes mesmo de ler o nome. */
+.investimentos__institution {
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--institution-color);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.investimentos__institution-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.investimentos__institution-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.investimentos__institution-total {
+  color: var(--color-text-primary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.investimentos__institution-items {
+  list-style: none;
   margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.investimentos__institution-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.investimentos__institution-item-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.investimentos__institution-item-value {
+  color: var(--color-text-primary);
+  font-size: 0.86rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ── Modalidades ── */
+.investimentos__modality {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: var(--radius-pill);
+  padding: 0.2rem 0.55rem;
+  background-color: color-mix(in srgb, var(--modality-color) 18%, transparent);
+  color: var(--modality-color);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.investimentos__modality svg {
+  width: 13px;
+  height: 13px;
+}
+
+.investimentos__guide {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.investimentos__guide-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.investimentos__guide-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background-color: color-mix(in srgb, var(--modality-color) 18%, transparent);
+  color: var(--modality-color);
+}
+
+.investimentos__guide-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.investimentos__guide-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-text-primary);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.investimentos__guide-source {
+  color: var(--color-text-tertiary);
+  font-size: 0.68rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.investimentos__guide-item p {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+/* ── Metas ── */
+.investimentos__goal-percent {
+  margin-left: auto;
+  margin-right: 0.4rem;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.investimentos__goal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.investimentos__link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 0.78rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.investimentos__link-button:hover {
+  color: var(--color-text-primary);
+}
+
+@media (max-width: 900px) {
+  .investimentos__grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 520px) {
   .investimentos__form {
+    grid-template-columns: 1fr;
+  }
+
+  .investimentos__institutions {
     grid-template-columns: 1fr;
   }
 }

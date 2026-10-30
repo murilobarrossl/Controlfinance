@@ -4,7 +4,8 @@ import Button from "../../components/ui/Button/Button.jsx";
 import { EyeIcon, EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
 import { register } from "../../api/auth.js";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { applyMask, CNPJ_MASK, getCpfCnpjMask, PHONE_MASK_MOBILE, getPhoneMask } from "../../utils/masks.js";
+import { applyMask, CNPJ_MASK, getCpfCnpjMask } from "../../utils/masks.js";
+import { TERMS_VERSION, PRIVACY_VERSION } from "../../legal/versions.js";
 import logo from "../../assets/images/cflogobranco.svg";
 import "./Cadastro.css";
 
@@ -23,16 +24,16 @@ const STEPS = [
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const { login: setAuthToken } = useAuth();
+  const { login: startSession } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [document, setDocument] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [confirmsAdult, setConfirmsAdult] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -42,14 +43,6 @@ export default function RegisterPage() {
     const mask = getCpfCnpjMask(digits);
     const masked = applyMask(digits, mask, document.replace(/\D/g, ""));
     setDocument(masked);
-  }
-
-  function handlePhoneChange(e) {
-    const rawValue = e.target.value;
-    const digits = rawValue.replace(/\D/g, "").slice(0, 11);
-    const mask = getPhoneMask(digits);
-    const masked = applyMask(digits, mask, phone.replace(/\D/g, ""));
-    setPhone(masked);
   }
 
   async function handleSubmit(e) {
@@ -66,17 +59,17 @@ export default function RegisterPage() {
       const data = await register({
         name,
         email,
-        phoneNumber: phone.replace(/\D/g, ""),
         document: document.replace(/\D/g, ""),
         password,
+        // Versões dos textos exibidos nesta tela: o backend registra o aceite com elas e recusa
+        // se não forem as vigentes.
+        acceptedTermsVersion: TERMS_VERSION,
+        acceptedPrivacyVersion: PRIVACY_VERSION,
+        confirmsAdult,
       });
 
-      if (data?.token) {
-        setAuthToken(data.token);
-        navigate("/conectar-banco");
-      } else {
-        navigate("/loginemail");
-      }
+      startSession(data);
+      navigate("/conectar-banco");
     } catch (err) {
       setError(err.message || "Não foi possível criar a conta. Tente novamente.");
     } finally {
@@ -103,8 +96,8 @@ export default function RegisterPage() {
           comece a planejar
         </h1>
         <p className="register__subtitle">
-          Em alguns cliques você terá acesso ao painel financeiro
-          inteligente.
+          Em alguns cliques você terá acesso ao seu painel
+          financeiro.
         </p>
         <ol className="register__steps">
           {STEPS.map((step) => (
@@ -158,21 +151,6 @@ export default function RegisterPage() {
           </label>
 
           <label className="register__field">
-            <span className="register__field-label">TELEFONE</span>
-            <input
-              type="tel"
-              value={phone}
-              onChange={handlePhoneChange}
-              className="register__input"
-              inputMode="numeric"
-              maxLength={PHONE_MASK_MOBILE.length}
-              autoComplete="tel"
-              placeholder="(00) 00000-0000"
-              required
-            />
-          </label>
-
-          <label className="register__field">
             <span className="register__field-label">CPF/CNPJ</span>
             <input
               type="text"
@@ -185,6 +163,10 @@ export default function RegisterPage() {
               placeholder="000.000.000-00 ou 00.000.000/0000-00"
               required
             />
+            <span className="register__field-hint">
+              Usado para entrar com CPF/CNPJ e para confirmar que é você ao conectar um banco. O número
+              não fica guardado: guardamos só um código de verificação gerado a partir dele.
+            </span>
           </label>
 
           <label className="register__field">
@@ -243,23 +225,39 @@ export default function RegisterPage() {
           <label className="register__terms">
             <input
               type="checkbox"
+              checked={confirmsAdult}
+              onChange={(e) => setConfirmsAdult(e.target.checked)}
+              className="register__checkbox"
+              required
+            />
+            <span className="register__terms-text">Declaro que tenho 18 anos ou mais.</span>
+          </label>
+
+          <label className="register__terms">
+            <input
+              type="checkbox"
               checked={acceptedTerms}
               onChange={(e) => setAcceptedTerms(e.target.checked)}
               className="register__checkbox"
               required
             />
             <span className="register__terms-text">
-              Concordo com os{" "}
-              <Link to="/termos-de-uso" className="register__link">
+              Li e aceito os{" "}
+              <Link to="/termos-de-uso" className="register__link" target="_blank" rel="noopener noreferrer">
                 Termos de uso
-              </Link>{" "}
-              e{" "}
-              <Link to="/politica-de-privacidade" className="register__link">
-                Política de privacidade
-              </Link>{" "}
-              da plataforma.
+              </Link>
+              .
             </span>
           </label>
+
+          <p className="register__privacy-note">
+            Seus dados são tratados como descrito na{" "}
+            <Link to="/politica-de-privacidade" className="register__link" target="_blank" rel="noopener noreferrer">
+              Política de privacidade
+            </Link>
+            : o que guardamos, com quem compartilhamos, por quanto tempo e como excluir. Conectar um banco
+            é opcional e pedido à parte, depois do cadastro.
+          </p>
 
           {error && <p className="register__error">{error}</p>}
 

@@ -24,6 +24,9 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<PolpIntegration> PolpIntegrations => Set<PolpIntegration>();
     public DbSet<RevokedToken> RevokedTokens => Set<RevokedToken>();
     public DbSet<RecurrenceDecision> RecurrenceDecisions => Set<RecurrenceDecision>();
+    public DbSet<ConsentRecord> ConsentRecords => Set<ConsentRecord>();
+    public DbSet<PendingProviderDeletion> PendingProviderDeletions => Set<PendingProviderDeletion>();
+    public DbSet<AccessLogEntry> AccessLogs => Set<AccessLogEntry>();
     public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -58,13 +61,14 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(u => u.Name).IsRequired().HasMaxLength(100);
             e.Property(u => u.Email).IsRequired().HasMaxLength(150);
             e.HasIndex(u => u.Email).IsUnique();
-            e.Property(u => u.PhoneNumber).IsRequired().HasMaxLength(20);
-
-            // Document guarda o CPF/CNPJ criptografado: a busca/unicidade usa DocumentHash,
-            // já que o ciphertext muda a cada gravação e não permite comparação direta.
-            e.Property(u => u.Document).IsRequired().HasConversion(textConverter);
+            // Document (legado) é o CPF/CNPJ cifrado de forma recuperável. Não é mais gravado
+            // (ver User.Document); fica nulável só até PrivacyBackfill zerar as linhas antigas e
+            // a coluna ser removida. Busca/unicidade sempre usaram DocumentHash.
+            e.Property(u => u.Document).HasConversion(nullableTextConverter);
             e.Property(u => u.DocumentHash).IsRequired().HasMaxLength(100);
             e.HasIndex(u => u.DocumentHash).IsUnique();
+            e.Property(u => u.DocumentType).HasMaxLength(4);
+            e.Property(u => u.DueRemindersEnabled).HasDefaultValue(true);
 
             e.Property(u => u.PasswordHash).IsRequired();
         });
@@ -113,7 +117,15 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<Transaction>(e =>
         {
             e.HasKey(t => t.Id);
-            e.Property(t => t.Name).IsRequired().HasMaxLength(150);
+            // Name traz descrição do lançamento, nome de estabelecimento e, em transferências, o
+            // nome da contraparte (dado pessoal de terceiro): cifrado em repouso como Amount.
+            // Isso tira a busca/ordenação por nome do SQL (o ciphertext não é comparável): o
+            // relatório faz essas duas em memória, sobre o mesmo teto de linhas que já usava pra
+            // ordenar por valor. Nulável no banco só durante a transição: linhas antigas ainda
+            // estão em texto puro na coluna "Name" (shadow property LegacyName) até
+            // PrivacyBackfill cifrá-las e zerar a coluna antiga.
+            e.Property(t => t.Name).HasConversion(textConverter).HasColumnName("NameEncrypted").IsRequired(false);
+            e.Property<string?>("LegacyName").HasColumnName("Name").HasMaxLength(150);
             e.Property(t => t.Amount).HasConversion(decimalConverter).HasColumnName("AmountEncrypted");
             e.Property(t => t.Type).HasConversion<string>();
             e.Property(t => t.Status).HasConversion<string>();
@@ -151,7 +163,12 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<Installment>(e =>
         {
             e.HasKey(i => i.Id);
-            e.Property(i => i.Description).IsRequired().HasMaxLength(150);
+            // Descrição do parcelamento é digitada pelo usuário ("Notebook", "Tratamento dentário"…)
+            // e pode revelar mais do que parece (inclusive saúde): cifrada como o nome das
+            // transações. Mesma transição em duas fases: linhas antigas ficam em "Description"
+            // (shadow LegacyDescription) até PrivacyBackfill cifrar.
+            e.Property(i => i.Description).HasConversion(textConverter).HasColumnName("DescriptionEncrypted").IsRequired(false);
+            e.Property<string?>("LegacyDescription").HasColumnName("Description").HasMaxLength(150);
             e.Property(i => i.TotalAmount).HasConversion(decimalConverter).HasColumnName("TotalAmountEncrypted");
             e.Property(i => i.InstallmentAmount).HasConversion(decimalConverter).HasColumnName("InstallmentAmountEncrypted");
             e.HasOne(i => i.CreditCard)
@@ -162,6 +179,33 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
              .WithMany()
              .HasForeignKey(i => i.BankAccountId)
              .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ConsentRecord>(e =>
+        {
+            e.HasKey(c => c.Id);
+            e.Property(c => c.Kind).IsRequired().HasMaxLength(40);
+            e.Property(c => c.Version).IsRequired().HasMaxLength(40);
+            e.Property(c => c.Reference).HasMaxLength(40);
+            e.HasOne(c => c.User)
+             .WithMany()
+             .HasForeignKey(c => c.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(c => new { c.UserId, c.Kind });
+        });
+
+        modelBuilder.Entity<PendingProviderDeletion>(e =>
+        {
+            e.HasKey(p => p.Id);
+        });
+
+        modelBuilder.Entity<AccessLogEntry>(e =>
+        {
+            e.ToTable("AccessLogs");
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Event).IsRequired().HasMaxLength(30);
+            e.Property(a => a.IpAddress).HasConversion(nullableTextConverter).HasColumnName("IpAddressEncrypted");
+            e.HasIndex(a => a.OccurredAt);
         });
 
         modelBuilder.Entity<RevokedToken>(e =>

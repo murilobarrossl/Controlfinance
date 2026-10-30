@@ -105,9 +105,6 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, true, out var tp))
             query = query.Where(t => t.Type == tp);
 
-        if (!string.IsNullOrEmpty(search))
-            query = query.Where(t => EF.Functions.ILike(t.Name, $"%{search}%"));
-
         // year/month chegam como inteiros (não como DateTime cru na query string) de propósito:
         // o model binder de DateTime da ASP.NET não garante Kind=Utc a partir de string, e essa
         // ambiguidade já causou bug de fronteira de mês em outro lugar do dashboard. Montar o
@@ -119,7 +116,6 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             query = query.Where(t => t.DueDate >= startOfMonth && t.DueDate < endOfMonth);
         }
 
-        var totalCount = await query.CountAsync();
         var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
 
         // Amount é criptografado (guardado como texto): "ORDER BY"/"SUM" direto na coluna
@@ -133,9 +129,20 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         decimal totalIncome;
         decimal totalExpense;
 
-        if (string.Equals(sortBy, "amount", StringComparison.OrdinalIgnoreCase))
+        int totalCount;
+
+        // Nome (Name) também é cifrado agora: busca por descrição e ordenação por nome caem no
+        // mesmo caminho em memória da ordenação por valor.
+        var needsInMemory = string.Equals(sortBy, "amount", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(sortBy, "name", StringComparison.OrdinalIgnoreCase)
+            || !string.IsNullOrWhiteSpace(search);
+
+        if (needsInMemory)
         {
             var all = await ProjectToDto(query.OrderByDescending(t => t.DueDate).Take(MaxRows)).ToListAsync();
+            if (!string.IsNullOrWhiteSpace(search))
+                all = all.Where(t => MatchesSearch(t.Name, search)).ToList();
+            totalCount = all.Count;
             all = all
                 .Select(t => t with
                 {
@@ -145,14 +152,14 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
                         : t.Status,
                 })
                 .ToList();
-            var sorted = desc ? all.OrderByDescending(t => t.Amount) : all.OrderBy(t => t.Amount);
-            items = sorted.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            items = SortInMemory(all, sortBy, desc).Skip((page - 1) * pageSize).Take(pageSize).ToList();
             // Transferências pra si mesmo continuam nos itens (extrato), só saem dos totais.
             totalIncome = all.Where(t => t.Type == "Income" && !t.IsTransfer).Sum(t => t.Amount);
             totalExpense = all.Where(t => t.Type == "Expense" && !t.IsTransfer).Sum(t => t.Amount);
         }
         else
         {
+            totalCount = await query.CountAsync();
             var ordered = ApplySort(query, sortBy, desc);
             items = await ProjectToDto(ordered.Skip((page - 1) * pageSize).Take(pageSize)).ToListAsync();
             items = items
@@ -183,6 +190,32 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         return Ok(new TransactionReportDto(items, totalCount, totalIncome, totalExpense));
     }
 
+    // Busca sem diferenciar maiúsculas nem acentos ("pao" acha "Pão"), como o ILIKE fazia para
+    // maiúsculas, agora sobre o nome já decifrado em memória.
+    private static bool MatchesSearch(string name, string search) =>
+        System.Globalization.CultureInfo.InvariantCulture.CompareInfo.IndexOf(
+            name, search.Trim(),
+            System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+
+    private static IEnumerable<TransactionDto> SortInMemory(List<TransactionDto> items, string sortBy, bool desc)
+    {
+        Func<TransactionDto, object?> key = sortBy switch
+        {
+            "amount" => t => t.Amount,
+            "name" => t => t.Name,
+            "categoryName" => t => t.CategoryName ?? "",
+            "bankAccountName" => t => t.BankAccountName ?? "",
+            "type" => t => t.Type,
+            "status" => t => t.Status,
+            _ => t => t.DueDate,
+        };
+        var comparer = Comparer<object?>.Create((a, b) => a is string sa && b is string sb
+            ? string.Compare(sa, sb, System.Globalization.CultureInfo.GetCultureInfo("pt-BR"), System.Globalization.CompareOptions.IgnoreCase)
+            : Comparer<object?>.Default.Compare(a, b));
+        var ordered = desc ? items.OrderByDescending(key, comparer) : items.OrderBy(key, comparer);
+        return ordered.ThenBy(t => t.Id);
+    }
+
     private static IQueryable<TransactionDto> ProjectToDto(IQueryable<Transaction> query) =>
         query.Select(t => new TransactionDto(
             t.Id, t.Name, t.Description,
@@ -200,9 +233,6 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
     // (ou sumir de todas) só por causa disso.
     private static IQueryable<Transaction> ApplySort(IQueryable<Transaction> query, string sortBy, bool desc) => sortBy switch
     {
-        "name" => desc
-            ? query.OrderByDescending(t => t.Name).ThenBy(t => t.Id)
-            : query.OrderBy(t => t.Name).ThenBy(t => t.Id),
         "categoryName" => desc
             ? query.OrderByDescending(t => t.Category != null ? t.Category.Name : "").ThenBy(t => t.Id)
             : query.OrderBy(t => t.Category != null ? t.Category.Name : "").ThenBy(t => t.Id),

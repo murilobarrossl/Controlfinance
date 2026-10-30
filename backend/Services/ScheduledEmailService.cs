@@ -4,9 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ControlFinance.API.Services;
 
-// Roda uma vez por dia: (1) lembretes de vencimento pras transações que entraram na janela
-// de 3 dias antes do vencimento e ainda não foram avisadas, e (2) resumo mensal, enviado
-// pra cada usuário todo dia 1º, cobrindo o mês anterior (já fechado).
+// Roda uma vez por dia: (1) lembrete de vencimento (um por usuário) quando há transações
+// pendentes na janela de 3 dias antes do vencimento ainda não avisadas, e (2) aviso mensal, todo
+// dia 1º, só pra quem ligou essa opção.
 public class ScheduledEmailService(IServiceScopeFactory scopeFactory, ILogger<ScheduledEmailService> logger) : BackgroundService
 {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(24);
@@ -41,6 +41,9 @@ public class ScheduledEmailService(IServiceScopeFactory scopeFactory, ILogger<Sc
             await SendMonthlySummaries(db, email, ct);
     }
 
+    // Um e-mail por usuário, não um por transação, e sem nome nem valor de nenhuma conta (ver
+    // EmailService). Só usuários ativos que não desligaram o lembrete, e só transações de contas
+    // ainda conectadas (ou manuais): antes uma conta "desconectada" continuava gerando lembrete.
     private async Task SendDueReminders(AppDbContext db, EmailService email, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
@@ -51,22 +54,24 @@ public class ScheduledEmailService(IServiceScopeFactory scopeFactory, ILogger<Sc
             .Where(t => t.Status == TransactionStatus.Pending
                      && t.ReminderSentAt == null
                      && t.DueDate >= now
-                     && t.DueDate <= horizon)
+                     && t.DueDate <= horizon
+                     && t.User.IsActive
+                     && t.User.DueRemindersEnabled
+                     && (t.BankAccount == null || t.BankAccount.IsActive))
             .ToListAsync(ct);
 
-        foreach (var transaction in dueTransactions)
+        foreach (var group in dueTransactions.GroupBy(t => t.UserId))
         {
+            var items = group.ToList();
             try
             {
-                await email.SendTransactionAlertEmailAsync(
-                    transaction.User.Email, transaction.User.Name,
-                    transaction.Name, transaction.Amount, transaction.DueDate);
-
-                transaction.ReminderSentAt = now;
+                await email.SendDueReminderAsync(items[0].User.Email, items.Count, items.Min(t => t.DueDate));
+                foreach (var transaction in items)
+                    transaction.ReminderSentAt = now;
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Falha ao enviar lembrete de vencimento da transação {TransactionId}", transaction.Id);
+                logger.LogWarning("Falha ao enviar lembrete de vencimento pro usuário {UserId} ({ErrorType})", group.Key, ex.GetType().Name);
             }
         }
 
@@ -74,6 +79,8 @@ public class ScheduledEmailService(IServiceScopeFactory scopeFactory, ILogger<Sc
             await db.SaveChangesAsync(ct);
     }
 
+    // Opt-in (User.MonthlySummaryEnabled, desligado por padrão) e sem números: só avisa que o
+    // resumo do mês está no painel. Antes ia pra todo mundo, com receitas, despesas e saldo.
     private async Task SendMonthlySummaries(AppDbContext db, EmailService email, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
@@ -81,44 +88,22 @@ public class ScheduledEmailService(IServiceScopeFactory scopeFactory, ILogger<Sc
         var previousMonthStart = currentMonthStart.AddMonths(-1);
 
         var users = await db.Users
-            .Where(u => u.IsActive && (u.LastMonthlySummarySentAt == null || u.LastMonthlySummarySentAt < currentMonthStart))
+            .Where(u => u.IsActive
+                     && u.MonthlySummaryEnabled
+                     && (u.LastMonthlySummarySentAt == null || u.LastMonthlySummarySentAt < currentMonthStart)
+                     && db.Transactions.Any(t => t.UserId == u.Id && t.DueDate >= previousMonthStart && t.DueDate < currentMonthStart))
             .ToListAsync(ct);
-
-        if (users.Count == 0) return;
-
-        // Uma query pra todo mundo em vez de uma por usuário: os valores estão criptografados
-        // no banco, então a soma por tipo é feita em memória depois de trazer as linhas do mês.
-        var userIds = users.Select(u => u.Id).ToList();
-        var monthlyTransactionsByUser = (await db.Transactions
-                .Where(t => userIds.Contains(t.UserId) && t.DueDate >= previousMonthStart && t.DueDate < currentMonthStart)
-                .Select(t => new { t.UserId, t.Type, t.Amount, t.Name, CategoryName = t.Category != null ? t.Category.Name : null })
-                .ToListAsync(ct))
-            .GroupBy(t => t.UserId)
-            .ToDictionary(g => g.Key, g => g.ToList());
 
         foreach (var user in users)
         {
-            if (!monthlyTransactionsByUser.TryGetValue(user.Id, out var monthlyTransactions))
-                continue; // nada a resumir, não manda e-mail vazio
-
-            // Mesmo filtro de auto-transferência usado no dashboard (TransferDetection): sem
-            // isso, um Pix entre duas contas do próprio usuário infla receita e despesa aqui
-            // também, mesmo já corrigido na tela.
-            var nonTransfer = monthlyTransactions
-                .Where(t => !TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, user.Name))
-                .ToList();
-
-            var income = nonTransfer.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
-            var expense = nonTransfer.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
-
             try
             {
-                await email.SendMonthlySummaryEmailAsync(user.Email, user.Name, income, expense, income - expense);
+                await email.SendMonthlyNoticeAsync(user.Email);
                 user.LastMonthlySummarySentAt = now;
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Falha ao enviar resumo mensal pro usuário {UserId}", user.Id);
+                logger.LogWarning("Falha ao enviar aviso mensal pro usuário {UserId} ({ErrorType})", user.Id, ex.GetType().Name);
             }
         }
 

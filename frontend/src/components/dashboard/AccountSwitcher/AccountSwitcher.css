@@ -43,6 +43,45 @@
   max-width: 200px;
 }
 
+.account-switcher__card-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: #a99ff0;
+}
+
+.account-switcher__card-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.account-switcher__kind {
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  padding: 0.1rem 0.45rem;
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-tertiary);
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.account-switcher__kind--card {
+  background-color: color-mix(in srgb, #7569d3 20%, transparent);
+  color: #a99ff0;
+}
+
+/* Cartão logo abaixo da conta corrente do mesmo banco, recuado com uma guia na esquerda: é um
+   produto daquela conexão, não uma conta bancária independente. */
+.account-switcher__row--nested {
+  margin-left: 1rem;
+  width: calc(100% - 1rem);
+  border-left: 2px solid var(--color-border-strong);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
 .account-switcher__chevron {
   display: inline-flex;
   flex-shrink: 0;

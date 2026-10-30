@@ -60,8 +60,8 @@
 
 | Método | Rota                  | Body                                                    | Resposta          |
 |--------|-----------------------|---------------------------------------------------------|-------------------|
-| POST   | `/api/auth/register`  | `name, email, phoneNumber, document, password`          | `201` + JWT       |
-| POST   | `/api/auth/login`     | `identifier` (e-mail ou CPF/CNPJ), `password`           | `200` + JWT       |
+| POST   | `/api/auth/register`  | `name, email, document, password, acceptedTermsVersion, acceptedPrivacyVersion, confirmsAdult` | `201` + cookie de sessão |
+| POST   | `/api/auth/login`     | `identifier` (e-mail ou CPF/CNPJ), `password`           | `200` + cookie de sessão |
 
 ### Exemplo - Register
 ```json
@@ -69,9 +69,11 @@ POST /api/auth/register
 {
   "name": "Bruno Silva",
   "email": "bruno@empresa.com.br",
-  "phoneNumber": "81999990000",
   "document": "12345678000199",
-  "password": "Senha@123"
+  "password": "Senha@123",
+  "acceptedTermsVersion": "2026-10-31",
+  "acceptedPrivacyVersion": "2026-10-31",
+  "confirmsAdult": true
 }
 ```
 
@@ -87,27 +89,27 @@ POST /api/auth/login
 ### Resposta de sucesso (ambos)
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5...",
+  "csrfToken": "q3l2...",
   "user": {
     "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "name": "Bruno Silva",
     "email": "bruno@empresa.com.br",
-    "document": "12345678000199"
+    "documentType": "CNPJ",
+    "dueRemindersEnabled": true,
+    "monthlySummaryEnabled": false
   }
 }
 ```
 
 ---
 
-## Como o frontend deve usar o token
+## Como o frontend usa a sessão
 
-Após o login/registro, salve o token (ex: `localStorage`) e envie em toda requisição autenticada:
-
-```http
-Authorization: Bearer {token}
-```
-
----
+O JWT vai num cookie `httpOnly` (`access_token`), nunca no corpo da resposta nem no
+`localStorage`. O frontend manda as requisições com `credentials: "include"` e, em toda requisição
+que altera dados (POST/PUT/PATCH/DELETE), o cabeçalho `X-CSRF-Token` com o `csrfToken` recebido
+no login/cadastro ou em `GET /api/auth/me` (guardado só em memória). Para Swagger ou clientes de
+API, `Authorization: Bearer {token}` continua aceito e dispensa o cabeçalho de CSRF.
 
 ## Estrutura de pastas
 

@@ -11,7 +11,7 @@ namespace ControlFinance.API.Controllers;
 [ApiController]
 [Route("api/recurrences")]
 [Authorize]
-public class RecurrencesController(AppDbContext db) : ApiControllerBase
+public class RecurrencesController(AppDbContext db, IEncryptionService encryption) : ApiControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -33,7 +33,8 @@ public class RecurrencesController(AppDbContext db) : ApiControllerBase
 
         var now = DateTime.UtcNow;
         var detected = RecurrenceDetection.DetectGroups(transactions, now);
-        var applied = RecurrenceDetection.ApplyDecisions(detected, transactions, decisions, now);
+        var applied = RecurrenceDetection.ApplyDecisions(
+            detected, transactions, decisions, now, name => RecurrenceKey.Candidates(encryption, name));
 
         // Custo anual ao lado do mensal é a ideia central da feature (ver comentário no DTO):
         // ordenar por ele já deixa a lista no formato que a tela vai querer (maior impacto primeiro).
@@ -83,9 +84,10 @@ public class RecurrencesController(AppDbContext db) : ApiControllerBase
         if (!accountExists) return BadRequest(new { message = "Conta bancária inválida." });
 
         var normalizedName = RecurrenceDetection.Normalize(dto.Name);
+        var keyCandidates = RecurrenceKey.Candidates(encryption, normalizedName);
 
         var decision = await db.RecurrenceDecisions.FirstOrDefaultAsync(d =>
-            d.UserId == UserId && d.BankAccountId == dto.BankAccountId && d.NormalizedName == normalizedName);
+            d.UserId == UserId && d.BankAccountId == dto.BankAccountId && keyCandidates.Contains(d.NormalizedName));
 
         // Dois casos precisam saber se a detecção automática já pegou essa recorrência sozinha:
         // confirmar com pouco histórico (aí a frequência assumida é obrigatória) e pedir lembrete
@@ -124,7 +126,7 @@ public class RecurrencesController(AppDbContext db) : ApiControllerBase
             {
                 UserId = UserId,
                 BankAccountId = dto.BankAccountId,
-                NormalizedName = normalizedName
+                NormalizedName = RecurrenceKey.For(encryption, normalizedName)
             };
             db.RecurrenceDecisions.Add(decision);
         }
@@ -136,6 +138,10 @@ public class RecurrencesController(AppDbContext db) : ApiControllerBase
         }
         if (dto.ReminderRequested.HasValue)
             decision.ReminderRequested = dto.ReminderRequested.Value;
+
+        // Linha antiga (texto puro ou chave de busca anterior) é regravada com a chave atual.
+        if (!RecurrenceKey.IsCurrent(encryption, decision.NormalizedName))
+            decision.NormalizedName = RecurrenceKey.For(encryption, normalizedName);
 
         decision.UpdatedAt = DateTime.UtcNow;
 

@@ -10,7 +10,13 @@ namespace ControlFinance.API.Controllers;
 [ApiController]
 [Route("api/polp")]
 [Authorize]
-public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFactory scopeFactory, ILogger<PolpController> logger) : ApiControllerBase
+public class PolpController(
+    AppDbContext db,
+    IPolpService polp,
+    IEncryptionService encryption,
+    PolpDisconnectService disconnectService,
+    IServiceScopeFactory scopeFactory,
+    ILogger<PolpController> logger) : ApiControllerBase
 {
     [HttpGet("connectors")]
     public async Task<IActionResult> GetConnectors(CancellationToken ct)
@@ -20,9 +26,9 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
         {
             institutions = await polp.GetInstitutionsAsync(ct);
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException)
         {
-            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível carregar os bancos disponíveis.", detail = ex.Message });
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível carregar os bancos disponíveis." });
         }
 
         var connectors = institutions.Select(i => new
@@ -81,8 +87,26 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
         if (!int.TryParse(dto.ConnectorId, out var institutionId))
             return BadRequest(new { message = "connectorId inválido." });
 
+        // O aviso da tela de conexão (quais dados, pra quê, quem recebe, como desconectar) tem
+        // versão; só aceita a conexão se o usuário confirmou exatamente o texto vigente, e esse
+        // aceite fica registrado (LGPD art. 8º, § 2º; Termos da Polp, seção 06).
+        if (dto.ConsentVersion != LegalDocuments.BankConnectionNoticeVersion)
+            return BadRequest(new { message = "Confirme as informações sobre a conexão bancária antes de continuar." });
+
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == UserId, ct);
         if (user is null) return Unauthorized();
+
+        // O CPF/CNPJ não fica mais guardado em forma recuperável: a Polp precisa dele pra criar a
+        // integração, então o usuário digita na hora, ele vai direto pra Polp e é descartado.
+        // Conferir contra o hash do cadastro impede conectar o banco de outra pessoa nesta conta.
+        var document = new string((dto.Document ?? string.Empty).Where(char.IsDigit).ToArray());
+        if (!DocumentValidator.IsValid(document) || !encryption.ComputeLookupHashCandidates(document).Contains(user.DocumentHash))
+            return BadRequest(new { message = "O CPF/CNPJ informado não confere com o do seu cadastro." });
+
+        // Mesmo motivo do login por CPF: o documento acabou de ser digitado, então regrava o hash
+        // com a chave de busca ativa se ele ainda estiver numa chave antiga.
+        if (!encryption.IsActiveLookupHash(user.DocumentHash))
+            user.DocumentHash = encryption.ComputeLookupHash(document);
 
         var blocking = await FindBlockingIntegrationAsync(institutionId, ct);
         if (blocking is not null)
@@ -98,11 +122,11 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
         PolpIntegrationDto created;
         try
         {
-            created = await polp.CreateIntegrationAsync(institutionId, user.Document, ct);
+            created = await polp.CreateIntegrationAsync(institutionId, document, ct);
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException)
         {
-            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível iniciar a conexão com o banco.", detail = ex.Message });
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível iniciar a conexão com o banco." });
         }
 
         var localIntegration = new PolpIntegration
@@ -110,11 +134,17 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
             UserId = UserId,
             PolpIntegrationId = created.Id,
             InstitutionId = institutionId,
-            Status = created.Status,
-            UrlToAuthenticate = created.UrlToAuthenticate
+            Status = created.Status
         };
 
         db.PolpIntegrations.Add(localIntegration);
+        db.ConsentRecords.Add(new ConsentRecord
+        {
+            UserId = UserId,
+            Kind = ConsentKinds.BankConnection,
+            Version = LegalDocuments.BankConnectionNoticeVersion,
+            Reference = institutionId.ToString()
+        });
         await db.SaveChangesAsync(ct);
 
         return Ok(new
@@ -134,7 +164,7 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
         // conta continua com sua própria visão de dados, nada é somado entre elas.
         var accounts = await db.BankAccounts
             .Where(b => b.UserId == UserId && b.IsActive)
-            .Select(b => new { b.Id, b.Name, b.Balance, b.BankCode, b.PolpIntegrationId })
+            .Select(b => new { b.Id, b.Name, b.Balance, b.BankCode, b.PolpIntegrationId, b.PolpAccountType, b.PolpAccountSubtype })
             .ToListAsync(ct);
 
         // BankAccount.PolpIntegrationId guarda o id remoto (int) da Polp, mas o botão de
@@ -158,7 +188,14 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
                 a.BankCode,
                 a.PolpIntegrationId,
                 localIntegrationId = local?.Id,
-                lastSyncedAt = local?.LastSyncedAt
+                lastSyncedAt = local?.LastSyncedAt,
+                // Tipo cru da Polp + a mesma decisão de "é cartão" que Cartões/Dashboard já usam
+                // (CreditCardAccountDetector), pra o frontend não apresentar um cartão como se fosse
+                // outra conta bancária nem reimplementar essa heurística do lado de lá. O tipo cru
+                // também é o que separa conta corrente de poupança/investimento em Investimentos.
+                accountType = a.PolpAccountType,
+                accountSubtype = a.PolpAccountSubtype,
+                isCreditCard = CreditCardAccountDetector.LooksLikeCreditCard(a.PolpAccountType, a.PolpAccountSubtype)
             };
         });
 
@@ -170,7 +207,7 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
     public async Task<IActionResult> GetIntegrationStatus(Guid id, CancellationToken ct)
     {
         var local = await db.PolpIntegrations
-            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == UserId, ct);
+            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus, ct);
 
         if (local is null) return NotFound();
 
@@ -179,13 +216,14 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
         {
             remote = await polp.GetIntegrationAsync(local.PolpIntegrationId, ct);
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException)
         {
-            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível consultar o status da conexão.", detail = ex.Message });
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível consultar o status da conexão." });
         }
 
+        // A URL de autenticação vai direto pro navegador e não é gravada: é de uso único e o
+        // próximo polling já traz a versão atual da Polp.
         local.Status = remote.Status;
-        local.UrlToAuthenticate = remote.UrlToAuthenticate;
         local.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
@@ -218,7 +256,7 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
     public async Task<IActionResult> Sync(Guid id, CancellationToken ct)
     {
         var local = await db.PolpIntegrations
-            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == UserId, ct);
+            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus, ct);
 
         if (local is null) return NotFound();
 
@@ -253,7 +291,7 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
     public async Task<IActionResult> SyncAll(CancellationToken ct)
     {
         var integrations = await db.PolpIntegrations
-            .Where(p => p.UserId == UserId)
+            .Where(p => p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus)
             .ToListAsync(ct);
 
         var toSync = integrations.Where(i => !IsSyncThrottled(i)).ToList();
@@ -266,6 +304,28 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
             QueueBackgroundSync(local.Id, UserId);
 
         return Accepted(new { queuedIntegrations = toSync.Count, totalIntegrations = integrations.Count });
+    }
+
+    // Desconecta uma conexão bancária inteira (conta corrente + cartão do mesmo banco vêm na mesma
+    // integração e não dá pra revogar uma sem a outra). Apaga na hora tudo que veio dessa conexão
+    // e pede a exclusão da integração na Polp. A resposta diz se a Polp aceitou o pedido ou se
+    // ele ficou pendente: a tela não pode afirmar que o fornecedor apagou algo que ele não
+    // confirmou. Desconectar não exclui a conta do Control Finance (isso é DELETE /api/account).
+    [HttpDelete("integrations/{id:guid}")]
+    public async Task<IActionResult> Disconnect(Guid id, CancellationToken ct)
+    {
+        var local = await db.PolpIntegrations
+            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == UserId, ct);
+
+        if (local is null) return NotFound();
+
+        var outcome = await disconnectService.DisconnectAsync(local, ct);
+
+        return Ok(new
+        {
+            localDataDeleted = true,
+            providerDeletion = outcome == RemoteDeletionOutcome.Requested ? "requested" : "pending"
+        });
     }
 
     // Roda com seu próprio escopo de DI (próprio DbContext, próprio PolpSyncService): o
@@ -325,4 +385,4 @@ public class PolpController(AppDbContext db, IPolpService polp, IServiceScopeFac
     }
 }
 
-public record PolpConnectDto(string ConnectorId);
+public record PolpConnectDto(string ConnectorId, string? Document, string? ConsentVersion);

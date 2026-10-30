@@ -11,7 +11,10 @@ namespace ControlFinance.API.Services;
 public static class CreditCardAccountDetector
 {
     public static bool LooksLikeCreditCard(BankAccount account) =>
-        MatchesHint(account.PolpAccountType) || MatchesHint(account.PolpAccountSubtype);
+        LooksLikeCreditCard(account.PolpAccountType, account.PolpAccountSubtype);
+
+    public static bool LooksLikeCreditCard(string? type, string? subtype) =>
+        MatchesHint(type) || MatchesHint(subtype);
 
     private static bool MatchesHint(string? value) =>
         value is not null && (

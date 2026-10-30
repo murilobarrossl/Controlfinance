@@ -12,6 +12,7 @@ import { getGoals } from "../../../utils/investmentStorage.js";
 import { getReserve } from "../../../utils/emergencyReserveStorage.js";
 import { calculateCutImpact } from "../../../utils/cutImpact.js";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
+import { resolveCategoryColor } from "../../../utils/categoryColors.js";
 import "./Categorias.css";
 
 const CUT_RATE_OPTIONS = [0.1, 0.2, 0.3, 0.5];
@@ -182,10 +183,11 @@ export default function Categorias() {
     const total = [...totals.values()].reduce((sum, e) => sum + e.value, 0);
 
     return [...totals.values()]
-      .map((e) => {
-        const category = categories.find((c) => c.name === e.name);
-        return { ...e, color: category?.color, percentage: total > 0 ? (e.value / total) * 100 : 0 };
-      })
+      .map((e) => ({
+        ...e,
+        color: resolveCategoryColor(e.name, categories),
+        percentage: total > 0 ? (e.value / total) * 100 : 0,
+      }))
       .sort((a, b) => b.value - a.value);
   }, [expenseTransactions, categories]);
 
@@ -299,7 +301,7 @@ export default function Categorias() {
               <ul className="categorias__donut-summary">
                 {breakdown.slice(0, 3).map((c) => (
                   <li key={c.name} className="categorias__donut-summary-item">
-                    <span className="categorias__donut-summary-dot" style={{ backgroundColor: c.color || "#808080" }} />
+                    <span className="categorias__donut-summary-dot" style={{ backgroundColor: c.color }} />
                     <span className="categorias__donut-summary-name">{c.name}</span>
                     <span className="categorias__donut-summary-percentage">{formatPercentage(c.percentage)}</span>
                     <span className="categorias__donut-summary-value">{formatCurrency(c.value)}</span>

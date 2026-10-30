@@ -2,6 +2,10 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE, FALLBACK_COLORS } from "./chartTheme.js";
 import "./CategoryDonutChart.css";
 
+function sliceColor(entry, index) {
+  return entry.color || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+}
+
 export default function CategoryDonutChart({
   data,
   height = 240,
@@ -11,27 +15,38 @@ export default function CategoryDonutChart({
   centerLabel,
   centerCaption = "Total",
 }) {
+  const format = (value) => (formatValue ? formatValue(value) : value);
+  const total = data.reduce((sum, entry) => sum + entry.value, 0);
+
   return (
     <div className={`category-donut ${showLegend ? "category-donut--with-legend" : ""}`}>
-      <div className="category-donut__chart">
-        <ResponsiveContainer width="100%" height={height}>
+      {/* Largura fixa igual à altura: antes o gráfico esticava (flex: 1) e a rosca ficava pequena
+          no meio de um retângulo largo, com o valor central maior que o furo da rosca. */}
+      <div className="category-donut__chart" style={{ width: height, maxWidth: "100%" }}>
+        <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={data}
               dataKey="value"
               nameKey="name"
-              innerRadius="62%"
-              outerRadius="80%"
-              paddingAngle={2}
+              innerRadius="66%"
+              outerRadius="96%"
+              // Com uma fatia só, o espaçamento abria um "corte" na rosca que parecia dado faltando.
+              paddingAngle={data.length > 1 ? 2 : 0}
+              stroke="none"
+              isAnimationActive={false}
               onClick={onSliceClick ? (entry) => onSliceClick(entry.name) : undefined}
               cursor={onSliceClick ? "pointer" : "default"}
             >
               {data.map((entry, index) => (
-                <Cell key={entry.name ?? index} fill={entry.color || FALLBACK_COLORS[index % FALLBACK_COLORS.length]} />
+                <Cell key={entry.name ?? index} fill={sliceColor(entry, index)} />
               ))}
             </Pie>
             <Tooltip
-              formatter={(value) => (formatValue ? formatValue(value) : value)}
+              formatter={(value, name) => [
+                `${format(value)}${total > 0 ? ` (${Math.round((value / total) * 100)}%)` : ""}`,
+                name,
+              ]}
               contentStyle={TOOLTIP_STYLE}
               itemStyle={TOOLTIP_ITEM_STYLE}
             />
@@ -48,18 +63,25 @@ export default function CategoryDonutChart({
 
       {showLegend && (
         <ul className="category-donut__legend">
-          {data.map((entry, index) => (
-            <li key={entry.name ?? index} className="category-donut__legend-item">
-              <span
-                className="category-donut__legend-dot"
-                style={{ backgroundColor: entry.color || FALLBACK_COLORS[index % FALLBACK_COLORS.length] }}
-              />
-              <span className="category-donut__legend-name">{entry.name}</span>
-              <span className="category-donut__legend-value">
-                {formatValue ? formatValue(entry.value) : entry.value}
-              </span>
-            </li>
-          ))}
+          {data.map((entry, index) => {
+            const percent = total > 0 ? (entry.value / total) * 100 : 0;
+            const color = sliceColor(entry, index);
+            return (
+              <li key={entry.name ?? index} className="category-donut__legend-item">
+                <div className="category-donut__legend-row">
+                  <span className="category-donut__legend-dot" style={{ backgroundColor: color }} />
+                  <span className="category-donut__legend-name" title={entry.name}>
+                    {entry.name}
+                  </span>
+                  <span className="category-donut__legend-percent">{Math.round(percent)}%</span>
+                  <span className="category-donut__legend-value">{format(entry.value)}</span>
+                </div>
+                <div className="category-donut__legend-bar" aria-hidden="true">
+                  <div style={{ width: `${percent}%`, backgroundColor: color }} />
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

@@ -54,41 +54,70 @@ There is no test runner configured (no Jest/Vitest).
 
 Auth is **cookie-based**, not bearer-token-in-JS, despite still using JWTs internally:
 - On login/register, `AuthController` issues the JWT inside an `httpOnly` `access_token` cookie
-  (`SameSite=Lax` in dev, `SameSite=None; Secure` in prod, since frontend and API sit on different
-  subdomains in production). JS never reads this cookie.
+  (`SessionCookie`; `Path=/api`, `Secure` outside Development, `SameSite` from
+  `Auth:CookieSameSite`, default `Lax`). JS never reads this cookie, and the JWT is never in a
+  response body. Frontend and API should share the same registrable domain in production; with
+  `SameSite=None` (different domains) browsers that block third-party cookies break login.
 - `OnMessageReceived` in the JWT bearer handler falls back to reading the `access_token` cookie
   when there's no `Authorization` header, so the same auth scheme handles both cookie sessions and
-  raw bearer tokens (Swagger, older clients).
-- Every validated token is also checked against `ITokenRevocationService` (backed by
-  `RevokedToken`/DB) by JTI, which is what makes logout actually invalidate a still-unexpired JWT.
-- Because the session cookie is `SameSite=None` in prod, a **double-submit CSRF cookie**
-  (`XSRF-TOKEN`, readable by JS) is required on every unsafe (non-GET/HEAD/OPTIONS) request and
-  echoed back as the `X-XSRF-TOKEN` header (see `frontend/src/api/client.js`). Requests carrying an
-  `Authorization` header instead of relying on the cookie are exempt from this check (can't be
-  forged cross-site), which is also what keeps Swagger working unmodified. `/api/auth/login` and
-  `/api/auth/register` are exempt too (pre-auth).
+  raw bearer tokens (Swagger, API clients).
+- `OnTokenValidated` checks, per request: JTI revocation (`ITokenRevocationService`, makes logout
+  real) and `SessionValidator` (user exists, is active, and the token's `tv` claim equals
+  `User.TokenVersion`, which is what makes "logout from all devices" and account deletion end
+  other sessions). Both use a 30s memory cache.
+- CSRF (`CsrfProtection`): every unsafe request authenticated by the cookie must send
+  `X-CSRF-Token` equal to the `csrf` claim inside the JWT. The frontend gets that value from the
+  body of `/auth/login`, `/auth/register` and `/auth/me` and keeps it in memory only
+  (`api/client.js`). Not a double-submit cookie because the frontend can't read cookies of the API
+  origin. Requests with an `Authorization` header are exempt (can't be forged cross-site).
 - `ApiControllerBase.UserId` is the standard way controllers read the authenticated user's id from
   the `sub` claim; inherit from it rather than parsing claims manually.
 
 ### Data protection / encryption
 
-- Sensitive columns (CPF/CNPJ, money amounts: `Balance`, `Amount`, `CreditLimit`, `UsedLimit`,
-  `TotalAmount`, `InstallmentAmount`) are encrypted at rest with AES-256-GCM via
+- Sensitive columns (money amounts: `Balance`, `Amount`, `CreditLimit`, `UsedLimit`,
+  `TotalAmount`, `InstallmentAmount`, `CurrentInvoiceAmount`; `Transaction.Name`; masked
+  `BankAccount.Number`) are encrypted at rest with AES-256-GCM via
   `IEncryptionService`, wired in transparently as EF Core `ValueConverter`s in
   `AppDbContext.OnModelCreating`. Application code always reads/writes plaintext; only the DB
   columns (suffixed `...Encrypted`) hold ciphertext.
-- `User.Document` (CPF/CNPJ) is encrypted and therefore not directly queryable; `DocumentHash` is a
-  deterministic HMAC-SHA256 lookup hash used for uniqueness/search instead.
-- The ASP.NET Data Protection key ring (used for the antiforgery/CSRF tokens) is persisted to
-  Postgres (`PersistKeysToDbContext`), not the filesystem: required so CSRF tokens survive
-  restarts/redeploys and work across multiple instances.
+- The CPF/CNPJ number is **not stored**: only `DocumentHash` (HMAC-SHA256, used for CPF login,
+  uniqueness and to check the document typed on the bank-connection screen) and `DocumentType`.
+  `User.Document` is a legacy column being emptied by `PrivacyBackfill`; Polp gets the document
+  typed by the user at connection time, in memory only.
+- Because `Transaction.Name` is encrypted, report search and sort-by-name run in memory
+  (`TransactionsController.GetReport`), capped like sort-by-amount.
+- Data minimization rules (see `RELATORIO_ADEQUACAO_PRIVACIDADE_CONTROL_FINANCE.md`): no Polp
+  response bodies in logs or exception messages, no names/amounts in e-mails (Resend is a US
+  provider), only last 4 digits of account numbers, no phone number, auth URL not persisted.
+- `PrivacyBackfill` runs on every startup (idempotent, batched) to convert pre-existing rows.
+- Key ring (`EncryptionService`): optional versioned data keys (`Encryption:Keys:{id}` +
+  `ActiveKeyId`, ciphertext prefix `cfk:{id}:`) and **independent** lookup-hash keys
+  (`Encryption:LookupKeys:{id}` + `ActiveLookupKeyId`, prefix `cfh:{id}:`), HKDF-derived. Unprefixed
+  values are legacy and read with `Encryption:Key`. Always look up hashed values with
+  `ComputeLookupHashCandidates` (CPF is not stored, so hash rotation is lazy: re-hashed when the user
+  types the document again). `EncryptionKeyRotation` (opt-in `Encryption:RotateOnStartup`) re-encrypts
+  every `...Encrypted` column. Never remove a key before rotation finished.
+- `Installment.Description` is encrypted too; `RecurrenceDecision.NormalizedName` stores an HMAC
+  (`RecurrenceKey`), never the plain normalized transaction name.
+- Retention and access logs are opt-in config: `DataRetention:SyncedHistoryMonths` (skip at import +
+  daily purge of old imported transactions), `AccessLog:Mode` (`Off` | `Authentication`, IP encrypted,
+  purged after `AccessLog:RetentionDays`; rows have no FK to `Users` on purpose).
+- Session checks skip the 10s cache for unsafe methods and `/api/account/export`
+  (`SessionValidator`, `TokenRevocationService`).
+- There is no lawyer or external legal review: legal questions are investigated and decided during
+  development; unresolved ones are recorded as open risks in the privacy report.
 
 ### Domain model (`backend/Models`, `backend/Data/AppDbContext.cs`)
 
 `User` → `BankAccount`, `Category`, `CreditCard`, `Transaction` (each cascade-deletes with the
 user). `Transaction` optionally links to a `BankAccount` and/or `Category` (`SetNull` on delete).
 `Installment` optionally links to a `CreditCard`. `PolpIntegration` tracks an open-finance link
-per user/institution.
+per user/institution. `ConsentRecord` is the append-only log of accepted Terms/Privacy versions and
+bank-connection notices (versions in `LegalDocuments.cs` and `frontend/src/legal/versions.js`,
+must match). `Installment` has no FK to `User`: delete it explicitly. `Transaction`/`Installment`
+→ `BankAccount` is `SetNull`, so deleting accounts must go through
+`PolpDisconnectService.DeleteAccountsDataAsync` to avoid orphaned statements.
 
 ### Polp integration (open finance sync)
 
@@ -100,13 +129,22 @@ idempotent (matches existing accounts by `PolpAccountId`, existing transactions 
 per-integration failures don't abort a `sync-all` batch. First sync for a user seeds a default set
 of categories.
 
+Disconnecting (`DELETE /api/polp/integrations/{id}`, `PolpDisconnectService`) deletes local data
+of that connection immediately, marks it `DISCONNECT_PENDING` (ignored by every sync path) and calls
+Polp `DELETE /integrations/{id}`; failures are retried hourly by `PendingDisconnectRetryService`.
+Account deletion (`POST /api/account/deletion`) queues failed provider deletions in
+`PendingProviderDeletion` (technical id only). The legacy v1 Polp API used here is announced by Polp
+as discontinued on 2026-11-28.
+
 ### Other backend services
 
 - `RateLimitService`: singleton, in-memory sliding-window rate limiting on both identifier
   (email/CPF) and IP for auth endpoints, to stop both credential stuffing and distributed attempts
   against one account.
 - `ScheduledEmailService` / `EmailService`: background hosted service sending transactional email
-  (via Resend), e.g. due-date reminders.
+  (via Resend): one aggregated due-date reminder per user (opt-out) and an opt-in monthly notice,
+  both without names or amounts.
+- `AccountController`: data export (JSON), e-mail preferences, account deletion.
 - `TokenRevocationService`: backs the logout flow described above.
 
 ### Frontend structure (`frontend/src`)
@@ -120,7 +158,7 @@ of categories.
   "include"`), attaches the CSRF header on unsafe methods, and redirects to `/loginemail` on a 401
   from any non-auth endpoint (session expired/revoked). All `api/*.js` modules build on this.
 - `pages/dashboard/*` are the authenticated app screens (income/expenses, reports, categories,
-  investments, budget); `pages/home/sections/*` compose the public marketing landing page.
+  investments, cards); `pages/home/sections/*` compose the public marketing landing page.
 - Some non-sensitive, per-user local state (investment goals, emergency reserve) is kept in
   `localStorage`, namespaced by the user id that `AuthContext` mirrors there
   (`cf_current_user_id`), see `utils/investmentStorage.js`, `utils/emergencyReserveStorage.js`.

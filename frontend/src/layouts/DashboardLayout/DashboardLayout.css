@@ -260,3 +260,47 @@
     padding: 1rem;
   }
 }
+
+.dashboard-sidebar__privacy-link {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  text-decoration: underline;
+}
+
+/* Resultado de desconexão/remoção de conta: o menu do seletor fecha ao confirmar, então o
+   resultado (inclusive "pedido à Polp pendente") aparece aqui, até o usuário fechar. */
+.dashboard-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-strong);
+  background-color: var(--color-surface);
+}
+
+.dashboard-notice p {
+  flex: 1;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.dashboard-notice--success {
+  border-color: color-mix(in srgb, var(--color-income) 60%, transparent);
+}
+
+.dashboard-notice--error {
+  border-color: var(--color-accent);
+}
+
+.dashboard-notice button {
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}

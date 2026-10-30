@@ -9,6 +9,8 @@ const PRODUTO_LINKS = [
   { label: "Sincronização bancária", href: "#funcionalidades" },
 ];
 
+const ANO_LANCAMENTO = 2026;
+
 const EMPRESA_LINKS = [
   { label: "Sobre nós", href: "#sobre-nos" },
   { label: "Time", href: "#time" },
@@ -17,6 +19,8 @@ const EMPRESA_LINKS = [
 
 export default function Footer() {
   const ano = new Date().getFullYear();
+  // Ano de lançamento fixo + ano corrente, pra o aviso não ficar desatualizado a cada virada de ano.
+  const periodo = ano > ANO_LANCAMENTO ? `${ANO_LANCAMENTO}–${ano}` : `${ANO_LANCAMENTO}`;
 
   return (
     <footer className="footer">
@@ -24,12 +28,13 @@ export default function Footer() {
         <div className="footer__brand">
           <img src={logo} alt="Control Finance" className="footer__logo" />
           <p className="footer__tagline">
-            Inteligência financeira para pessoa física e pequenos negócios,
-            com sincronização bancária via Open Finance.
+            Organização financeira para pessoa física e pequenos negócios,
+            com conexão bancária via Open Finance.
           </p>
           <p className="footer__security">
             <ShieldIcon />
-            Estrutura regulamentada pelo Banco Central do Brasil
+            O Control Finance não é instituição financeira. A conexão com bancos usa o
+            Open Finance (regulado pelo Banco Central), por meio de fornecedor parceiro.
           </p>
         </div>
 
@@ -67,18 +72,25 @@ export default function Footer() {
 
       <div className="footer__legal">
         <p className="footer__legal-text">
-          Control Finance · CNPJ [preencher antes de publicar] · Empresa 100% online
+          {/* PENDENTE (empresa): razão social, CNPJ, endereço físico e encarregado/canal de dados
+              ainda não foram informados. Exigidos pelo Decreto 7.962/2013 (art. 2º) e pela
+              LGPD (art. 9º e art. 41). Não inventar. */}
+          Control Finance · Razão social e CNPJ: [PENDENTE] · Endereço: [PENDENTE] · Empresa 100% online
         </p>
         <p className="footer__legal-text">
           As informações desta plataforma têm caráter informativo e não constituem
-          recomendação de investimento. A sincronização de contas ocorre exclusivamente
-          via Open Finance, mediante autorização do usuário, podendo ser revogada a
-          qualquer momento.
+          recomendação de investimento. Saldos e extratos exibidos são os informados pelo
+          banco na última sincronização. A conexão bancária ocorre via Open Finance, mediante
+          autorização do usuário, e pode ser desfeita a qualquer momento no painel.
         </p>
       </div>
 
       <div className="footer__bottom">
-        <span>© {ano} Control Finance. Todos os direitos reservados.</span>
+        <span>© {periodo} Control Finance. Todos os direitos reservados.</span>
+        <span>
+          É proibida a reprodução total ou parcial do conteúdo, marca e identidade visual desta
+          plataforma sem autorização prévia (Lei nº 9.610/1998).
+        </span>
       </div>
     </footer>
   );

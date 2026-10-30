@@ -1,10 +1,18 @@
 import { apiFetch } from "./client.js";
 
-export const createIntegration = async (connectorId) =>
+// document: CPF/CNPJ digitado na tela de conexão. Vai direto pra Polp (que exige o documento
+// do titular pra criar a integração) e não é guardado nem no navegador nem no backend.
+// consentVersion: versão do aviso de conexão que a pessoa confirmou (ver legal/versions.js).
+export const createIntegration = async (connectorId, document, consentVersion) =>
   apiFetch("/polp/integrations", {
     method: "POST",
-    body: JSON.stringify({ connectorId }),
+    body: JSON.stringify({ connectorId, document, consentVersion }),
   });
+
+// Desconecta um banco: apaga do Control Finance tudo que veio dessa conexão e pede a exclusão
+// da integração na Polp. Devolve { localDataDeleted, providerDeletion: "requested" | "pending" }.
+export const disconnectIntegration = async (localIntegrationId) =>
+  apiFetch(`/polp/integrations/${localIntegrationId}`, { method: "DELETE" });
 
 export const getIntegrations = async () =>
   apiFetch("/polp/integrations");

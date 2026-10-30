@@ -15,17 +15,24 @@ public class AuthController : ApiControllerBase
 {
     private readonly IAuthService _authService;
     private readonly ITokenRevocationService _tokenRevocation;
+    private readonly SessionValidator _sessionValidator;
     private readonly AppDbContext _db;
+    private readonly IConfiguration _config;
+    private readonly AccessLogService _accessLog;
 
-    public AuthController(IAuthService authService, ITokenRevocationService tokenRevocation, AppDbContext db)
+    public AuthController(IAuthService authService, ITokenRevocationService tokenRevocation,
+        SessionValidator sessionValidator, AppDbContext db, IConfiguration config, AccessLogService accessLog)
     {
+        _accessLog = accessLog;
         _authService = authService;
         _tokenRevocation = tokenRevocation;
+        _sessionValidator = sessionValidator;
         _db = db;
+        _config = config;
     }
 
     /// <summary>
-    /// Cadastra um novo usuário e retorna o JWT.
+    /// Cadastra um novo usuário e abre a sessão (cookie httpOnly).
     /// </summary>
     /// POST /api/auth/register
     [HttpPost("register")]
@@ -46,11 +53,12 @@ public class AuthController : ApiControllerBase
             return StatusCode(statusCode, new { message = error });
         }
 
-        return CreatedAtAction(nameof(Register), data);
+        await _accessLog.RecordAsync(data!.User.Id, "register", ipAddress);
+        return StatusCode(StatusCodes.Status201Created, StartSession(data!));
     }
 
     /// <summary>
-    /// Autentica o usuário com e-mail ou CPF/CNPJ + senha e retorna o JWT.
+    /// Autentica o usuário com e-mail ou CPF/CNPJ + senha e abre a sessão (cookie httpOnly).
     /// </summary>
     /// POST /api/auth/login
     [HttpPost("login")]
@@ -64,32 +72,33 @@ public class AuthController : ApiControllerBase
         if (!success)
             return Unauthorized(new { message = error });
 
-        return Ok(data);
+        await _accessLog.RecordAsync(data!.User.Id, "login", ipAddress);
+        return Ok(StartSession(data!));
     }
 
     /// <summary>
-    /// Dados do usuário autenticado, usado pra exibir nome/e-mail em telas que não
-    /// vieram de um login/cadastro recente (ex.: sessão já aberta antes, refresh de página).
+    /// Dados do usuário da sessão atual + o segredo anti-CSRF dela. É como o frontend descobre,
+    /// ao abrir/recarregar a página, se já existe uma sessão válida (o cookie não é legível por JS).
     /// </summary>
     /// GET /api/auth/me
     [Authorize]
     [HttpGet("me")]
-    [ProducesResponseType(typeof(UserInfoDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Me(CancellationToken ct)
     {
-        var user = await _db.Users
-            .Where(u => u.Id == UserId)
-            .Select(u => new UserInfoDto { Id = u.Id, Name = u.Name, Email = u.Email, Document = u.Document })
-            .FirstOrDefaultAsync(ct);
-
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == UserId, ct);
         if (user is null) return NotFound();
 
-        return Ok(user);
+        return Ok(new AuthResponseDto
+        {
+            User = AuthService.ToUserInfo(user),
+            CsrfToken = User.FindFirstValue(SessionClaims.Csrf) ?? string.Empty,
+        });
     }
 
     /// <summary>
-    /// Revoga o token atual: sem isso, "sair" só apagava o token no navegador e ele
-    /// continuava válido (JWT é stateless) até expirar sozinho.
+    /// Encerra a sessão atual: revoga o token (por JTI) e apaga o cookie. Revogar é o que torna o
+    /// logout real, já que o JWT continuaria válido até expirar.
     /// </summary>
     /// POST /api/auth/logout
     [Authorize]
@@ -99,12 +108,41 @@ public class AuthController : ApiControllerBase
         var jti = User.FindFirstValue(JwtRegisteredClaimNames.Jti);
         var expClaim = User.FindFirstValue(JwtRegisteredClaimNames.Exp);
 
-        if (string.IsNullOrEmpty(jti) || !long.TryParse(expClaim, out var expUnix))
-            return BadRequest(new { message = "Token inválido." });
+        if (!string.IsNullOrEmpty(jti) && long.TryParse(expClaim, out var expUnix))
+        {
+            var expiresAt = DateTimeOffset.FromUnixTimeSeconds(expUnix).UtcDateTime;
+            await _tokenRevocation.RevokeAsync(jti, expiresAt);
+        }
 
-        var expiresAt = DateTimeOffset.FromUnixTimeSeconds(expUnix).UtcDateTime;
-        await _tokenRevocation.RevokeAsync(jti, expiresAt);
-
+        SessionCookie.Delete(HttpContext, _config);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Encerra todas as sessões do usuário, em qualquer aparelho: incrementa a versão de sessão,
+    /// e todo token emitido antes passa a ser recusado (ver SessionValidator).
+    /// </summary>
+    /// POST /api/auth/logout-all
+    [Authorize]
+    [HttpPost("logout-all")]
+    public async Task<IActionResult> LogoutAll(CancellationToken ct)
+    {
+        await _db.Users
+            .Where(u => u.Id == UserId)
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.TokenVersion, u => u.TokenVersion + 1), ct);
+
+        _sessionValidator.Invalidate(UserId);
+        SessionCookie.Delete(HttpContext, _config);
+        return NoContent();
+    }
+
+    private AuthResponseDto StartSession(AuthResult result)
+    {
+        SessionCookie.Append(HttpContext, _config, result.Token.Jwt, result.Token.ExpiresAt);
+        return new AuthResponseDto
+        {
+            User = AuthService.ToUserInfo(result.User),
+            CsrfToken = result.Token.CsrfToken,
+        };
     }
 }

@@ -9,6 +9,7 @@ import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
 import { formatCurrency } from "../../../utils/financeMath.js";
 import { formatMonthLong } from "../../../utils/monthLabel.js";
 import { getMonthsWindow } from "../../../utils/monthlyTrend.js";
+import { resolveCategoryColor, categoryInitials } from "../../../utils/categoryColors.js";
 import "./Relatorios.css";
 
 const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
@@ -25,6 +26,30 @@ const COLUMNS = [
   { key: "status", label: "Status" },
   { key: "amount", label: "Valor" },
 ];
+
+const PERIOD_HINTS = {
+  all: "Todo o período: mostra todos os lançamentos desde a primeira sincronização da conta selecionada, sem filtro de data. Os totais abaixo somam o histórico inteiro.",
+  month:
+    "Por mês: mostra só os lançamentos do mês escolhido (use as setas para navegar entre meses). Os totais abaixo somam apenas aquele mês.",
+};
+
+// Etiqueta colorida por categoria: mesma cor da categoria no Dashboard e em Categorias, com as
+// iniciais pra continuar distinguível mesmo entre duas cores parecidas.
+function CategoryTag({ name, categories }) {
+  if (!name) return <span className="relatorios__category relatorios__category--empty">Sem categoria</span>;
+  const color = resolveCategoryColor(name, categories);
+  return (
+    <span
+      className="relatorios__category"
+      style={{ "--category-color": color }}
+    >
+      <span className="relatorios__category-badge" aria-hidden="true">
+        {categoryInitials(name)}
+      </span>
+      <span className="relatorios__category-name">{name}</span>
+    </span>
+  );
+}
 
 // A Polp manda a descrição de transferências como "Transferência Recebida|Nome do titular"
 // (ver TransferDetection no backend); separa em duas linhas legíveis em vez do texto cru.
@@ -200,6 +225,8 @@ export default function Relatorios() {
           type="button"
           className={`relatorios__chip ${periodMode === "all" ? "relatorios__chip--active" : ""}`}
           onClick={() => handlePeriodModeChange("all")}
+          title={PERIOD_HINTS.all}
+          aria-describedby="relatorios-period-hint"
         >
           Todo o período
         </button>
@@ -207,6 +234,8 @@ export default function Relatorios() {
           type="button"
           className={`relatorios__chip ${periodMode === "month" ? "relatorios__chip--active" : ""}`}
           onClick={() => handlePeriodModeChange("month")}
+          title={PERIOD_HINTS.month}
+          aria-describedby="relatorios-period-hint"
         >
           Por mês
         </button>
@@ -225,6 +254,9 @@ export default function Relatorios() {
           />
         )}
       </div>
+      <p id="relatorios-period-hint" className="relatorios__period-hint">
+        {PERIOD_HINTS[periodMode]}
+      </p>
 
       <div className="relatorios__totals-bar">
         <div className="relatorios__totals-item">
@@ -377,7 +409,7 @@ export default function Relatorios() {
                             ))}
                           </select>
                         ) : (
-                          t.categoryName || "Sem categoria"
+                          <CategoryTag name={t.categoryName} categories={categories} />
                         )}
                       </td>
                       <td className="relatorios__truncate-cell" title={t.bankAccountName || "-"}>

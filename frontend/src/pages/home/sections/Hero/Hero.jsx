@@ -22,13 +22,14 @@ export default function Hero() {
         </h1>
 
         <p className="hero__subtitle">
-          Você entra com o login do seu banco, via Open Finance regulamentado
-          pelo Banco Central, e organiza tudo em um só lugar.
+          Você autoriza a conexão no próprio banco, pelo Open Finance, e organiza
+          contas, cartões e gastos em um só lugar.
         </p>
 
         <p className="hero__trust">
           <ShieldIcon />
-          Conexão criptografada de ponta a ponta. Nunca vemos nem guardamos seus dados.
+          A senha do seu banco não passa por nós. Guardamos só o necessário para o
+          painel, cifrado, e você pode baixar ou apagar tudo quando quiser.
         </p>
 
         <div className="hero__actions">

@@ -1,0 +1,22 @@
+.bank-logo {
+  flex-shrink: 0;
+  border-radius: 6px;
+  object-fit: contain;
+  background-color: #ffffff;
+  padding: 3px;
+}
+
+.bank-logo--transparent {
+  background-color: transparent;
+  padding: 0;
+}
+
+.bank-logo--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+}

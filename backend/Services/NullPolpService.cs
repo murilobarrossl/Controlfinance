@@ -32,4 +32,10 @@ public class NullPolpService : IPolpService
 
     public Task<List<PolpBillDto>> GetBillsAsync(int creditCardId, CancellationToken ct = default) =>
         Task.FromResult(new List<PolpBillDto>());
+
+    // Sem credenciais não dá pra pedir a exclusão na Polp. PolpDisconnectService trata essa
+    // falha como "pendente" (apaga o dado local mesmo assim e tenta de novo depois), em vez de
+    // fingir que a integração foi excluída do lado da Polp.
+    public Task DeleteIntegrationAsync(int integrationId, CancellationToken ct = default) =>
+        throw new HttpRequestException(DisabledMessage);
 }

@@ -243,3 +243,86 @@
     padding: 1.75rem 1.5rem;
   }
 }
+
+/* Aviso pré-conexão: o que é acessado, para quê, quem participa, o que fica guardado e como
+   desconectar, antes de qualquer dado sair daqui. */
+.connect-bank__consent {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  text-align: left;
+}
+
+.connect-bank__consent-title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.connect-bank__facts {
+  margin: 0;
+  display: grid;
+  gap: 0.35rem 0;
+}
+
+.connect-bank__facts dt {
+  color: var(--color-text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.connect-bank__facts dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.connect-bank__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.connect-bank__field-label {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.connect-bank__field input {
+  background-color: var(--color-border-strong);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: 0.7rem 0.85rem;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.connect-bank__checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.connect-bank__checkbox input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
+.connect-bank__checkbox a,
+.connect-bank__skip {
+  color: var(--color-text-primary);
+}
+
+.connect-bank__skip {
+  align-self: center;
+  font-size: 0.82rem;
+}

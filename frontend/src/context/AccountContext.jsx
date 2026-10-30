@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { getIntegrations, getConnectors } from "../api/polp.js";
+import { getIntegrations, getConnectors, disconnectIntegration } from "../api/polp.js";
 import { deleteBankAccount } from "../api/bankAccounts.js";
+import { clearTransactionsCache } from "../api/transactions.js";
 import { getCurrentUserId } from "../utils/authToken.js";
 
 const AccountContext = createContext(null);
@@ -30,6 +31,9 @@ export function AccountProvider({ children }) {
   // reagem a essa mudança (ver dependência nos useEffect de cada página), sem precisar de um
   // recarregamento manual da página.
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
+  // Resultado da última desconexão/remoção, mostrado num aviso no topo do dashboard (o menu do
+  // seletor fecha ao confirmar, então o resultado não pode ficar só lá dentro).
+  const [notice, setNotice] = useState(null);
 
   function setSelectedAccountId(id) {
     setSelectedAccountIdState(id);
@@ -64,8 +68,36 @@ export function AccountProvider({ children }) {
     setDataRefreshKey((key) => key + 1);
   }
 
-  async function disconnectAccount(accountId) {
-    await deleteBankAccount(accountId);
+  // Desconecta um banco inteiro (conta corrente + cartão da mesma conexão). O aviso diz o que
+  // realmente aconteceu do lado da Polp: "pedido aceito" ou "pendente", nunca "excluído" sem
+  // confirmação do fornecedor.
+  async function disconnectConnection(localIntegrationId) {
+    try {
+      const result = await disconnectIntegration(localIntegrationId);
+      setNotice({
+        tone: "success",
+        text:
+          result?.providerDeletion === "requested"
+            ? "Banco desconectado. Apagamos do Control Finance os dados que vieram dele, e a Polp aceitou o pedido de exclusão da conexão (ela conclui a exclusão do lado dela em seguida)."
+            : "Banco desconectado. Apagamos do Control Finance os dados que vieram dele. Não conseguimos falar com a Polp agora; o pedido de exclusão da conexão fica registrado e será reenviado automaticamente. Se quiser, revogue também a autorização no aplicativo do seu banco, na área de Open Finance.",
+      });
+    } catch (err) {
+      setNotice({ tone: "error", text: err.message || "Não foi possível desconectar o banco. Tente novamente." });
+    }
+    clearTransactionsCache();
+    setSelectedAccountId(null);
+    bumpDataRefresh();
+  }
+
+  // Só pra contas cadastradas manualmente: apaga a conta, as transações e os parcelamentos dela.
+  async function removeManualAccount(accountId) {
+    try {
+      await deleteBankAccount(accountId);
+      setNotice({ tone: "success", text: "Conta removida, junto com os lançamentos dela." });
+    } catch (err) {
+      setNotice({ tone: "error", text: err.message || "Não foi possível remover a conta." });
+    }
+    clearTransactionsCache();
     if (selectedAccountId === accountId) setSelectedAccountId(null);
     bumpDataRefresh();
   }
@@ -73,7 +105,7 @@ export function AccountProvider({ children }) {
   // selectedAccountId pode ser null (usuário nunca escolheu, ou a conta escolhida sumiu). Nesse
   // caso o resumo do dashboard (GetSummary) já sabe escolher uma conta padrão sozinho no backend,
   // mas os endpoints de lista (GetAll/GetReport, usados por Receitas x despesas/Categorias/
-  // Orçamento/Relatórios) tratam "sem conta" como "sem filtro nenhum": voltaria a somar todas as
+  // Relatórios) tratam "sem conta" como "sem filtro nenhum": voltaria a somar todas as
   // contas juntas. effectiveAccountId resolve isso aqui, uma vez só, pro mesmo id que o seletor já
   // mostra como "ativo" (accounts[0] como fallback, igual o AccountSwitcher faz internamente).
   const effectiveAccountId = selectedAccountId ?? accounts[0]?.id ?? null;
@@ -88,7 +120,10 @@ export function AccountProvider({ children }) {
         setSelectedAccountId,
         dataRefreshKey,
         bumpDataRefresh,
-        disconnectAccount,
+        disconnectConnection,
+        removeManualAccount,
+        notice,
+        dismissNotice: () => setNotice(null),
       }}
     >
       {children}

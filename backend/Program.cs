@@ -32,10 +32,15 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenRevocationService, TokenRevocationService>();
 builder.Services.AddScoped<PolpSyncService>();
+builder.Services.AddScoped<PolpDisconnectService>();
+builder.Services.AddScoped<SessionValidator>();
+builder.Services.AddScoped<AccessLogService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 builder.Services.AddSingleton<RateLimitService>();
 builder.Services.AddHttpClient<EmailService>();
 builder.Services.AddHostedService<ScheduledEmailService>();
+builder.Services.AddHostedService<PendingDisconnectRetryService>();
+builder.Services.AddHostedService<DataRetentionService>();
 
 // ──────────────────────────────────────────
 //  JWT
@@ -58,22 +63,52 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew                = TimeSpan.Zero
         };
 
-        // Rejeita tokens revogados (logout) mesmo que ainda não tenham expirado:
-        // JWT é stateless por padrão, então essa checagem extra é o que torna o logout real.
         options.Events = new JwtBearerEvents
         {
+            // A sessão do navegador vem no cookie httpOnly (SessionCookie), não no cabeçalho:
+            // sem Authorization, lê do cookie. Cabeçalho Authorization continua aceito (Swagger,
+            // clientes de API), e requisições assim não passam pela checagem de CSRF.
+            OnMessageReceived = context =>
+            {
+                if (string.IsNullOrEmpty(context.Token)
+                    && !context.Request.Headers.ContainsKey("Authorization")
+                    && context.Request.Cookies.TryGetValue(SessionCookie.Name, out var cookieToken))
+                {
+                    context.Token = cookieToken;
+                }
+                return Task.CompletedTask;
+            },
+
+            // Um JWT válido na assinatura ainda pode ter sido encerrado: logout (revogação por
+            // JTI), "sair de todos os dispositivos" (versão de sessão) ou conta excluída/inativa.
             OnTokenValidated = async context =>
             {
                 var jti = context.Principal?.FindFirstValue(JwtRegisteredClaimNames.Jti);
-                if (string.IsNullOrEmpty(jti))
+                var sub = context.Principal?.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                    ?? context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                var tvClaim = context.Principal?.FindFirstValue(SessionClaims.TokenVersion);
+
+                if (string.IsNullOrEmpty(jti) || !Guid.TryParse(sub, out var userId) || !int.TryParse(tvClaim, out var tokenVersion))
                 {
-                    context.Fail("Token sem identificador.");
+                    context.Fail("Token incompleto.");
                     return;
                 }
 
+                // Escrita e exportação nunca usam o cache (ver SessionValidator).
+                var request = context.HttpContext.Request;
+                var bypassCache = !(HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method) || HttpMethods.IsOptions(request.Method))
+                    || request.Path.StartsWithSegments("/api/account/export");
+
                 var revocation = context.HttpContext.RequestServices.GetRequiredService<ITokenRevocationService>();
-                if (await revocation.IsRevokedAsync(jti))
+                if (await revocation.IsRevokedAsync(jti, bypassCache))
+                {
                     context.Fail("Token revogado.");
+                    return;
+                }
+
+                var sessions = context.HttpContext.RequestServices.GetRequiredService<SessionValidator>();
+                if (!await sessions.IsValidAsync(userId, tokenVersion, bypassCache))
+                    context.Fail("Sessão encerrada.");
             }
         };
     });
@@ -116,6 +151,13 @@ var polpClientSecret = builder.Configuration["Polp:ClientSecret"];
 if (!string.IsNullOrWhiteSpace(polpClientId) && !string.IsNullOrWhiteSpace(polpClientSecret))
 {
     builder.Services.AddHttpClient<IPolpService, PolpService>();
+
+    // A URL de sandbox (dev.polp.com.br) é ambiente de teste do fornecedor: dados reais de
+    // usuários não devem passar por ela. Não bloqueia (a configuração de produção é do
+    // operador), mas deixa o alerta explícito no log de inicialização.
+    var polpBaseUrl = builder.Configuration["Polp:BaseUrl"] ?? string.Empty;
+    if (!builder.Environment.IsDevelopment() && polpBaseUrl.Contains("dev.polp.com.br", StringComparison.OrdinalIgnoreCase))
+        Console.Error.WriteLine("ATENÇÃO: Polp:BaseUrl aponta para o ambiente de testes (dev.polp.com.br) fora de Development.");
 }
 else
 {
@@ -137,7 +179,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme       = "bearer",
         BearerFormat = "JWT",
         In           = ParameterLocation.Header,
-        Description  = "Informe o token JWT: Bearer {seu_token}"
+        Description  = "Token JWT (opcional: o navegador usa o cookie httpOnly de sessão). Bearer {seu_token}"
     });
 
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -179,6 +221,13 @@ using (var scope = app.Services.CreateScope())
 
     db.Database.Migrate();
 
+    // Antes do backfill do Radar: ele lê User.DocumentType, que é preenchido aqui.
+    var startupLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    var encryption = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
+    await PrivacyBackfill.RunAsync(db, encryption, app.Configuration, startupLogger);
+    // Opt-in (Encryption:RotateOnStartup): regrava colunas cifradas com a chave ativa.
+    await EncryptionKeyRotation.RunAsync(db, app.Configuration, startupLogger);
+
     if (recurrenceRadarMigrationIsPending)
         await BackfillAccountOwnershipAsync(db);
 }
@@ -194,7 +243,7 @@ static async Task BackfillAccountOwnershipAsync(AppDbContext db)
     var accounts = await db.BankAccounts.Include(b => b.User).ToListAsync();
 
     foreach (var account in accounts)
-        account.Ownership = AccountOwnershipDefault.FromDocument(account.User.Document);
+        account.Ownership = AccountOwnershipDefault.FromDocumentType(account.User.DocumentType);
 
     if (accounts.Count > 0)
         await db.SaveChangesAsync();
@@ -245,6 +294,17 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
     context.Response.Headers.Append("X-Frame-Options", "DENY");
     context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        // Respostas da API trazem saldo, extrato e dados de cadastro: nada disso deve ficar em
+        // cache de navegador, proxy ou CDN.
+        context.Response.Headers.Append("Cache-Control", "no-store");
+        // A API só devolve JSON, nunca HTML/script: uma CSP fechada não quebra nada e impede
+        // que uma resposta seja interpretada como página. (Swagger fica fora do /api.)
+        context.Response.Headers.Append("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+    }
+
     await next();
 });
 
@@ -257,6 +317,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseAuthentication();
+app.UseCsrfProtection();
 app.UseAuthorization();
 app.MapControllers();
 

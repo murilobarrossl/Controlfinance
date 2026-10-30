@@ -73,17 +73,25 @@ public static class RecurrenceDetection
         List<RecurrenceGroup> detected,
         IEnumerable<Transaction> allTransactions,
         IReadOnlyDictionary<(Guid BankAccountId, string NormalizedName), RecurrenceDecision> decisions,
-        DateTime referenceDate)
+        DateTime referenceDate,
+        Func<string, IReadOnlyList<string>> decisionKeyCandidates)
     {
+        // As decisões guardam um HMAC do nome normalizado (ver RecurrenceKey), não o nome: o
+        // casamento com os grupos detectados é feito calculando as chaves candidatas de cada nome.
         var result = new List<RecurrenceGroup>();
-        var detectedKeys = new HashSet<(Guid BankAccountId, string NormalizedName)>();
+        var matchedDecisionKeys = new HashSet<(Guid BankAccountId, string NormalizedName)>();
 
         foreach (var group in detected)
         {
-            var key = (group.BankAccountId, group.NormalizedName);
-            detectedKeys.Add(key);
-
-            decisions.TryGetValue(key, out var decision);
+            RecurrenceDecision? decision = null;
+            foreach (var candidate in decisionKeyCandidates(group.NormalizedName))
+            {
+                if (decisions.TryGetValue((group.BankAccountId, candidate), out decision))
+                {
+                    matchedDecisionKeys.Add((group.BankAccountId, candidate));
+                    break;
+                }
+            }
             if (decision?.Status == RecurrenceDecisionStatus.Dismissed) continue;
 
             result.Add(group with
@@ -96,13 +104,13 @@ public static class RecurrenceDetection
         foreach (var (key, decision) in decisions)
         {
             if (decision.Status != RecurrenceDecisionStatus.Confirmed) continue;
-            if (detectedKeys.Contains(key)) continue;
+            if (matchedDecisionKeys.Contains(key)) continue;
             if (decision.AssumedFrequency is null) continue; // RecurrencesController exige isso ao confirmar sem detecção prévia
 
             var occurrences = allTransactions
                 .Where(t => t.Type == TransactionType.Expense
                          && t.BankAccountId == key.BankAccountId
-                         && Normalize(t.Name) == key.NormalizedName)
+                         && decisionKeyCandidates(Normalize(t.Name)).Contains(key.NormalizedName))
                 .OrderBy(t => t.DueDate)
                 .ToList();
 
@@ -111,7 +119,7 @@ public static class RecurrenceDetection
             var frequency = decision.AssumedFrequency.Value;
             var intervalDays = frequency == RecurrenceFrequency.Monthly ? 30 : 365;
 
-            result.Add(BuildGroup(key.NormalizedName, key.BankAccountId, occurrences, frequency, intervalDays, referenceDate)
+            result.Add(BuildGroup(Normalize(occurrences[^1].Name), key.BankAccountId, occurrences, frequency, intervalDays, referenceDate)
                 with
             { IsManuallyConfirmed = true, ReminderRequested = decision.ReminderRequested });
         }

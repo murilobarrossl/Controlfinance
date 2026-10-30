@@ -2,7 +2,6 @@ import SectionHeading from "../../../../components/ui/SectionHeading/SectionHead
 import {
   WalletIcon,
   SyncIcon,
-  SparkleIcon,
   TargetIcon,
   ChartIcon,
   BuildingIcon,
@@ -21,15 +20,15 @@ const FUNCIONALIDADES = [
     Icon: WalletIcon,
   },
   {
-    titulo: "Sincronização Bancária em Tempo Real",
+    titulo: "Sincronização Bancária",
     descricao:
-      "integração direta com suas contas e cartões, sem necessidade de lançamentos manuais",
+      "conexão via Open Finance com suas contas e cartões, atualizada sempre que você abre o painel",
     Icon: SyncIcon,
   },
   {
     titulo: "Planejamentos e Metas",
     descricao:
-      "defina objetivos financeiros e acompanhe sua evolução com projeções inteligentes",
+      "defina objetivos financeiros e acompanhe sua evolução com barras de progresso",
     Icon: TargetIcon,
   },
   {
@@ -51,20 +50,20 @@ const FUNCIONALIDADES = [
     Icon: CardIcon,
   },
   {
-    titulo: "Alertas e Notificações Inteligentes",
+    titulo: "Lembretes de Vencimento",
     descricao:
-      "avisos automáticos de vencimentos, gastos acima do esperado e oportunidades de economia",
+      "avisos por e-mail das contas pendentes que estão perto de vencer",
     Icon: BellIcon,
   },
   {
-    titulo: "Exportação de Relatórios",
+    titulo: "Seus Dados, Seu Controle",
     descricao:
-      "geração de planilhas e documentos para análise externa ou declaração de imposto de renda",
+      "baixe uma cópia de tudo que guardamos, desconecte bancos e exclua a conta direto no painel",
     Icon: ExportIcon,
   },
   {
-    titulo: "Histórico Financeiro Completo",
-    descricao: "acesso ao registro de todas as movimentações desde o primeiro uso",
+    titulo: "Histórico Financeiro",
+    descricao: "extrato importado do banco conectado e lançamentos manuais, com filtros por mês e categoria",
     Icon: HistoryIcon,
   },
 ];

@@ -134,6 +134,62 @@
   white-space: nowrap;
 }
 
+.cartoes__intro {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  max-width: 60rem;
+}
+
+.cartoes__form--spaced {
+  margin-top: 1.25rem;
+}
+
+/* Etiqueta de origem de cada vencimento: fatura, parcela e conta avulsa vencem por motivos
+   diferentes, então cada uma tem a própria cor em vez de todas parecerem a mesma coisa. */
+.cartoes__kind {
+  flex-shrink: 0;
+  min-width: 4.2rem;
+  text-align: center;
+  border-radius: var(--radius-pill);
+  padding: 0.2rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cartoes__kind--invoice {
+  background-color: color-mix(in srgb, #7569d3 20%, transparent);
+  color: #a99ff0;
+}
+
+.cartoes__kind--installment {
+  background-color: color-mix(in srgb, #bf8a22 20%, transparent);
+  color: #e3b45a;
+}
+
+.cartoes__kind--bill {
+  background-color: color-mix(in srgb, #4988d4 20%, transparent);
+  color: #8ab8ee;
+}
+
+.cartoes__remove {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+}
+
+.cartoes__remove:hover {
+  color: var(--color-accent);
+}
+
 @media (max-width: 520px) {
   .cartoes__form {
     grid-template-columns: 1fr;

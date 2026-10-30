@@ -103,10 +103,6 @@
   font-weight: 700;
 }
 
-.planos__highlight-text {
-  color: var(--color-accent);
-}
-
 .planos__extra-notes {
   list-style: disc;
   padding-left: 1.1rem;
@@ -139,6 +135,13 @@
 
 .planos__cta:hover {
   filter: brightness(0.92);
+}
+
+.planos__cta:disabled {
+  background-color: var(--color-border-strong);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  filter: none;
 }
 
 .planos__cta:focus-visible {

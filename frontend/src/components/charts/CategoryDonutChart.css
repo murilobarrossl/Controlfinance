@@ -1,28 +1,28 @@
 .category-donut {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 1.5rem;
-}
-
-.category-donut--with-legend {
-  flex-wrap: wrap;
 }
 
 .category-donut__chart {
   position: relative;
-  flex: 1;
-  min-width: 160px;
+  flex-shrink: 0;
+  /* Quadrado: a largura vem do componente (igual à altura pedida) e a altura acompanha, inclusive
+     quando o max-width: 100% encolhe a rosca numa tela estreita. */
+  aspect-ratio: 1;
 }
 
 .category-donut__center {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
   z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  /* Mantém o texto dentro do furo da rosca (innerRadius 66% do raio externo). */
+  padding: 0 22%;
   pointer-events: none;
   text-align: center;
 }
@@ -34,41 +34,50 @@
 }
 
 .category-donut__center-value {
+  max-width: 100%;
   color: var(--color-text-primary);
-  font-size: 1.3rem;
+  font-size: clamp(0.85rem, 2.4vw, 1.1rem);
   font-weight: 600;
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .category-donut__center-label {
   color: var(--color-text-tertiary);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-top: 0.2rem;
 }
 
 .category-donut__legend {
+  flex: 1;
+  min-width: 0;
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  min-width: 140px;
+  gap: 0.8rem;
 }
 
 .category-donut__legend-item {
   display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.category-donut__legend-row {
+  display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
 }
 
 .category-donut__legend-dot {
   flex-shrink: 0;
   width: 10px;
   height: 10px;
-  border-radius: 50%;
+  border-radius: 3px;
 }
 
 .category-donut__legend-name {
@@ -81,23 +90,39 @@
   white-space: nowrap;
 }
 
+.category-donut__legend-percent {
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .category-donut__legend-value {
   color: var(--color-text-primary);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.category-donut__legend-bar {
+  height: 4px;
+  border-radius: 2px;
+  background-color: var(--color-border);
+  overflow: hidden;
+}
+
+.category-donut__legend-bar > div {
+  height: 100%;
+  border-radius: 2px;
 }
 
 @media (max-width: 520px) {
   .category-donut {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .category-donut__chart {
-    width: 100%;
-  }
-
-  .category-donut__legend {
-    width: 100%;
+    align-self: center;
   }
 }

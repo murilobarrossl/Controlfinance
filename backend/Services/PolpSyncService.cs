@@ -13,7 +13,7 @@ namespace ControlFinance.API.Services;
 // páginas de transações, o sync inteiro passa fácil dos 30-60s que a maioria dos gateways
 // (Railway, DigitalOcean App Platform) tolera antes de devolver 504. Por isso o controller só
 // dispara esse serviço e responde na hora, sem esperar terminar.
-public class PolpSyncService(AppDbContext db, IPolpService polp)
+public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration config)
 {
     // Serializa syncs concorrentes da mesma integração (ex.: o auto-sync do dashboard cruzando
     // com um sync manual, ou dois cliques no botão antes do primeiro terminar): sem isso, duas
@@ -39,6 +39,13 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
 
     public async Task<int> SyncOneAsync(PolpIntegration local, Guid userId, CancellationToken ct)
     {
+        // Relê dentro do lock: o usuário pode ter desconectado esse banco entre o disparo do sync
+        // e agora. Sem essa checagem, um sync que já estava na fila recriava as contas e
+        // transações que a desconexão tinha acabado de apagar.
+        await db.Entry(local).ReloadAsync(ct);
+        if (db.Entry(local).State == EntityState.Detached || local.Status == PolpDisconnectService.PendingStatus)
+            return 0;
+
         var remoteAccounts = await polp.GetAccountsAsync(local.PolpIntegrationId, ct);
 
         if (!await db.Categories.AnyAsync(c => c.UserId == userId, ct))
@@ -64,7 +71,7 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
 
         // Chute inicial do Radar de Recorrências pra conta nova (CNPJ = Business, CPF = Personal,
         // ver AccountOwnershipDefault).
-        var ownerDocument = await db.Users.Where(u => u.Id == userId).Select(u => u.Document).FirstAsync(ct);
+        var ownerDocumentType = await db.Users.Where(u => u.Id == userId).Select(u => u.DocumentType).FirstAsync(ct);
 
         foreach (var remoteAccount in remoteAccounts)
         {
@@ -73,7 +80,7 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
                 account.Balance = remoteAccount.Balance;
                 account.PolpAccountType = remoteAccount.Type;
                 account.PolpAccountSubtype = remoteAccount.Subtype;
-                account.Number = remoteAccount.Number;
+                account.Number = AccountNumberMask.Mask(remoteAccount.Number);
             }
             else
             {
@@ -85,10 +92,10 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
                     PolpAccountId = remoteAccount.Id,
                     PolpIntegrationId = local.PolpIntegrationId,
                     Balance = remoteAccount.Balance,
-                    Ownership = AccountOwnershipDefault.FromDocument(ownerDocument),
+                    Ownership = AccountOwnershipDefault.FromDocumentType(ownerDocumentType),
                     PolpAccountType = remoteAccount.Type,
                     PolpAccountSubtype = remoteAccount.Subtype,
-                    Number = remoteAccount.Number
+                    Number = AccountNumberMask.Mask(remoteAccount.Number)
                 };
                 db.BankAccounts.Add(account);
             }
@@ -186,6 +193,11 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
 
         // Busca e persiste todo o histórico de transações de cada conta (paginado dentro do
         // PolpService, até o teto de segurança).
+        // Prazo máximo de histórico (opt-in, DataRetention:SyncedHistoryMonths): o que é mais
+        // antigo que isso nem entra no banco (minimização na origem), em vez de ser gravado pra
+        // ser apagado depois pelo DataRetentionService.
+        var historyCutoff = DataRetentionPolicy.SyncedHistoryCutoff(config, DateTime.UtcNow);
+
         foreach (var account in createdAccounts)
         {
             if (account.PolpAccountId is not int polpAccountId) continue;
@@ -218,6 +230,9 @@ public class PolpSyncService(AppDbContext db, IPolpService polp)
                 var amount = Math.Abs(rt.Amount);
                 var dueDate = ParseDateAsUtc(rt.Date);
                 var paidAt = status == TransactionStatus.Pending ? (DateTime?)null : dueDate;
+
+                if (historyCutoff.HasValue && dueDate < historyCutoff.Value && status != TransactionStatus.Pending)
+                    continue;
 
                 if (existingTransactionsByKey.TryGetValue((account.Id, polpTransactionId), out var existing))
                 {

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -162,6 +163,14 @@ public interface IPolpService
     Task<List<PolpTransactionDto>> GetTransactionsAsync(int accountId, CancellationToken ct = default);
     Task<List<PolpCreditCardDto>> GetCreditCardsAsync(int integrationId, CancellationToken ct = default);
     Task<List<PolpBillDto>> GetBillsAsync(int creditCardId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Pede à Polp a exclusão da integração (DELETE /integrations/{id} da API v1). A Polp
+    /// documenta resposta 202 e exclusão assíncrona da integração e dos dados vinculados
+    /// (contas, transações, faturas), incluindo o item no agregador. Não documenta o efeito sobre
+    /// o consentimento no banco. 404 (integração já inexistente na Polp) conta como concluído.
+    /// </summary>
+    Task DeleteIntegrationAsync(int integrationId, CancellationToken ct = default);
 }
 
 public class PolpService : IPolpService
@@ -178,7 +187,10 @@ public class PolpService : IPolpService
     {
         _logger = logger;
 
-        var baseUrl = config["Polp:BaseUrl"] ?? "https://dev.polp.com.br/api/v1/";
+        // Sem fallback pra URL de sandbox: um ambiente de teste nunca deve virar o destino real
+        // dos dados de um usuário só porque a configuração ficou faltando.
+        var baseUrl = config["Polp:BaseUrl"]
+            ?? throw new InvalidOperationException("Polp:BaseUrl não configurado.");
         if (!baseUrl.EndsWith('/')) baseUrl += "/";
 
         var clientId = config["Polp:ClientId"]
@@ -248,16 +260,10 @@ public class PolpService : IPolpService
         var resp = await _http.GetAsync($"integrations/{integrationId}/accounts", ct);
         await EnsureSuccess(resp, "listar contas");
 
-        // TEMP: captura crua pra descobrir onde a Polp expõe limite/fatura/parcela de cartão de
-        // crédito: PolpAccountDto só declara os campos que já usamos, e a desserialização tipada
-        // descarta silenciosamente qualquer campo extra que a Polp já esteja mandando (não tem
-        // JsonExtensionData). Lê como string em vez de ReadFromJsonAsync direto só pra poder logar
-        // o corpo inteiro antes de desserializar. Resultado do envelope é idêntico ao de antes.
-        // REMOVER esse bloco (as 2 linhas de log) depois do diagnóstico.
-        var rawJson = await resp.Content.ReadAsStringAsync(ct);
-        _logger.LogInformation("=== POLP RAW CARD JSON (accounts, integrationId={IntegrationId}) === {RawJson}", integrationId, rawJson);
-
-        var envelope = JsonSerializer.Deserialize<PolpListEnvelope<PolpAccountDto>>(rawJson, JsonOptions);
+        // Nenhum corpo de resposta da Polp vai pro log: ele traz número de conta, saldo, nome do
+        // titular e extrato. Já houve log cru aqui pra diagnóstico de schema, e isso expunha dado
+        // financeiro de todo usuário a quem tivesse acesso aos logs da hospedagem.
+        var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpAccountDto>>(JsonOptions, ct);
         return envelope?.Data ?? [];
     }
 
@@ -269,12 +275,7 @@ public class PolpService : IPolpService
         var resp = await _http.GetAsync($"integrations/{integrationId}/credit-cards", ct);
         await EnsureSuccess(resp, "listar cartões de crédito");
 
-        // TEMP: mesmo motivo do bloco de /accounts acima — schema ainda não confirmado.
-        // REMOVER esse bloco (as 2 linhas de log) depois do diagnóstico.
-        var rawJson = await resp.Content.ReadAsStringAsync(ct);
-        _logger.LogInformation("=== POLP RAW CARD JSON (credit-cards, integrationId={IntegrationId}) === {RawJson}", integrationId, rawJson);
-
-        var envelope = JsonSerializer.Deserialize<PolpListEnvelope<PolpCreditCardDto>>(rawJson, JsonOptions);
+        var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpCreditCardDto>>(JsonOptions, ct);
         return envelope?.Data ?? [];
     }
 
@@ -283,11 +284,7 @@ public class PolpService : IPolpService
         var resp = await _http.GetAsync($"credit-cards/{creditCardId}/bills", ct);
         await EnsureSuccess(resp, "listar faturas do cartão");
 
-        // TEMP: mesmo motivo dos blocos acima. REMOVER junto com os outros depois do diagnóstico.
-        var rawJson = await resp.Content.ReadAsStringAsync(ct);
-        _logger.LogInformation("=== POLP RAW CARD JSON (bills, creditCardId={CreditCardId}) === {RawJson}", creditCardId, rawJson);
-
-        var envelope = JsonSerializer.Deserialize<PolpListEnvelope<PolpBillDto>>(rawJson, JsonOptions);
+        var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpBillDto>>(JsonOptions, ct);
         return envelope?.Data ?? [];
     }
 
@@ -308,15 +305,7 @@ public class PolpService : IPolpService
             var resp = await _http.GetAsync($"accounts/{accountId}/transactions?page={page}", ct);
             await EnsureSuccess(resp, "listar transações");
 
-            // TEMP: mesma captura crua da conta, agora pro extrato: parcela (ex.: "3/12") é da
-            // compra, não da conta, então é mais provável que apareça aqui do que no /accounts.
-            // REMOVER junto com o bloco equivalente em GetAccountsAsync.
-            var rawJson = await resp.Content.ReadAsStringAsync(ct);
-            _logger.LogInformation(
-                "=== POLP RAW CARD JSON (transactions, accountId={AccountId}, page={Page}) === {RawJson}",
-                accountId, page, rawJson);
-
-            var envelope = JsonSerializer.Deserialize<PolpListEnvelope<PolpTransactionDto>>(rawJson, JsonOptions);
+            var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpTransactionDto>>(JsonOptions, ct);
             if (envelope?.Data is null || envelope.Data.Count == 0) break;
 
             transactions.AddRange(envelope.Data);
@@ -328,12 +317,21 @@ public class PolpService : IPolpService
         return transactions;
     }
 
-    private async Task EnsureSuccess(HttpResponseMessage resp, string action)
+    public async Task DeleteIntegrationAsync(int integrationId, CancellationToken ct = default)
     {
-        if (resp.IsSuccessStatusCode) return;
+        var resp = await _http.DeleteAsync($"integrations/{integrationId}", ct);
+        if (resp.StatusCode == HttpStatusCode.NotFound) return;
+        await EnsureSuccess(resp, "excluir integração");
+    }
 
-        var content = await resp.Content.ReadAsStringAsync();
-        _logger.LogError("Polp API error ao {Action}: {Status}, {Body}", action, resp.StatusCode, content);
-        throw new HttpRequestException($"Falha ao {action} na Polp ({(int)resp.StatusCode}): {content}");
+    // Só ação e status HTTP vão pro log e pra exceção: o corpo de erro da Polp pode repetir o
+    // CPF/CNPJ enviado (tax_id), dados da conta ou detalhes internos, e a mensagem da exceção
+    // chegava até o navegador do usuário.
+    private Task EnsureSuccess(HttpResponseMessage resp, string action)
+    {
+        if (resp.IsSuccessStatusCode) return Task.CompletedTask;
+
+        _logger.LogWarning("Polp API: falha ao {Action} (HTTP {Status})", action, (int)resp.StatusCode);
+        throw new HttpRequestException($"Falha ao {action} na Polp (HTTP {(int)resp.StatusCode}).", null, resp.StatusCode);
     }
 }

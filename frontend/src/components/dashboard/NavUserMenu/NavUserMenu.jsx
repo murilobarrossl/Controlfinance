@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import Avatar from "../../ui/Avatar/Avatar.jsx";
 import { ChevronDownIcon } from "../../ui/icons/FeatureIcons.jsx";
 import "./NavUserMenu.css";
@@ -34,6 +35,14 @@ export default function NavUserMenu({ user, onLogout }) {
 
       {open && (
         <div className="nav-user-menu__menu" role="menu">
+          <Link
+            to="/dashboard/privacidade"
+            role="menuitem"
+            className="nav-user-menu__option"
+            onClick={() => setOpen(false)}
+          >
+            Privacidade e dados
+          </Link>
           <button
             type="button"
             role="menuitem"

@@ -1,9 +1,12 @@
 import SectionHeading from "../../../../components/ui/SectionHeading/SectionHeading.jsx";
 import "./SobreNos.css";
 
+// Só o que o produto entrega e dá pra demonstrar: "tempo real" saiu porque a sincronização roda
+// ao abrir o painel (com intervalo mínimo por banco), e a comparação de preço com concorrentes
+// saiu porque não havia levantamento guardado que a sustentasse (CDC art. 36, parágrafo único).
 const DIFERENCIAIS = [
-  "Sincronização bancária em tempo real",
-  "Preço acessível comparado aos concorrentes",
+  "Conexão com bancos pelo Open Finance, com sua autorização",
+  "Coleta mínima: o CPF não fica guardado e e-mails não levam valores",
   "Tudo em um só lugar, PF e PJ",
 ];
 
@@ -17,9 +20,12 @@ export default function SobreNos() {
           <div className="sobre-nos__block">
             <h3 className="sobre-nos__subtitle">Nossa história</h3>
             <p className="sobre-nos__text">
-              70% das famílias brasileiras estão endividadas. A Control Finance existe
-              para mudar essa estatística. Isso acontece não por falta de esforço, mas por
-              falta de acesso a ferramentas financeiras inteligentes e acessíveis.
+              {/* PENDENTE: o dado de endividamento das famílias só deve voltar com fonte citada
+                  (ex.: pesquisa e mês de referência), guardada pela empresa (CDC art. 36,
+                  parágrafo único). */}
+              Muitas famílias brasileiras vivem endividadas, e a Control Finance existe para
+              ajudar a mudar isso. O problema raramente é falta de esforço: é falta de acesso a
+              ferramentas financeiras simples e acessíveis.
               Aplicativos complexos, preços altos e soluções fragmentadas sempre foram a
               realidade de quem tentava organizar as finanças, seja pessoa física ou
               pequeno empresário.
@@ -27,7 +33,7 @@ export default function SobreNos() {
             <p className="sobre-nos__text">
               Foi dessa realidade que nasceu o Control Finance. Uma
               plataforma criada para mudar esse cenário, colocando na mão de
-              qualquer brasileiro o mesmo nível de inteligência financeira
+              qualquer brasileiro o mesmo nível de organização financeira
               que antes só grandes investidores tinham acesso.
             </p>
           </div>
@@ -35,7 +41,7 @@ export default function SobreNos() {
           <div className="sobre-nos__block">
             <h3 className="sobre-nos__subtitle">Nossa missão</h3>
             <p className="sobre-nos__text">
-              Democratizar o acesso à inteligência financeira. Queremos que
+              Democratizar o acesso à organização financeira. Queremos que
               qualquer pessoa (independente de quanto ganha ou quanto sabe
               sobre finanças) consiga organizar, planejar e crescer
               financeiramente com o apoio da tecnologia.

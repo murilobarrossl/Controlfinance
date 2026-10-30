@@ -41,7 +41,7 @@ public class BankAccountsController(AppDbContext db) : ApiControllerBase
         // Mesmo chute inicial que o sync da Polp usa pra conta nova: CNPJ vira Business, CPF
         // vira Personal (ver AccountOwnershipDefault). Contas criadas manualmente (fora do fluxo
         // da Polp) não podiam ficar de fora desse default.
-        var document = await db.Users.Where(u => u.Id == UserId).Select(u => u.Document).FirstAsync();
+        var documentType = await db.Users.Where(u => u.Id == UserId).Select(u => u.DocumentType).FirstAsync();
 
         var account = new BankAccount
         {
@@ -49,7 +49,7 @@ public class BankAccountsController(AppDbContext db) : ApiControllerBase
             Name = dto.Name,
             BankCode = dto.BankCode,
             Balance = dto.Balance,
-            Ownership = AccountOwnershipDefault.FromDocument(document)
+            Ownership = AccountOwnershipDefault.FromDocumentType(documentType)
         };
 
         db.BankAccounts.Add(account);
@@ -108,14 +108,22 @@ public class BankAccountsController(AppDbContext db) : ApiControllerBase
         return Ok(await CreditCardSummaryBuilder.BuildRecognizedListAsync(db, UserId));
     }
 
+    // Remove uma conta cadastrada manualmente, junto com as transações e parcelamentos dela.
+    // Antes era só IsActive = false (o extrato inteiro continuava guardado). Conta que veio de
+    // um banco conectado não sai por aqui: ela é parte de uma conexão (conta corrente + cartão
+    // do mesmo banco), que só pode ser encerrada inteira em DELETE /api/polp/integrations/{id},
+    // onde também é pedida a exclusão na Polp. Apagar só a linha local deixaria a autorização
+    // no fornecedor ativa e o próximo sync recriaria a conta.
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var account = await db.BankAccounts.FirstOrDefaultAsync(b => b.Id == id && b.UserId == UserId);
+        var account = await db.BankAccounts.FirstOrDefaultAsync(b => b.Id == id && b.UserId == UserId, ct);
         if (account is null) return NotFound();
 
-        account.IsActive = false;
-        await db.SaveChangesAsync();
+        if (account.PolpIntegrationId.HasValue)
+            return Conflict(new { message = "Esta conta veio de um banco conectado. Para removê-la, desconecte o banco." });
+
+        await PolpDisconnectService.DeleteAccountsDataAsync(db, UserId, [account.Id], ct);
         return NoContent();
     }
 }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import Button from "../../components/ui/Button/Button.jsx";
 import { EyeIcon, EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
-import { ShieldIcon, SyncIcon, SparkleIcon } from "../../components/ui/icons/FeatureIcons.jsx";
+import { ShieldIcon, SyncIcon } from "../../components/ui/icons/FeatureIcons.jsx";
 import { login } from "../../api/auth.js";
 import { getIntegrations } from "../../api/polp.js";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -11,13 +11,13 @@ import logo from "../../assets/images/cflogobranco.svg";
 import "./Login.css";
 
 const DESTAQUES = [
-  { Icon: ShieldIcon, texto: "Dados protegidos com criptografia" },
+  { Icon: ShieldIcon, texto: "Valores e extratos guardados de forma cifrada" },
   { Icon: SyncIcon, texto: "Sincronização via Open Finance" },
 ];
 
 export default function LoginPage({ mode = "email" }) {
   const navigate = useNavigate();
-  const { login: setAuthToken } = useAuth();
+  const { login: startSession } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -60,10 +60,7 @@ export default function LoginPage({ mode = "email" }) {
     try {
       const cleanIdentifier = isCpf ? identifier.replace(/\D/g, "") : identifier;
       const data = await login(cleanIdentifier, password);
-
-      if (data?.token) {
-        setAuthToken(data.token);
-      }
+      startSession(data);
 
       // Só manda pro fluxo de conexão quem ainda não tem banco conectado: mandar todo mundo
       // pra lá incondicionalmente forçava reconexão a cada login, e cada reconexão podia gerar
@@ -101,13 +98,13 @@ export default function LoginPage({ mode = "email" }) {
         <span className="login__badge">Entrar na sua conta</span>
 
         <h1 className="login__title">
-          Inteligência financeira
+          Suas finanças organizadas
           <br />
           no seu bolso
         </h1>
 
         <p className="login__subtitle">
-          Organize suas finanças, simule investimentos e planeje seu futuro,
+          Organize suas finanças, simule financiamentos e planeje seu futuro,
           tudo em um só lugar.
         </p>
 

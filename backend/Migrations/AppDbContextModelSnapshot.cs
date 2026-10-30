@@ -22,6 +22,34 @@ namespace ControlFinance.API.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("ControlFinance.API.Models.AccessLogEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Event")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("IpAddress")
+                        .HasColumnType("text")
+                        .HasColumnName("IpAddressEncrypted");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAt");
+
+                    b.ToTable("AccessLogs", (string)null);
+                });
+
             modelBuilder.Entity("ControlFinance.API.Models.BankAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -129,6 +157,39 @@ namespace ControlFinance.API.Migrations
                     b.ToTable("Categories", (string)null);
                 });
 
+            modelBuilder.Entity("ControlFinance.API.Models.ConsentRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Kind");
+
+                    b.ToTable("ConsentRecords", (string)null);
+                });
+
             modelBuilder.Entity("ControlFinance.API.Models.CreditCard", b =>
                 {
                     b.Property<Guid>("Id")
@@ -194,9 +255,13 @@ namespace ControlFinance.API.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("Description")
-                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("DescriptionEncrypted");
+
+                    b.Property<string>("LegacyDescription")
                         .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("Description");
 
                     b.Property<string>("InstallmentAmount")
                         .IsRequired()
@@ -224,6 +289,26 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("CreditCardId");
 
                     b.ToTable("Installments", (string)null);
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.PendingProviderDeletion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PolpIntegrationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("PendingProviderDeletions", (string)null);
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.PolpIntegration", b =>
@@ -257,8 +342,6 @@ namespace ControlFinance.API.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("UrlToAuthenticate")
-                        .HasColumnType("text");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
@@ -354,10 +437,14 @@ namespace ControlFinance.API.Migrations
                     b.Property<bool>("IsFixed")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
+                    b.Property<string>("LegacyName")
                         .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("Name");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text")
+                        .HasColumnName("NameEncrypted");
 
                     b.Property<DateTime?>("PaidAt")
                         .HasColumnType("timestamp with time zone");
@@ -397,13 +484,21 @@ namespace ControlFinance.API.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Document")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("DocumentHash")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("DocumentType")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<bool>("DueRemindersEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -416,6 +511,9 @@ namespace ControlFinance.API.Migrations
                     b.Property<DateTime?>("LastMonthlySummarySentAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("MonthlySummaryEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -425,10 +523,8 @@ namespace ControlFinance.API.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("PhoneNumber")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                    b.Property<int>("TokenVersion")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -472,6 +568,17 @@ namespace ControlFinance.API.Migrations
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.Category", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.ConsentRecord", b =>
                 {
                     b.HasOne("ControlFinance.API.Models.User", "User")
                         .WithMany()
