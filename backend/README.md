@@ -36,6 +36,21 @@
    ```
    > ⚠️ Em produção, use variáveis de ambiente ou Azure Key Vault - nunca versione a chave real.
 
+   Fora de Development a API **não sobe** se `ConnectionStrings:DefaultConnection`,
+   `JwtSettings:SecretKey` ou `Encryption:Key` estiverem ausentes, forem placeholders ou tiverem
+   menos de 32 caracteres. Lista completa em `.env.example`.
+
+   **Webhook da Polp** (obrigatório quando `Polp:ClientId`/`Polp:ClientSecret` estão preenchidos):
+
+   | Variável | Origem | Uso |
+   |---|---|---|
+   | `Polp__WebhookToken` | gerado por você (`openssl rand -hex 32`) | último segmento da URL: `/api/polp/webhook/<token>` |
+   | `Polp__WebhookTokenPrevious` | token anterior, opcional | aceito durante a troca de URL |
+   | `Polp__WebhookSigningSecret` | campo `secret` devolvido uma única vez pela Polp ao ativar `signing_enabled` | HMAC-SHA256 do corpo, header `X-Webhook-Signature: sha256=<hex>` |
+
+   Os dois segredos precisam ser diferentes entre si e das demais chaves. Respostas: `404` token
+   errado, `401` assinatura ausente ou inválida, `503` signing secret não configurado.
+
 4. **Restaure os pacotes:**
    ```bash
    dotnet restore

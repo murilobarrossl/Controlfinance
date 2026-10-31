@@ -79,6 +79,7 @@ public class AccountController(
                 subtipo = a.PolpAccountSubtype,
                 numero = a.Number,
                 bandeira = a.Brand,
+                categoriaCartao = a.ProductType,
                 limite = a.CreditLimit,
                 limiteUsado = a.UsedLimit,
                 diaFechamento = a.ClosingDay,

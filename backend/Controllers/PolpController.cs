@@ -13,6 +13,7 @@ namespace ControlFinance.API.Controllers;
 public class PolpController(
     AppDbContext db,
     IPolpService polp,
+    InstitutionNameResolver institutionNames,
     IEncryptionService encryption,
     PolpDisconnectService disconnectService,
     IServiceScopeFactory scopeFactory,
@@ -31,15 +32,19 @@ public class PolpController(
             return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível carregar os bancos disponíveis." });
         }
 
-        var connectors = institutions.Select(i => new
+        var connectors = institutions.Select(i =>
         {
-            id = i.Id.ToString(),
-            name = i.Name,
-            color = i.Color ?? "#000000",
-            textColor = ResolveTextColor(i.Color),
-            initials = BuildInitials(i.Name),
-            logoUrl = i.LogoUrl,
-            status = i.Status
+            var color = i.Color ?? BankBrandColors.Find(i.Name);
+            return new
+            {
+                id = i.Id.ToString(),
+                name = i.Name,
+                color,
+                textColor = ResolveTextColor(color),
+                initials = BuildInitials(i.Name),
+                logoUrl = i.LogoUrl,
+                status = i.Status
+            };
         });
 
         return Ok(connectors);
@@ -139,7 +144,8 @@ public class PolpController(
 
         localIntegration.Status = created.Status;
         localIntegration.ExecutionStatus = created.ExecutionStatus;
-        localIntegration.InstitutionName = created.Institution?.Name ?? localIntegration.InstitutionName;
+        localIntegration.InstitutionName = created.Institution?.Name ?? localIntegration.InstitutionName
+            ?? await institutionNames.FindAsync(institutionId, ct);
         localIntegration.UpdatedAt = DateTime.UtcNow;
 
         db.ConsentRecords.Add(new ConsentRecord
@@ -238,7 +244,8 @@ public class PolpController(
                 var remote = await polp.GetConsentAsync(local.PolpIntegrationId, ct);
                 local.Status = remote.Status;
                 local.ExecutionStatus = remote.ExecutionStatus;
-                local.InstitutionName = remote.Institution?.Name ?? local.InstitutionName;
+                local.InstitutionName = remote.Institution?.Name ?? local.InstitutionName
+                    ?? await institutionNames.FindAsync(local.InstitutionId, ct);
                 urlToAuthenticate = remote.UrlToAuthenticate;
                 error = remote.ErrorMessage;
             }

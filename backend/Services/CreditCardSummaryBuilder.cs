@@ -26,10 +26,18 @@ public static class CreditCardSummaryBuilder
             .OrderBy(c => c.CreatedAt)
             .ToListAsync(ct);
 
+        var connections = (await db.PolpIntegrations
+                .Where(p => p.UserId == userId)
+                .Select(p => new { p.Id, p.PolpIntegrationId, p.InstitutionName, p.LastSyncedAt })
+                .ToListAsync(ct))
+            .GroupBy(p => p.PolpIntegrationId)
+            .ToDictionary(g => g.Key, g => g.First());
+
         var result = new List<RecognizedCardDto>();
 
         foreach (var account in cardAccounts)
         {
+            var connection = account.PolpIntegrationId is Guid consentId ? connections.GetValueOrDefault(consentId) : null;
             var installments = await db.Installments
                 .Include(i => i.BankAccount)
                 .Where(i => i.BankAccountId == account.Id)
@@ -50,7 +58,12 @@ public static class CreditCardSummaryBuilder
                 account.CurrentInvoiceAmount,
                 account.InvoiceDueDate,
                 HasFullDetails: account.CreditLimit.HasValue && account.ClosingDay.HasValue && account.DueDay.HasValue,
-                installmentDtos));
+                installmentDtos,
+                ProductType: account.ProductType,
+                InstitutionColor: BankBrandColors.Find(connection?.InstitutionName) ?? BankBrandColors.Find(account.Name),
+                ConnectionId: connection?.Id,
+                BankName: connection?.InstitutionName,
+                ConnectionLastSyncedAt: connection?.LastSyncedAt));
         }
 
         foreach (var card in manualCards)
@@ -82,7 +95,12 @@ public static class CreditCardSummaryBuilder
                 currentInvoice,
                 dueDate,
                 HasFullDetails: true,
-                installmentDtos));
+                installmentDtos,
+                ProductType: null,
+                InstitutionColor: BankBrandColors.Find(card.Name),
+                ConnectionId: null,
+                BankName: null,
+                ConnectionLastSyncedAt: null));
         }
 
         return result;

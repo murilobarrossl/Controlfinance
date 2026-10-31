@@ -197,5 +197,10 @@ public record RecognizedCardDto(
     decimal? CurrentInvoice,
     DateTime? InvoiceDueDate,
     bool HasFullDetails,
-    IEnumerable<InstallmentDto> Installments
+    IEnumerable<InstallmentDto> Installments,
+    string? ProductType,
+    string? InstitutionColor,
+    Guid? ConnectionId,
+    string? BankName,
+    DateTime? ConnectionLastSyncedAt
 );

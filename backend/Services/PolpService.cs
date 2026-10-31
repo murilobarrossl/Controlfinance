@@ -127,6 +127,7 @@ public class PolpCreditCardDto
     [JsonPropertyName("consent_id")] public Guid ConsentId { get; set; }
     [JsonPropertyName("name")] public string? Name { get; set; }
     [JsonPropertyName("credit_card_network")] public string? CreditCardNetwork { get; set; }
+    [JsonPropertyName("product_type")] public string? ProductType { get; set; }
     [JsonPropertyName("payment_methods")] public List<PolpCardPaymentMethodDto> PaymentMethods { get; set; } = [];
     [JsonPropertyName("limits")] public List<PolpCardLimitDto> Limits { get; set; } = [];
 }

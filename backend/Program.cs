@@ -18,6 +18,18 @@ var builder = WebApplication.CreateBuilder(args);
 // ambiente: appsettings.json versionado no git só tem placeholders.
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
+// Fora de Development, segredo ausente ou placeholder impede a subida: senão a API sobe usando um
+// valor público do repositório como chave.
+var secretErrors = ConfigSecrets.Validate(builder.Configuration);
+if (secretErrors.Count > 0)
+{
+    if (!builder.Environment.IsDevelopment())
+        throw new InvalidOperationException("Configuração de segredos inválida: " + string.Join("; ", secretErrors));
+
+    foreach (var error in secretErrors)
+        Console.Error.WriteLine($"ATENÇÃO: {error}");
+}
+
 // ──────────────────────────────────────────
 //  BANCO DE DADOS
 // ──────────────────────────────────────────
@@ -34,6 +46,7 @@ builder.Services.AddScoped<ITokenRevocationService, TokenRevocationService>();
 builder.Services.AddScoped<PolpSyncService>();
 builder.Services.AddScoped<PolpDisconnectService>();
 builder.Services.AddScoped<PolpWebhookProcessor>();
+builder.Services.AddScoped<InstitutionNameResolver>();
 builder.Services.AddScoped<SessionValidator>();
 builder.Services.AddScoped<AccessLogService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
@@ -147,9 +160,7 @@ builder.Services.AddEndpointsApiExplorer();
 // sincronizadas pro seletor lateral). NullPolpService devolve listas vazias pras leituras e recusa
 // com uma mensagem clara as ações que exigiriam falar de verdade com a Polp (conectar banco novo,
 // sincronizar) — reversível: voltando a preencher as duas chaves, a integração real volta sozinha.
-var polpClientId = builder.Configuration["Polp:ClientId"];
-var polpClientSecret = builder.Configuration["Polp:ClientSecret"];
-if (!string.IsNullOrWhiteSpace(polpClientId) && !string.IsNullOrWhiteSpace(polpClientSecret))
+if (ConfigSecrets.IsPolpEnabled(builder.Configuration))
 {
     builder.Services.AddHttpClient<IPolpService, PolpService>();
 
@@ -226,6 +237,7 @@ using (var scope = app.Services.CreateScope())
     var startupLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     var encryption = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
     await PrivacyBackfill.RunAsync(db, encryption, app.Configuration, startupLogger);
+    await InstitutionNameResolver.BackfillAsync(db, scope.ServiceProvider.GetRequiredService<InstitutionNameResolver>());
     // Opt-in (Encryption:RotateOnStartup): regrava colunas cifradas com a chave ativa.
     await EncryptionKeyRotation.RunAsync(db, app.Configuration, startupLogger);
 

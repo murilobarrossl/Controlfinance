@@ -43,7 +43,10 @@ There is no test runner configured (no Jest/Vitest).
 - Backend secrets go in `backend/appsettings.Local.json` (gitignored) or environment variables
   (double-underscore syntax, see `backend/.env.example`). `appsettings.json` in git only has
   placeholders. Required: `ConnectionStrings:DefaultConnection`, `JwtSettings:SecretKey` (32+
-  chars), `Encryption:Key`, and for the Polp integration `Polp:ClientId`/`Polp:ClientSecret`/`Polp:WebhookToken`.
+  chars), `Encryption:Key`, and for the Polp integration `Polp:ClientId`/`Polp:ClientSecret`/
+  `Polp:WebhookToken`/`Polp:WebhookSigningSecret`. Outside Development, `ConfigSecrets.Validate`
+  (`Program.cs`) refuses to start if any of these is missing, a placeholder, shorter than 32 chars
+  or reused between keys. Polp counts as enabled only when ClientId/ClientSecret are not placeholders.
 - Frontend reads `VITE_API_URL` (see `frontend/.env.example`); defaults to
   `http://localhost:5000/api` if unset.
 - Requires a local PostgreSQL instance (port 5432 by default).
@@ -131,10 +134,13 @@ Flow: `PolpController.Connect` creates the consent (`avoidDuplicates`, `cliente_
 Guid, never e-mail) → user authorizes at the bank → `PolpSyncService.SyncOneAsync` runs **once** as
 the initial backfill. After that sync is **webhook-driven**: Polp syncs on its own schedule and calls
 `POST /api/polp/webhook/{Polp:WebhookToken}` (`PolpWebhookController` → `PolpWebhookProcessor`). The
-payload is only a notice (`event`, `resource`, `resource_id`, `query_parameters`) and Polp documents no
-signature, so nothing in it is trusted: unknown ids are ignored, the date window is rebuilt field by
-field (`PolpQueryWindow`), data always comes from the authenticated API, and the token is compared in
-constant time (`WebhookTokenPrevious` allows rotation). There is no "sync now"; the only on-demand call
+request must pass two independent checks before the body is parsed: the URL token (constant time,
+`WebhookTokenPrevious` allows rotation, 404 if wrong) and `X-Webhook-Signature: sha256=<hex>`, an
+HMAC-SHA256 of the raw body with `Polp:WebhookSigningSecret` (401 if missing/invalid; 503 if the
+secret isn't configured). The payload is only a notice (`event`, `resource`, `resource_id`,
+`query_parameters`) and Polp signs no timestamp, so nothing in it is trusted: unknown ids are ignored,
+the date window is rebuilt field by field (`PolpQueryWindow`) and data always comes from the
+authenticated API. There is no "sync now"; the only on-demand call
 is `POST /api/polp/accounts/{id}/balance-sync`. Regulatory monthly limits per CPF/institution apply:
 reconnecting the same CPF burns them, hence `avoidDuplicates`.
 

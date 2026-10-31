@@ -61,7 +61,9 @@ export default function DashboardHome() {
   const [categories, setCategories] = useState([]);
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const requestKey = `${selectedAccountId ?? ""}|${dataRefreshKey}`;
+  const [loadedKey, setLoadedKey] = useState(null);
+  const loading = loadedKey !== requestKey;
   const [error, setError] = useState("");
   const [cardConfirmOpen, setCardConfirmOpen] = useState(false);
 
@@ -76,7 +78,7 @@ export default function DashboardHome() {
     // requisição voltar, ignora o resultado, senão a tela pode acabar mostrando o resumo da
     // conta anterior por cima da conta selecionada agora.
     let cancelled = false;
-    setLoading(true);
+    const key = `${selectedAccountId ?? ""}|${dataRefreshKey}`;
 
     // Busca as transações só depois do resumo responder: o gráfico de tendência precisa saber
     // qual conta ficou ativa (selectedAccountId pode vir nulo, aí o backend escolhe a conta
@@ -96,7 +98,7 @@ export default function DashboardHome() {
         if (!cancelled) setError(err.message || "Não foi possível carregar o dashboard.");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoadedKey(key);
       });
 
     return () => {

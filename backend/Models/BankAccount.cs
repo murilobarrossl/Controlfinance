@@ -47,6 +47,7 @@ public class BankAccount
     /// Polp expõe esses dados pra esse banco; nulos até lá (a UI de Cartões pede pra completar só
     /// o que faltar). Nenhuma tabela separada representa o cartão — é esta mesma BankAccount.</summary>
     public string? Brand { get; set; }
+    public string? ProductType { get; set; }
     public decimal? CreditLimit { get; set; }
     public decimal? UsedLimit { get; set; }
     public int? ClosingDay { get; set; }

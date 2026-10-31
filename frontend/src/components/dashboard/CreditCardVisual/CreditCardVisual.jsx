@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import { CardIcon } from "../../ui/icons/FeatureIcons.jsx";
 import Button from "../../ui/Button/Button.jsx";
 import { formatCurrency, formatDate } from "../../../utils/financeMath.js";
+import { getCardGradient } from "../../../utils/cardColors.js";
 import "./CreditCardVisual.css";
 
 // `card` é o RecognizedCardDto do backend, já achatado — sem entidade separada por trás: quando
@@ -12,6 +14,19 @@ export default function CreditCardVisual({ card, cardholderName, onClick, onComp
   const usagePercent =
     card.creditLimit && card.creditLimit > 0 ? Math.min(100, ((card.usedLimit ?? 0) / card.creditLimit) * 100) : null;
   const FaceTag = onClick ? "button" : "div";
+  const faceStyle = useMemo(() => {
+    const gradient = getCardGradient({
+      name: card.name,
+      productType: card.productType,
+      institutionColor: card.institutionColor,
+    });
+    return {
+      "--card-from": gradient.from,
+      "--card-to": gradient.to,
+      "--card-text": gradient.text,
+      "--card-text-muted": gradient.textMuted,
+    };
+  }, [card.name, card.productType, card.institutionColor]);
   const missingFields = [
     !card.creditLimit && "limite",
     !card.closingDay && "dia de fechamento",
@@ -23,6 +38,7 @@ export default function CreditCardVisual({ card, cardholderName, onClick, onComp
       <FaceTag
         type={onClick ? "button" : undefined}
         className={`credit-card-visual__face ${onClick ? "credit-card-visual__face--interactive" : ""}`}
+        style={faceStyle}
         onClick={onClick}
       >
         <div className="credit-card-visual__top">

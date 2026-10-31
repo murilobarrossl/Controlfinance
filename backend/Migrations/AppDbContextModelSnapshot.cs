@@ -115,6 +115,9 @@ namespace ControlFinance.API.Migrations
                     b.Property<Guid?>("PolpIntegrationId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ProductType")
+                        .HasColumnType("text");
+
                     b.Property<string>("UsedLimit")
                         .HasColumnType("text")
                         .HasColumnName("UsedLimitEncrypted");

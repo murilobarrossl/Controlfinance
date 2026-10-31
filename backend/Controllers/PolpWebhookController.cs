@@ -1,20 +1,20 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ControlFinance.API.Controllers;
 
-// Receptor dos webhooks da Polp (API v2). A doc da Polp não prevê assinatura nem header
-// customizado, então o segredo vai no caminho da URL cadastrada no Dashboard. Fraquezas
-// conhecidas, e por que são aceitáveis aqui:
-//  - URL aparece em log de acesso de proxy/gateway: o token precisa ser rotacionável
-//    (Polp:WebhookToken + Polp:WebhookTokenPrevious, para trocar sem perder eventos).
-//  - sem proteção a replay: o pior efeito de um aviso reenviado é um sync a mais, e
-//    PolpWebhookProcessor deduplica e só aceita ids que já existem no banco.
-// O corpo nunca é logado e a resposta é sempre 200 depois do token válido, para não revelar quais
-// ids existem.
+// Receptor dos webhooks da Polp (API v2). Duas barreiras independentes, nesta ordem:
+//  - token no caminho da URL (Polp:WebhookToken, rotacionável com Polp:WebhookTokenPrevious): 404
+//    se errado, para não confirmar que o endpoint existe;
+//  - assinatura HMAC-SHA256 do corpo bruto em X-Webhook-Signature (Polp:WebhookSigningSecret): 401
+//    se ausente ou inválida. A URL vaza em log de proxy; o signing secret nunca trafega.
+// Sem a configuração completa, nada é aceito. A Polp não assina timestamp, então não há proteção a
+// replay além da deduplicação de PolpWebhookProcessor, que só aceita ids já existentes no banco.
+// Corpo, token e assinatura nunca são logados.
 [ApiController]
 [Route("api/polp/webhook")]
 [AllowAnonymous]
@@ -23,11 +23,41 @@ public class PolpWebhookController(
     IServiceScopeFactory scopeFactory,
     ILogger<PolpWebhookController> logger) : ControllerBase
 {
+    public const string SignatureHeader = "X-Webhook-Signature";
+    private const string SignaturePrefix = "sha256=";
+    private const int MaxBodyBytes = 64 * 1024;
+
     [HttpPost("{token}")]
-    public IActionResult Receive(string token, [FromBody] PolpWebhookPayload payload)
+    [RequestSizeLimit(MaxBodyBytes)]
+    public async Task<IActionResult> Receive(string token, CancellationToken ct)
     {
-        // 404 (e não 401) para token errado ou ausente: não confirma que o endpoint existe.
         if (!IsValidToken(token)) return NotFound();
+
+        var signingSecret = config["Polp:WebhookSigningSecret"];
+        if (!ConfigSecrets.IsStrongSecret(signingSecret) || signingSecret == config["Polp:WebhookToken"])
+        {
+            logger.LogError("Webhook da Polp recusado: Polp:WebhookSigningSecret ausente ou inválido");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var body = await ReadBodyAsync(ct);
+
+        if (!SignatureMatches(body, signingSecret!))
+        {
+            logger.LogWarning("Webhook da Polp recusado: assinatura ausente ou inválida");
+            return Unauthorized();
+        }
+
+        PolpWebhookPayload? payload;
+        try
+        {
+            payload = JsonSerializer.Deserialize<PolpWebhookPayload>(body);
+        }
+        catch (JsonException)
+        {
+            return BadRequest();
+        }
+        if (payload is null) return BadRequest();
 
         if (PolpWebhookProcessor.IsDuplicate(payload)) return Ok();
 
@@ -61,12 +91,45 @@ public class PolpWebhookController(
         foreach (var key in new[] { "Polp:WebhookToken", "Polp:WebhookTokenPrevious" })
         {
             var expected = config[key];
-            if (string.IsNullOrWhiteSpace(expected) || expected.Length < 32) continue;
+            if (!ConfigSecrets.IsStrongSecret(expected)) continue;
 
-            var expectedHash = SHA256.HashData(Encoding.UTF8.GetBytes(expected));
+            var expectedHash = SHA256.HashData(Encoding.UTF8.GetBytes(expected!));
             valid |= CryptographicOperations.FixedTimeEquals(providedHash, expectedHash);
         }
 
         return valid;
+    }
+
+    // O HMAC precisa dos bytes exatamente como chegaram: por isso a action não usa [FromBody].
+    private async Task<byte[]> ReadBodyAsync(CancellationToken ct)
+    {
+        using var buffer = new MemoryStream();
+        await Request.Body.CopyToAsync(buffer, ct);
+        return buffer.ToArray();
+    }
+
+    private bool SignatureMatches(byte[] body, string signingSecret)
+    {
+        var headers = Request.Headers[SignatureHeader];
+        if (headers.Count != 1) return false;
+
+        var header = headers[0];
+        if (header is null
+            || header.Length != SignaturePrefix.Length + 64
+            || !header.StartsWith(SignaturePrefix, StringComparison.Ordinal))
+            return false;
+
+        byte[] received;
+        try
+        {
+            received = Convert.FromHexString(header.AsSpan(SignaturePrefix.Length));
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        var expected = HMACSHA256.HashData(Encoding.UTF8.GetBytes(signingSecret), body);
+        return CryptographicOperations.FixedTimeEquals(expected, received);
     }
 }

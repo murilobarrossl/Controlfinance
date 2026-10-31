@@ -10,8 +10,11 @@ import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading
 import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
 import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
+import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
+import { CardIcon, WalletIcon, BellIcon, HistoryIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import { formatCurrency, formatDate } from "../../../utils/financeMath.js";
+import { summarizeCards, groupCards } from "../../../utils/cardGroups.js";
 import "./Cartoes.css";
 
 const EMPTY_DETAIL_FORM = { id: null, brand: "", creditLimit: "", closingDay: "1", dueDay: "10" };
@@ -31,6 +34,10 @@ const EMPTY_INSTALLMENT_FORM = {
 const MAX_UPCOMING = 8;
 const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
 const KIND_CLASS = { Fatura: "invoice", Parcela: "installment", Conta: "bill" };
+
+function formatDateTime(value) {
+  return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -221,6 +228,92 @@ export default function Cartoes() {
     [cards, installments, pendingTransactions]
   );
 
+  const summary = useMemo(() => summarizeCards(cards), [cards]);
+  const { groups, showHeaders } = useMemo(() => groupCards(cards), [cards]);
+
+  function renderCardBlock(card) {
+    return (
+      <div key={card.id} className="cartoes__card-block">
+        <CreditCardVisual
+          card={card}
+          cardholderName={user?.name}
+          onCompleteFields={!card.hasFullDetails ? () => openDetailForm(card) : undefined}
+        />
+
+        {card.hasFullDetails && detailForm.id !== card.id && (
+          <button type="button" className="cartoes__edit-link" onClick={() => openDetailForm(card)}>
+            Editar limite/fatura
+          </button>
+        )}
+
+        {detailForm.id === card.id && (
+          <form className="cartoes__form" onSubmit={(e) => handleSubmitDetail(e, card)}>
+            {!card.isSynced && (
+              <label className="cartoes__field">
+                <span className="cartoes__field-label">Bandeira (opcional)</span>
+                <input
+                  type="text"
+                  placeholder="Ex: Mastercard"
+                  maxLength={50}
+                  value={detailForm.brand}
+                  onChange={(e) => setDetailForm({ ...detailForm, brand: e.target.value })}
+                />
+              </label>
+            )}
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Limite de crédito</span>
+              <CurrencyInput
+                placeholder="Ex: 5000"
+                value={detailForm.creditLimit}
+                onChange={(e) => setDetailForm({ ...detailForm, creditLimit: e.target.value })}
+                required
+              />
+            </label>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Dia de fechamento</span>
+              <input
+                type="number"
+                min="1"
+                max="31"
+                step="1"
+                value={detailForm.closingDay}
+                onChange={(e) => setDetailForm({ ...detailForm, closingDay: e.target.value })}
+                required
+              />
+            </label>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Dia de vencimento</span>
+              <input
+                type="number"
+                min="1"
+                max="31"
+                step="1"
+                value={detailForm.dueDay}
+                onChange={(e) => setDetailForm({ ...detailForm, dueDay: e.target.value })}
+                required
+              />
+            </label>
+
+            <div className="cartoes__form-actions">
+              <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
+                {saving ? "Salvando..." : "Salvar"}
+              </Button>
+              <Button
+                as="button"
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setDetailForm(EMPTY_DETAIL_FORM)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </form>
+        )}
+      </div>
+    );
+  }
+
   if (loading) return <p className="cartoes__hint">Carregando...</p>;
 
   return (
@@ -235,6 +328,18 @@ export default function Cartoes() {
         cartões.
       </p>
 
+      <div className="cartoes__summary">
+        <StatCard icon={<CardIcon />} label="Limite usado" value={formatCurrency(summary.usedLimit)} />
+        <StatCard icon={<WalletIcon />} label="Limite disponível" value={formatCurrency(summary.availableLimit)} />
+        <StatCard icon={<BellIcon />} label="Faturas abertas" value={formatCurrency(summary.openInvoices)} />
+        <StatCard
+          icon={<HistoryIcon />}
+          label="Próximo vencimento"
+          value={summary.nextDue ? formatDate(summary.nextDue.date) : "—"}
+          secondaryLines={summary.nextDue ? [{ label: summary.nextDue.label, value: "" }] : []}
+        />
+      </div>
+
       <Card title="Seus cartões">
         {cards.length === 0 ? (
           <p className="cartoes__hint">
@@ -242,86 +347,30 @@ export default function Cartoes() {
             ele deve aparecer aqui sozinho na próxima sincronização — ou cadastre um manualmente abaixo.
           </p>
         ) : (
-          <div className="cartoes__grid">
-            {cards.map((card) => (
-              <div key={card.id} className="cartoes__card-block">
-                <CreditCardVisual
-                  card={card}
-                  cardholderName={user?.name}
-                  onCompleteFields={!card.hasFullDetails ? () => openDetailForm(card) : undefined}
-                />
-
-                {card.hasFullDetails && detailForm.id !== card.id && (
-                  <button type="button" className="cartoes__edit-link" onClick={() => openDetailForm(card)}>
-                    Editar limite/fatura
-                  </button>
-                )}
-
-                {detailForm.id === card.id && (
-                  <form className="cartoes__form" onSubmit={(e) => handleSubmitDetail(e, card)}>
-                    {!card.isSynced && (
-                      <label className="cartoes__field">
-                        <span className="cartoes__field-label">Bandeira (opcional)</span>
-                        <input
-                          type="text"
-                          placeholder="Ex: Mastercard"
-                          maxLength={50}
-                          value={detailForm.brand}
-                          onChange={(e) => setDetailForm({ ...detailForm, brand: e.target.value })}
-                        />
-                      </label>
-                    )}
-                    <label className="cartoes__field">
-                      <span className="cartoes__field-label">Limite de crédito</span>
-                      <CurrencyInput
-                        placeholder="Ex: 5000"
-                        value={detailForm.creditLimit}
-                        onChange={(e) => setDetailForm({ ...detailForm, creditLimit: e.target.value })}
-                        required
-                      />
-                    </label>
-                    <label className="cartoes__field">
-                      <span className="cartoes__field-label">Dia de fechamento</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max="31"
-                        step="1"
-                        value={detailForm.closingDay}
-                        onChange={(e) => setDetailForm({ ...detailForm, closingDay: e.target.value })}
-                        required
-                      />
-                    </label>
-                    <label className="cartoes__field">
-                      <span className="cartoes__field-label">Dia de vencimento</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max="31"
-                        step="1"
-                        value={detailForm.dueDay}
-                        onChange={(e) => setDetailForm({ ...detailForm, dueDay: e.target.value })}
-                        required
-                      />
-                    </label>
-
-                    <div className="cartoes__form-actions">
-                      <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
-                        {saving ? "Salvando..." : "Salvar"}
-                      </Button>
-                      <Button
-                        as="button"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setDetailForm(EMPTY_DETAIL_FORM)}
-                      >
-                        Cancelar
-                      </Button>
+          <div className="cartoes__groups">
+            {groups.map((group) => (
+              <section key={group.key} className="cartoes__group">
+                {showHeaders && (
+                  <header className="cartoes__group-header" style={{ "--group-color": group.color ?? "var(--color-border-strong)" }}>
+                    <div className="cartoes__group-title">
+                      <span className="cartoes__group-marker" aria-hidden="true" />
+                      <h3 className="cartoes__group-name">{group.bankName}</h3>
                     </div>
-                  </form>
+                    <div className="cartoes__group-meta">
+                      <span>Fatura aberta: <strong>{formatCurrency(group.openInvoice)}</strong></span>
+                      <span>Limite usado: <strong>{formatCurrency(group.usedLimit)}</strong></span>
+                      {!group.isOthers && (
+                        <span className="cartoes__group-sync">
+                          {group.lastSyncedAt
+                            ? `Atualizado em ${formatDateTime(group.lastSyncedAt)}`
+                            : "Ainda não atualizado"}
+                        </span>
+                      )}
+                    </div>
+                  </header>
                 )}
-              </div>
+                <div className="cartoes__grid">{group.cards.map(renderCardBlock)}</div>
+              </section>
             ))}
           </div>
         )}

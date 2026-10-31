@@ -17,7 +17,7 @@ namespace ControlFinance.API.Services;
 // O fluxo normal é orientado a webhook: a Polp sincroniza por agenda com a instituição e avisa;
 // cada aviso vira uma das operações pontuais abaixo, limitada à janela que ela informou. O sync
 // completo (SyncOneAsync) só roda uma vez, na conexão (backfill inicial).
-public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration config)
+public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration config, InstitutionNameResolver institutionNames)
 {
     // Serializa syncs concorrentes da mesma integração (ex.: dois webhooks seguidos, ou um webhook
     // cruzando com o backfill): sem isso, duas execuções liam o mesmo snapshot de "transações já
@@ -50,6 +50,7 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
         local.Status = remote.Status;
         local.ExecutionStatus = remote.ExecutionStatus;
         if (!string.IsNullOrWhiteSpace(remote.Institution?.Name)) local.InstitutionName = remote.Institution.Name;
+        local.InstitutionName ??= await institutionNames.FindAsync(local.InstitutionId, ct);
         local.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
@@ -97,6 +98,7 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
         // Chute inicial do Radar de Recorrências pra conta nova (CNPJ = Business, CPF = Personal,
         // ver AccountOwnershipDefault).
         var ownerDocumentType = await db.Users.Where(u => u.Id == userId).Select(u => u.DocumentType).FirstAsync(ct);
+        local.InstitutionName ??= await institutionNames.FindAsync(local.InstitutionId, ct);
         var bankName = local.InstitutionName ?? "Banco";
 
         var touched = new List<BankAccount>();
@@ -147,7 +149,7 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
             // A v2 não separa conta de cartão por "type": o cartão é um recurso próprio, então
             // o tipo é fixado aqui para o resto do app (CreditCardAccountDetector) reconhecê-lo.
             card.PolpAccountType = CreditCardAccountDetector.CardType;
-            card.PolpAccountSubtype = null;
+            card.ProductType = remote.ProductType;
             card.Brand = remote.CreditCardNetwork;
             card.Number = AccountNumberMask.Mask(remote.PaymentMethods.FirstOrDefault()?.IdentificationNumber);
 
