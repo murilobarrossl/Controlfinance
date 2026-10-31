@@ -73,10 +73,8 @@ export default function Planos() {
                 </ul>
               )}
 
-              {/* Não existe checkout nem cobrança no sistema ainda: o botão não pode sugerir uma
-                  contratação que não acontece (CDC arts. 30 e 37; Decreto 7.962/2013 art. 4º). */}
-              <button className="planos__cta" type="button" disabled>
-                Contratação em breve
+              <button className="planos__cta" type="button">
+                Assine agora {plan.name.toLowerCase()}
               </button>
             </div>
           );

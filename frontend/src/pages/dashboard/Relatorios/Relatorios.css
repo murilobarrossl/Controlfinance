@@ -157,6 +157,7 @@
 
 .relatorios__table-wrapper {
   overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .relatorios__table {

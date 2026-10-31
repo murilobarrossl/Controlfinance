@@ -1,6 +1,5 @@
 import { Link } from "react-router";
 import logo from "../../../assets/images/cflogobranco.svg";
-import { ShieldIcon } from "../../ui/icons/FeatureIcons.jsx";
 import "./Footer.css";
 
 const PRODUTO_LINKS = [
@@ -32,7 +31,6 @@ export default function Footer() {
             com conexão bancária via Open Finance.
           </p>
           <p className="footer__security">
-            <ShieldIcon />
             O Control Finance não é instituição financeira. A conexão com bancos usa o
             Open Finance (regulado pelo Banco Central), por meio de fornecedor parceiro.
           </p>
