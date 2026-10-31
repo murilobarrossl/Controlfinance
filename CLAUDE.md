@@ -43,7 +43,7 @@ There is no test runner configured (no Jest/Vitest).
 - Backend secrets go in `backend/appsettings.Local.json` (gitignored) or environment variables
   (double-underscore syntax, see `backend/.env.example`). `appsettings.json` in git only has
   placeholders. Required: `ConnectionStrings:DefaultConnection`, `JwtSettings:SecretKey` (32+
-  chars), `Encryption:Key`, and for the Polp integration `Polp:ClientId`/`Polp:ClientSecret`.
+  chars), `Encryption:Key`, and for the Polp integration `Polp:ClientId`/`Polp:ClientSecret`/`Polp:WebhookToken`.
 - Frontend reads `VITE_API_URL` (see `frontend/.env.example`); defaults to
   `http://localhost:5000/api` if unset.
 - Requires a local PostgreSQL instance (port 5432 by default).
@@ -119,22 +119,38 @@ must match). `Installment` has no FK to `User`: delete it explicitly. `Transacti
 → `BankAccount` is `SetNull`, so deleting accounts must go through
 `PolpDisconnectService.DeleteAccountsDataAsync` to avoid orphaned statements.
 
-### Polp integration (open finance sync)
+### Polp integration (open finance sync, API v2 / Celcoin)
 
-`IPolpService`/`PolpService` talks to the external Polp API; `PolpController` orchestrates the
-flow: list connectors → create integration (redirects user to bank auth) → poll integration status
-→ sync accounts + transaction history into local `BankAccount`/`Transaction` rows. Sync is
-idempotent (matches existing accounts by `PolpAccountId`, existing transactions by
-`(BankAccountId, Description)` where `Description` stores the remote transaction id) and
-per-integration failures don't abort a `sync-all` batch. First sync for a user seeds a default set
-of categories.
+`IPolpService`/`PolpService` talks to the Polp **v2** API (`Polp:BaseUrl`; testing uses
+`.../api/v2/sandbox`, which fabricates data and never touches a real bank). Names kept from v1:
+`PolpIntegration` is now a **consent** (`PolpIntegrationId` = consent UUID), `BankAccount.PolpAccountId`
+is the account **or card** UUID. A credit card is still a `BankAccount` (`PolpAccountType =
+CreditCardAccountDetector.CardType`), because v2 exposes cards as their own resource.
+
+Flow: `PolpController.Connect` creates the consent (`avoidDuplicates`, `cliente_user_id` = local user
+Guid, never e-mail) → user authorizes at the bank → `PolpSyncService.SyncOneAsync` runs **once** as
+the initial backfill. After that sync is **webhook-driven**: Polp syncs on its own schedule and calls
+`POST /api/polp/webhook/{Polp:WebhookToken}` (`PolpWebhookController` → `PolpWebhookProcessor`). The
+payload is only a notice (`event`, `resource`, `resource_id`, `query_parameters`) and Polp documents no
+signature, so nothing in it is trusted: unknown ids are ignored, the date window is rebuilt field by
+field (`PolpQueryWindow`), data always comes from the authenticated API, and the token is compared in
+constant time (`WebhookTokenPrevious` allows rotation). There is no "sync now"; the only on-demand call
+is `POST /api/polp/accounts/{id}/balance-sync`. Regulatory monthly limits per CPF/institution apply:
+reconnecting the same CPF burns them, hence `avoidDuplicates`.
+
+Upsert is by Polp transaction id (`Transaction.Description`, per `BankAccountId`); the id is stable
+when a card purchase moves from open to billed. `counterparty` and `category_ref` arrive later (a new
+webhook) and only fill name/category that were never edited. `category_ref` maps to app categories by
+top-level group (`PolpCategoryMap`). `execution_status` `PARTIAL_SUCCESS` never blocks the user. Card
+closing/due day come from bills (`bill_closing_date`/`due_date`), not from the card resource.
+Loans, financings and investments from Polp are out of scope.
 
 Disconnecting (`DELETE /api/polp/integrations/{id}`, `PolpDisconnectService`) deletes local data
-of that connection immediately, marks it `DISCONNECT_PENDING` (ignored by every sync path) and calls
-Polp `DELETE /integrations/{id}`; failures are retried hourly by `PendingDisconnectRetryService`.
+of that connection immediately, marks it `DISCONNECT_PENDING` (ignored by every sync path) and revokes the
+consent (`DELETE /consents/{id}`); failures are retried hourly by `PendingDisconnectRetryService`.
 Account deletion (`POST /api/account/deletion`) queues failed provider deletions in
-`PendingProviderDeletion` (technical id only). The legacy v1 Polp API used here is announced by Polp
-as discontinued on 2026-11-28.
+`PendingProviderDeletion` (technical id only). The legacy v1 API is announced by Polp as discontinued on
+2026-11-28; migration `PolpV2Consents` deleted all v1 data (test connections only).
 
 ### Other backend services
 

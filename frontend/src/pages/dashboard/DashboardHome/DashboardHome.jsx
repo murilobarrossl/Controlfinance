@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router";
 import { getDashboardSummary } from "../../../api/dashboard.js";
 import { getTransactions } from "../../../api/transactions.js";
 import { getCategories } from "../../../api/categories.js";
-import { syncAllIntegrations } from "../../../api/polp.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
@@ -67,16 +66,9 @@ export default function DashboardHome() {
   const [cardConfirmOpen, setCardConfirmOpen] = useState(false);
 
   useEffect(() => {
+    // Sem sync ao abrir a página: a Polp sincroniza por agenda e avisa o backend por webhook, então
+    // o que está no banco já é o mais recente que existe.
     getCategories().then(setCategories).catch(() => {});
-
-    // Sincroniza com o banco de verdade ao carregar a página (saldo e transações ficavam
-    // congelados no valor de quando a conta foi conectada, sem isso). Não trava o carregamento
-    // inicial esperando a Polp responder: dispara em paralelo e só atualiza o resumo (efeito
-    // abaixo, via dataRefreshKey) quando a sincronização terminar.
-    syncAllIntegrations()
-      .then(() => bumpDataRefresh())
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- só dispara na carga inicial da página
   }, []);
 
   useEffect(() => {

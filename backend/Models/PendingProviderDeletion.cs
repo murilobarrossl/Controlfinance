@@ -9,7 +9,7 @@ namespace ControlFinance.API.Models;
 public class PendingProviderDeletion
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public int PolpIntegrationId { get; set; }
+    public Guid PolpIntegrationId { get; set; }
     public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastAttemptAt { get; set; }
 }

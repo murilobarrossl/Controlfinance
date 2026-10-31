@@ -15,27 +15,33 @@ public class NullPolpService : IPolpService
     public Task<List<PolpInstitutionDto>> GetInstitutionsAsync(CancellationToken ct = default) =>
         Task.FromResult(new List<PolpInstitutionDto>());
 
-    public Task<PolpIntegrationDto> CreateIntegrationAsync(int institutionId, string document, CancellationToken ct = default) =>
+    public Task<PolpConsentDto> CreateConsentAsync(CreatePolpConsentRequest request, CancellationToken ct = default) =>
         throw new HttpRequestException(DisabledMessage);
 
-    public Task<PolpIntegrationDto> GetIntegrationAsync(int integrationId, CancellationToken ct = default) =>
+    public Task<PolpConsentDto> GetConsentAsync(Guid consentId, CancellationToken ct = default) =>
         throw new HttpRequestException(DisabledMessage);
 
-    public Task<List<PolpAccountDto>> GetAccountsAsync(int integrationId, CancellationToken ct = default) =>
+    public Task<List<PolpAccountDto>> GetAccountsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default) =>
         Task.FromResult(new List<PolpAccountDto>());
 
-    public Task<List<PolpTransactionDto>> GetTransactionsAsync(int accountId, CancellationToken ct = default) =>
-        Task.FromResult(new List<PolpTransactionDto>());
-
-    public Task<List<PolpCreditCardDto>> GetCreditCardsAsync(int integrationId, CancellationToken ct = default) =>
+    public Task<List<PolpCreditCardDto>> GetCreditCardsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default) =>
         Task.FromResult(new List<PolpCreditCardDto>());
 
-    public Task<List<PolpBillDto>> GetBillsAsync(int creditCardId, CancellationToken ct = default) =>
+    public Task<List<PolpBillDto>> GetBillsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default) =>
         Task.FromResult(new List<PolpBillDto>());
 
-    // Sem credenciais não dá pra pedir a exclusão na Polp. PolpDisconnectService trata essa
-    // falha como "pendente" (apaga o dado local mesmo assim e tenta de novo depois), em vez de
-    // fingir que a integração foi excluída do lado da Polp.
-    public Task DeleteIntegrationAsync(int integrationId, CancellationToken ct = default) =>
+    public Task<List<PolpAccountTransactionDto>> GetAccountTransactionsAsync(Guid accountId, PolpQueryWindow? window = null, CancellationToken ct = default) =>
+        Task.FromResult(new List<PolpAccountTransactionDto>());
+
+    public Task<List<PolpCardTransactionDto>> GetCardTransactionsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default) =>
+        Task.FromResult(new List<PolpCardTransactionDto>());
+
+    public Task<PolpAccountDto> SyncBalanceAsync(Guid accountId, CancellationToken ct = default) =>
+        throw new HttpRequestException(DisabledMessage);
+
+    // Sem credenciais não dá pra revogar na Polp. PolpDisconnectService trata essa falha como
+    // "pendente" (apaga o dado local mesmo assim e tenta de novo depois), em vez de fingir que o
+    // consentimento foi revogado do lado da Polp.
+    public Task DeleteConsentAsync(Guid consentId, CancellationToken ct = default) =>
         throw new HttpRequestException(DisabledMessage);
 }

@@ -6,8 +6,8 @@ namespace ControlFinance.API.Services;
 
 public enum RemoteDeletionOutcome
 {
-    /// <summary>A Polp aceitou o pedido de exclusão (202). A exclusão do lado dela é assíncrona:
-    /// "aceito" não é o mesmo que "concluído", e a tela diz isso.</summary>
+    /// <summary>A Polp aceitou a revogação do consentimento. O apagamento dos dados do lado dela
+    /// segue as regras do fornecedor: "aceito" não é o mesmo que "concluído", e a tela diz isso.</summary>
     Requested,
 
     /// <summary>Não deu pra falar com a Polp agora (sem credenciais, fora do ar, erro). O dado
@@ -59,7 +59,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
         {
             try
             {
-                await polp.DeleteIntegrationAsync(item.PolpIntegrationId, ct);
+                await polp.DeleteConsentAsync(item.PolpIntegrationId, ct);
                 db.PendingProviderDeletions.Remove(item);
             }
             catch (HttpRequestException)
@@ -84,7 +84,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
         {
             try
             {
-                await polp.DeleteIntegrationAsync(local.PolpIntegrationId, ct);
+                await polp.DeleteConsentAsync(local.PolpIntegrationId, ct);
             }
             catch (HttpRequestException)
             {
@@ -101,7 +101,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
     {
         try
         {
-            await polp.DeleteIntegrationAsync(local.PolpIntegrationId, ct);
+            await polp.DeleteConsentAsync(local.PolpIntegrationId, ct);
         }
         catch (HttpRequestException)
         {
@@ -115,7 +115,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
         return RemoteDeletionOutcome.Requested;
     }
 
-    private async Task DeleteConnectionDataAsync(Guid userId, int polpIntegrationId, CancellationToken ct)
+    private async Task DeleteConnectionDataAsync(Guid userId, Guid polpIntegrationId, CancellationToken ct)
     {
         var accountIds = await db.BankAccounts
             .Where(b => b.UserId == userId && b.PolpIntegrationId == polpIntegrationId)

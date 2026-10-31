@@ -1,4 +1,4 @@
-import { getIntegrationStatus, syncIntegration } from "../api/polp.js";
+import { getIntegrationStatus } from "../api/polp.js";
 
 // Mesmo nome usado por clearLocalDataFor (utils/authToken.js).
 const PENDING_KEY = "pendingPolpIntegrationId";
@@ -23,15 +23,15 @@ export function clearPendingIntegrationId() {
   localStorage.removeItem(PENDING_KEY);
 }
 
-// Faz polling do status da integração até ficar ativa, dar erro de login ou esgotar as tentativas.
-// Retorna "active" | "login_error" | "timeout".
+// Acompanha o status da conexão até ficar ativa, dar erro/rejeição ou esgotar as tentativas.
+// Retorna "active" | "login_error" | "timeout". O backend dispara a carga inicial dos dados sozinho
+// quando o consentimento é autorizado ("syncing" até ela terminar), então aqui não há nada a pedir.
 export async function watchPolpConnection(integrationId, { isCancelled = () => false } = {}) {
   for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS && !isCancelled(); attempt++) {
     try {
       const status = await getIntegrationStatus(integrationId);
 
       if (status?.status === "active") {
-        await syncIntegration(integrationId);
         clearPendingIntegrationId();
         return "active";
       }

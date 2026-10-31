@@ -199,6 +199,19 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasKey(p => p.Id);
         });
 
+        // O webhook da Polp chega só com o id do recurso deles (consentimento, conta ou cartão):
+        // é por esses índices que ele é resolvido para o usuário sem varrer a tabela. O
+        // consentimento é único por usuário porque o POST /consents já é idempotente por
+        // institution_id + documents (avoidDuplicates).
+        modelBuilder.Entity<PolpIntegration>(e =>
+        {
+            e.HasIndex(p => p.PolpIntegrationId).IsUnique();
+        });
+        modelBuilder.Entity<BankAccount>(e =>
+        {
+            e.HasIndex(b => b.PolpAccountId);
+        });
+
         modelBuilder.Entity<AccessLogEntry>(e =>
         {
             e.ToTable("AccessLogs");

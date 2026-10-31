@@ -33,6 +33,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenRevocationService, TokenRevocationService>();
 builder.Services.AddScoped<PolpSyncService>();
 builder.Services.AddScoped<PolpDisconnectService>();
+builder.Services.AddScoped<PolpWebhookProcessor>();
 builder.Services.AddScoped<SessionValidator>();
 builder.Services.AddScoped<AccessLogService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
@@ -152,12 +153,12 @@ if (!string.IsNullOrWhiteSpace(polpClientId) && !string.IsNullOrWhiteSpace(polpC
 {
     builder.Services.AddHttpClient<IPolpService, PolpService>();
 
-    // A URL de sandbox (dev.polp.com.br) é ambiente de teste do fornecedor: dados reais de
-    // usuários não devem passar por ela. Não bloqueia (a configuração de produção é do
-    // operador), mas deixa o alerta explícito no log de inicialização.
+    // O Sandbox da Polp (/api/v2/sandbox) gera dados fictícios e nunca conecta ao banco de
+    // verdade: em produção, um usuário "conectaria" um banco e veria contas inventadas. Não
+    // bloqueia (a configuração de produção é do operador), mas deixa o alerta explícito no log.
     var polpBaseUrl = builder.Configuration["Polp:BaseUrl"] ?? string.Empty;
-    if (!builder.Environment.IsDevelopment() && polpBaseUrl.Contains("dev.polp.com.br", StringComparison.OrdinalIgnoreCase))
-        Console.Error.WriteLine("ATENÇÃO: Polp:BaseUrl aponta para o ambiente de testes (dev.polp.com.br) fora de Development.");
+    if (!builder.Environment.IsDevelopment() && polpBaseUrl.Contains("/sandbox", StringComparison.OrdinalIgnoreCase))
+        Console.Error.WriteLine("ATENÇÃO: Polp:BaseUrl aponta para o Sandbox da Polp fora de Development.");
 }
 else
 {

@@ -9,8 +9,8 @@ export const createIntegration = async (connectorId, document, consentVersion) =
     body: JSON.stringify({ connectorId, document, consentVersion }),
   });
 
-// Desconecta um banco: apaga do Control Finance tudo que veio dessa conexão e pede a exclusão
-// da integração na Polp. Devolve { localDataDeleted, providerDeletion: "requested" | "pending" }.
+// Desconecta um banco: apaga do Control Finance tudo que veio dessa conexão e revoga o
+// consentimento na Polp. Devolve { localDataDeleted, providerDeletion: "requested" | "pending" }.
 export const disconnectIntegration = async (localIntegrationId) =>
   apiFetch(`/polp/integrations/${localIntegrationId}`, { method: "DELETE" });
 
@@ -20,17 +20,11 @@ export const getIntegrations = async () =>
 export const getIntegrationStatus = async (integrationId) =>
   apiFetch(`/polp/integrations/${integrationId}`);
 
-// integrationId aqui é o Guid local (PolpIntegration.Id), não o id remoto da Polp guardado em
-// BankAccount.PolpIntegrationId, que vem como localIntegrationId na resposta de getIntegrations().
-export const syncIntegration = async (integrationId) =>
-  apiFetch(`/polp/integrations/${integrationId}/sync`, {
-    method: "POST",
-  });
-
-// Sincroniza todas as integrações do usuário de uma vez (usado ao carregar o dashboard, pra
-// saldo/transações não ficarem desatualizados até a próxima reconexão manual do banco)
-export const syncAllIntegrations = async () =>
-  apiFetch("/polp/integrations/sync-all", {
+// Não existe mais "sincronizar tudo agora": a Polp sincroniza por agenda e avisa o backend por
+// webhook. A única consulta na hora que sobrou é o saldo de uma conta, a pedido do usuário
+// (limitada pela Polp; devolve 429 com retryAfterSeconds se for repetida em menos de 1 minuto).
+export const syncAccountBalance = async (accountId) =>
+  apiFetch(`/polp/accounts/${accountId}/balance-sync`, {
     method: "POST",
   });
 

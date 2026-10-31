@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -7,40 +8,61 @@ using System.Text.Json.Serialization;
 namespace ControlFinance.API.Services;
 
 // ──────────────────────────────────────────
-//  DTOs de resposta da Polp (snake_case)
+//  DTOs de resposta da Polp API v2 / Celcoin (snake_case)
+//  Campos conferidos contra a documentação oficial; o que a documentação não especifica
+//  (ex.: forma exata de "institution") fica nullable para não quebrar a desserialização.
 // ──────────────────────────────────────────
 
-public class PolpEnvelope<T>
+public class PolpMoney
 {
-    [JsonPropertyName("data")]
-    public T? Data { get; set; }
+    // A Polp manda valores como string ("1500.00"); unbilled_amount é o único número, e não é usado.
+    [JsonPropertyName("amount")] public string? Amount { get; set; }
+    [JsonPropertyName("currency")] public string? Currency { get; set; }
+
+    [JsonIgnore]
+    public decimal? Value =>
+        decimal.TryParse(Amount, NumberStyles.Number, CultureInfo.InvariantCulture, out var v) ? v : null;
+}
+
+public class PolpListMeta
+{
+    [JsonPropertyName("next_cursor")] public string? NextCursor { get; set; }
+}
+
+public class PolpListEnvelope<T>
+{
+    [JsonPropertyName("data")] public List<T> Data { get; set; } = [];
+    [JsonPropertyName("meta")] public PolpListMeta? Meta { get; set; }
 }
 
 public class PolpInstitutionDto
 {
-    [JsonPropertyName("id")] public int Id { get; set; }
+    [JsonPropertyName("id")] public Guid Id { get; set; }
     [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
-    [JsonPropertyName("color")] public string? Color { get; set; }
     [JsonPropertyName("logo_url")] public string? LogoUrl { get; set; }
+    [JsonPropertyName("color")] public string? Color { get; set; }
     [JsonPropertyName("type")] public string? Type { get; set; }
     [JsonPropertyName("status")] public string? Status { get; set; }
 }
 
-public class PolpIntegrationDto
+public class PolpConsentInstitutionDto
 {
-    [JsonPropertyName("id")] public int Id { get; set; }
-    [JsonPropertyName("institution_id")] public int InstitutionId { get; set; }
-    [JsonPropertyName("tax_id")] public string? TaxId { get; set; }
+    [JsonPropertyName("id")] public Guid? Id { get; set; }
+    [JsonPropertyName("name")] public string? Name { get; set; }
+}
+
+public class PolpConsentDto
+{
+    [JsonPropertyName("id")] public Guid Id { get; set; }
+    [JsonPropertyName("institution_id")] public Guid InstitutionId { get; set; }
+    [JsonPropertyName("institution")] public PolpConsentInstitutionDto? Institution { get; set; }
     [JsonPropertyName("status")] public string Status { get; set; } = string.Empty;
     [JsonPropertyName("execution_status")] public string? ExecutionStatus { get; set; }
-    // A Polp às vezes retorna "error": null, e às vezes "error": { ... } (objeto),
-    // dependendo do tipo de falha. JsonElement aceita os dois formatos sem quebrar.
-    [JsonPropertyName("error")] public JsonElement? Error { get; set; }
-    [JsonPropertyName("user_action")] public string? UserAction { get; set; }
+    [JsonPropertyName("flags")] public List<string> Flags { get; set; } = [];
     [JsonPropertyName("url_to_authenticate")] public string? UrlToAuthenticate { get; set; }
     [JsonPropertyName("url_to_authenticate_expires_at")] public DateTime? UrlToAuthenticateExpiresAt { get; set; }
-    [JsonPropertyName("created_at")] public DateTime CreatedAt { get; set; }
-    [JsonPropertyName("updated_at")] public DateTime UpdatedAt { get; set; }
+    // "error" é null ou objeto, dependendo da falha. JsonElement aceita os dois formatos.
+    [JsonPropertyName("error")] public JsonElement? Error { get; set; }
 
     /// <summary>Extrai uma mensagem de erro legível, seja "error" string, objeto ou null.</summary>
     [JsonIgnore]
@@ -48,7 +70,7 @@ public class PolpIntegrationDto
     {
         get
         {
-            if (Error is not { } el || el.ValueKind == JsonValueKind.Null || el.ValueKind == JsonValueKind.Undefined)
+            if (Error is not { } el || el.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
                 return null;
 
             if (el.ValueKind == JsonValueKind.String) return el.GetString();
@@ -59,7 +81,6 @@ public class PolpIntegrationDto
                     return msg.GetString();
                 if (el.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String)
                     return code.GetString();
-                return el.GetRawText();
             }
 
             return el.GetRawText();
@@ -67,88 +88,139 @@ public class PolpIntegrationDto
     }
 }
 
-public class PolpAccountDto
+public class PolpBalanceDto
 {
-    [JsonPropertyName("id")] public int Id { get; set; }
-    [JsonPropertyName("integration_id")] public int IntegrationId { get; set; }
-    [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
-    [JsonPropertyName("subtype")] public string? Subtype { get; set; }
-    [JsonPropertyName("number")] public string? Number { get; set; }
-    [JsonPropertyName("name")] public string? Name { get; set; }
-    [JsonPropertyName("balance")] public decimal Balance { get; set; }
-    [JsonPropertyName("currency_code")] public string? CurrencyCode { get; set; }
-    [JsonPropertyName("marketing_name")] public string? MarketingName { get; set; }
-    [JsonPropertyName("owner")] public string? Owner { get; set; }
+    [JsonPropertyName("available_amount")] public PolpMoney? AvailableAmount { get; set; }
+    [JsonPropertyName("has_reserved_balance")] public bool HasReservedBalance { get; set; }
 }
 
-// Schema ainda não confirmado (documentação da Polp não ficou acessível pra conferir os nomes de
-// campo exatos) — nomes abaixo são o melhor palpite (convenção Open Finance Brasil / mesmo estilo
-// snake_case já usado em PolpAccountDto). Tudo nullable de propósito: um campo que não bater com o
-// nome real simplesmente fica null em vez de quebrar a desserialização. O log cru em
-// GetCreditCardsAsync/GetBillsAsync serve pra confirmar/corrigir isso depois do primeiro sync real.
+public class PolpAccountDto
+{
+    [JsonPropertyName("id")] public Guid Id { get; set; }
+    [JsonPropertyName("consent_id")] public Guid ConsentId { get; set; }
+    [JsonPropertyName("number")] public string? Number { get; set; }
+    [JsonPropertyName("check_digit")] public string? CheckDigit { get; set; }
+    // CONTA_DEPOSITO_A_VISTA | CONTA_POUPANCA | CONTA_PAGAMENTO_PRE_PAGA
+    [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
+    [JsonPropertyName("subtype")] public string? Subtype { get; set; }
+    [JsonPropertyName("currency")] public string? Currency { get; set; }
+    // null enquanto o saldo não foi sincronizado.
+    [JsonPropertyName("balance")] public PolpBalanceDto? Balance { get; set; }
+}
+
+public class PolpCardPaymentMethodDto
+{
+    [JsonPropertyName("identification_number")] public string? IdentificationNumber { get; set; }
+}
+
+public class PolpCardLimitDto
+{
+    [JsonPropertyName("credit_line_limit_type")] public string? CreditLineLimitType { get; set; }
+    [JsonPropertyName("used_amount")] public PolpMoney? UsedAmount { get; set; }
+    [JsonPropertyName("limit_amount")] public PolpMoney? LimitAmount { get; set; }
+    [JsonPropertyName("available_amount")] public PolpMoney? AvailableAmount { get; set; }
+}
+
 public class PolpCreditCardDto
 {
-    [JsonPropertyName("id")] public int Id { get; set; }
-    [JsonPropertyName("account_id")] public int? AccountId { get; set; }
+    [JsonPropertyName("id")] public Guid Id { get; set; }
+    [JsonPropertyName("consent_id")] public Guid ConsentId { get; set; }
     [JsonPropertyName("name")] public string? Name { get; set; }
-    [JsonPropertyName("brand_name")] public string? BrandName { get; set; }
-    [JsonPropertyName("credit_limit")] public decimal? CreditLimit { get; set; }
-    [JsonPropertyName("available_credit_limit")] public decimal? AvailableCreditLimit { get; set; }
-    [JsonPropertyName("used_credit_limit")] public decimal? UsedCreditLimit { get; set; }
-    [JsonPropertyName("close_day")] public int? CloseDay { get; set; }
-    [JsonPropertyName("due_day")] public int? DueDay { get; set; }
+    [JsonPropertyName("credit_card_network")] public string? CreditCardNetwork { get; set; }
+    [JsonPropertyName("payment_methods")] public List<PolpCardPaymentMethodDto> PaymentMethods { get; set; } = [];
+    [JsonPropertyName("limits")] public List<PolpCardLimitDto> Limits { get; set; } = [];
+}
+
+public class PolpBillPaymentDto
+{
+    [JsonPropertyName("amount")] public string? Amount { get; set; }
+    [JsonPropertyName("paymentDate")] public string? PaymentDate { get; set; }
 }
 
 public class PolpBillDto
 {
-    [JsonPropertyName("id")] public int Id { get; set; }
+    [JsonPropertyName("id")] public Guid Id { get; set; }
+    [JsonPropertyName("credit_card_id")] public Guid CreditCardId { get; set; }
     [JsonPropertyName("due_date")] public string? DueDate { get; set; }
-    [JsonPropertyName("total_amount")] public decimal? TotalAmount { get; set; }
-    [JsonPropertyName("minimum_amount")] public decimal? MinimumAmount { get; set; }
-    [JsonPropertyName("status")] public string? Status { get; set; }
+    [JsonPropertyName("bill_closing_date")] public string? BillClosingDate { get; set; }
+    [JsonPropertyName("bill_minimum_amount")] public PolpMoney? BillMinimumAmount { get; set; }
+    [JsonPropertyName("bill_total_amount")] public PolpMoney? BillTotalAmount { get; set; }
+    [JsonPropertyName("payments")] public List<PolpBillPaymentDto> Payments { get; set; } = [];
 }
 
-public class PolpTransactionDto
-{
-    [JsonPropertyName("id")] public int Id { get; set; }
-    [JsonPropertyName("account_id")] public int AccountId { get; set; }
-    [JsonPropertyName("description")] public string? Description { get; set; }
-    [JsonPropertyName("amount")] public decimal Amount { get; set; }
-    [JsonPropertyName("currency_code")] public string? CurrencyCode { get; set; }
-    [JsonPropertyName("date")] public string Date { get; set; } = string.Empty;
-    [JsonPropertyName("type")] public string Type { get; set; } = string.Empty; // DEBIT | CREDIT
-    [JsonPropertyName("status")] public string? Status { get; set; }           // POSTED | PENDING
-    [JsonPropertyName("category")] public PolpCategoryDto? Category { get; set; }
-    [JsonPropertyName("merchant")] public PolpMerchantDto? Merchant { get; set; }
-}
-
-public class PolpCategoryDto
-{
-    [JsonPropertyName("id")] public int Id { get; set; }
-    [JsonPropertyName("description")] public string? Description { get; set; }
-    [JsonPropertyName("color")] public string? Color { get; set; }
-}
-
-public class PolpMerchantDto
+public class PolpCounterpartyDto
 {
     [JsonPropertyName("name")] public string? Name { get; set; }
-    [JsonPropertyName("business_name")] public string? BusinessName { get; set; }
-    [JsonPropertyName("logo_url")] public string? LogoUrl { get; set; }
+    [JsonPropertyName("alias")] public string? Alias { get; set; }
 }
 
-public class PolpMeta
+public class PolpAccountTransactionDto
 {
-    [JsonPropertyName("current_page")] public int CurrentPage { get; set; }
-    [JsonPropertyName("last_page")] public int LastPage { get; set; }
+    [JsonPropertyName("id")] public Guid Id { get; set; }
+    [JsonPropertyName("account_id")] public Guid AccountId { get; set; }
+    [JsonPropertyName("transaction_name")] public string? TransactionName { get; set; }
+    [JsonPropertyName("transaction_date_time")] public string? TransactionDateTime { get; set; }
+    // CREDITO | DEBITO
+    [JsonPropertyName("credit_debit_type")] public string? CreditDebitType { get; set; }
+    [JsonPropertyName("transaction_amount")] public PolpMoney? TransactionAmount { get; set; }
+    // Preenchidos depois, de forma assíncrona (webhook accounts.transactions de novo).
+    [JsonPropertyName("counterparty")] public PolpCounterpartyDto? Counterparty { get; set; }
+    [JsonPropertyName("category_ref")] public string? CategoryRef { get; set; }
 }
 
-public class PolpListEnvelope<T>
+public class PolpCardTransactionDto
 {
-    [JsonPropertyName("data")] public List<T> Data { get; set; } = [];
-    [JsonPropertyName("meta")] public PolpMeta? Meta { get; set; }
+    [JsonPropertyName("id")] public Guid Id { get; set; }
+    [JsonPropertyName("credit_card_id")] public Guid CreditCardId { get; set; }
+    [JsonPropertyName("transaction_name")] public string? TransactionName { get; set; }
+    [JsonPropertyName("transaction_date_time")] public string? TransactionDateTime { get; set; }
+    // CREDITO | DEBITO
+    [JsonPropertyName("credit_debit_type")] public string? CreditDebitType { get; set; }
+    // PAGAMENTO_FATURA identifica o pagamento da fatura, que não é uma despesa nova.
+    [JsonPropertyName("transaction_type")] public string? TransactionType { get; set; }
+    // Valor em reais; "amount" é o original (moeda estrangeira).
+    [JsonPropertyName("brazilian_amount")] public PolpMoney? BrazilianAmount { get; set; }
+    // "0001-01-01" enquanto a transação não foi lançada em fatura (inclui parcelas futuras).
+    [JsonPropertyName("bill_post_date")] public string? BillPostDate { get; set; }
+    [JsonPropertyName("bill_id")] public Guid? BillId { get; set; }
+    [JsonPropertyName("charge_identificator")] public int? ChargeIdentificator { get; set; }
+    [JsonPropertyName("charge_number")] public int? ChargeNumber { get; set; }
+    [JsonPropertyName("counterparty")] public PolpCounterpartyDto? Counterparty { get; set; }
+    [JsonPropertyName("category_ref")] public string? CategoryRef { get; set; }
 }
 
-public record CreatePolpIntegrationRequest(int InstitutionId, string? Cpf, string? Cnpj);
+public record CreatePolpConsentRequest(Guid InstitutionId, string Document, Guid ClientUserId);
+
+/// <summary>
+/// Janela de sincronização que a Polp manda no webhook (query_parameters). O texto vem de uma
+/// requisição pública (o webhook só é protegido por um token na URL), então nunca é repassado cru
+/// à Polp: só os quatro campos conhecidos, e só se forem datas válidas, são remontados.
+/// </summary>
+public sealed record PolpQueryWindow(string Query)
+{
+    private static readonly string[] AllowedKeys = ["fromCreatedAt", "toCreatedAt", "fromUpdatedAt", "toUpdatedAt"];
+
+    public static PolpQueryWindow? TryParse(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw) || raw.Length > 400) return null;
+
+        var parts = new List<string>();
+        foreach (var pair in raw.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = pair.Split('=', 2);
+            if (kv.Length != 2 || !AllowedKeys.Contains(kv[0])) continue;
+
+            var value = Uri.UnescapeDataString(kv[1]);
+            if (!DateTime.TryParse(value, CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+                continue;
+
+            parts.Add($"{kv[0]}={Uri.EscapeDataString(parsed.ToString("yyyy-MM-ddTHH:mm:ss.ffffff", CultureInfo.InvariantCulture))}");
+        }
+
+        return parts.Count == 0 ? null : new PolpQueryWindow(string.Join('&', parts));
+    }
+}
 
 // ──────────────────────────────────────────
 //  Interface + implementação
@@ -157,25 +229,34 @@ public record CreatePolpIntegrationRequest(int InstitutionId, string? Cpf, strin
 public interface IPolpService
 {
     Task<List<PolpInstitutionDto>> GetInstitutionsAsync(CancellationToken ct = default);
-    Task<PolpIntegrationDto> CreateIntegrationAsync(int institutionId, string document, CancellationToken ct = default);
-    Task<PolpIntegrationDto> GetIntegrationAsync(int integrationId, CancellationToken ct = default);
-    Task<List<PolpAccountDto>> GetAccountsAsync(int integrationId, CancellationToken ct = default);
-    Task<List<PolpTransactionDto>> GetTransactionsAsync(int accountId, CancellationToken ct = default);
-    Task<List<PolpCreditCardDto>> GetCreditCardsAsync(int integrationId, CancellationToken ct = default);
-    Task<List<PolpBillDto>> GetBillsAsync(int creditCardId, CancellationToken ct = default);
+    Task<PolpConsentDto> CreateConsentAsync(CreatePolpConsentRequest request, CancellationToken ct = default);
+    Task<PolpConsentDto> GetConsentAsync(Guid consentId, CancellationToken ct = default);
+    Task<List<PolpAccountDto>> GetAccountsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default);
+    Task<List<PolpCreditCardDto>> GetCreditCardsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default);
+    Task<List<PolpBillDto>> GetBillsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default);
+    Task<List<PolpAccountTransactionDto>> GetAccountTransactionsAsync(Guid accountId, PolpQueryWindow? window = null, CancellationToken ct = default);
+    Task<List<PolpCardTransactionDto>> GetCardTransactionsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default);
 
-    /// <summary>
-    /// Pede à Polp a exclusão da integração (DELETE /integrations/{id} da API v1). A Polp
-    /// documenta resposta 202 e exclusão assíncrona da integração e dos dados vinculados
-    /// (contas, transações, faturas), incluindo o item no agregador. Não documenta o efeito sobre
-    /// o consentimento no banco. 404 (integração já inexistente na Polp) conta como concluído.
-    /// </summary>
-    Task DeleteIntegrationAsync(int integrationId, CancellationToken ct = default);
+    /// <summary>Consulta o saldo na instituição na hora (POST /accounts/{id}/balance/sync). Limite
+    /// de 30 req/min por cliente da Polp: só para quando o usuário pede o saldo mais recente.</summary>
+    Task<PolpAccountDto> SyncBalanceAsync(Guid accountId, CancellationToken ct = default);
+
+    /// <summary>Revoga o consentimento (DELETE /consents/{id}). 404 (já inexistente) conta como
+    /// concluído.</summary>
+    Task DeleteConsentAsync(Guid consentId, CancellationToken ct = default);
 }
 
 public class PolpService : IPolpService
 {
+    // Teto de segurança por listagem: 500 itens por página de transação, então 50 páginas cobrem
+    // 25 mil lançamentos; evita um laço indefinido se a Polp devolver um cursor que não termina.
+    private const int MaxPages = 50;
+
+    private static readonly string[] DefaultProducts = ["ACCOUNT", "CREDIT_CARD_ACCOUNT"];
+
     private readonly HttpClient _http;
+    private readonly Uri _institutionsUri;
+    private readonly string? _redirectUrl;
     private readonly ILogger<PolpService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -188,7 +269,8 @@ public class PolpService : IPolpService
         _logger = logger;
 
         // Sem fallback pra URL de sandbox: um ambiente de teste nunca deve virar o destino real
-        // dos dados de um usuário só porque a configuração ficou faltando.
+        // dos dados de um usuário só porque a configuração ficou faltando. Em teste, aponte
+        // Polp:BaseUrl para https://api.polp.com.br/api/v2/sandbox.
         var baseUrl = config["Polp:BaseUrl"]
             ?? throw new InvalidOperationException("Polp:BaseUrl não configurado.");
         if (!baseUrl.EndsWith('/')) baseUrl += "/";
@@ -198,6 +280,15 @@ public class PolpService : IPolpService
         var clientSecret = config["Polp:ClientSecret"]
             ?? throw new InvalidOperationException("Polp:ClientSecret não configurado em appsettings.json");
 
+        _redirectUrl = config["Polp:RedirectUrl"];
+
+        // GET /institutions é público e só existe na raiz da v2, mesmo para o Sandbox (a rota
+        // /sandbox/institutions não existe).
+        var institutionsBase = baseUrl.EndsWith("/sandbox/", StringComparison.OrdinalIgnoreCase)
+            ? baseUrl[..^"sandbox/".Length]
+            : baseUrl;
+        _institutionsUri = new Uri(institutionsBase + "institutions");
+
         _http = http;
         _http.BaseAddress = new Uri(baseUrl);
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -205,128 +296,119 @@ public class PolpService : IPolpService
         _http.DefaultRequestHeaders.Add("x-api-secret", clientSecret);
     }
 
-    public async Task<List<PolpInstitutionDto>> GetInstitutionsAsync(CancellationToken ct = default)
+    public async Task<List<PolpInstitutionDto>> GetInstitutionsAsync(CancellationToken ct = default) =>
+        await GetAllRawAsync<PolpInstitutionDto>(_institutionsUri.ToString(), null, "listar instituições", ct);
+
+    public async Task<PolpConsentDto> CreateConsentAsync(CreatePolpConsentRequest request, CancellationToken ct = default)
     {
-        var institutions = new List<PolpInstitutionDto>();
-        var page = 1;
-        int lastPage;
-
-        do
-        {
-            var resp = await _http.GetAsync($"institutions?page={page}", ct);
-            await EnsureSuccess(resp, "listar instituições");
-
-            var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpInstitutionDto>>(JsonOptions, ct);
-            if (envelope?.Data is null || envelope.Data.Count == 0) break;
-
-            institutions.AddRange(envelope.Data);
-            lastPage = envelope.Meta?.LastPage ?? page;
-            page++;
-
-        } while (page <= lastPage);
-
-        return institutions;
-    }
-
-    public async Task<PolpIntegrationDto> CreateIntegrationAsync(int institutionId, string document, CancellationToken ct = default)
-    {
-        // A Polp espera cpf OU cnpj dependendo do tamanho do documento
-        var isCnpj = document.Length > 11;
+        // A Polp espera cpf OU cnpj dependendo do tamanho do documento.
+        var isCnpj = request.Document.Length > 11;
 
         var body = new Dictionary<string, object?>
         {
-            ["institution_id"] = institutionId,
-            [isCnpj ? "cnpj" : "cpf"] = document
+            ["institution_id"] = request.InstitutionId,
+            [isCnpj ? "cnpj" : "cpf"] = request.Document,
+            // Id interno e opaco do usuário, nunca e-mail: a Polp é um terceiro e o campo é livre.
+            ["cliente_user_id"] = request.ClientUserId.ToString(),
+            ["products"] = DefaultProducts,
+            // Reconectar o mesmo CPF consome o teto mensal regulatório de consultas: reaproveita
+            // um consentimento ativo da mesma instituição em vez de criar outro.
+            ["avoidDuplicates"] = true
         };
+        if (!string.IsNullOrWhiteSpace(_redirectUrl)) body["redirectUrl"] = _redirectUrl;
 
-        var resp = await _http.PostAsJsonAsync("integrations", body, ct);
-        await EnsureSuccess(resp, "criar integração");
-
-        var envelope = await resp.Content.ReadFromJsonAsync<PolpEnvelope<PolpIntegrationDto>>(JsonOptions, ct);
-        return envelope?.Data ?? throw new InvalidOperationException("Resposta vazia da Polp ao criar integração.");
+        var resp = await _http.PostAsJsonAsync("consents", body, ct);
+        await EnsureSuccess(resp, "criar consentimento");
+        return await ReadResourceAsync<PolpConsentDto>(resp, "criar consentimento", ct);
     }
 
-    public async Task<PolpIntegrationDto> GetIntegrationAsync(int integrationId, CancellationToken ct = default)
+    public async Task<PolpConsentDto> GetConsentAsync(Guid consentId, CancellationToken ct = default)
     {
-        var resp = await _http.GetAsync($"integrations/{integrationId}", ct);
-        await EnsureSuccess(resp, "consultar integração");
-
-        var envelope = await resp.Content.ReadFromJsonAsync<PolpEnvelope<PolpIntegrationDto>>(JsonOptions, ct);
-        return envelope?.Data ?? throw new InvalidOperationException("Resposta vazia da Polp ao consultar integração.");
+        var resp = await _http.GetAsync($"consents/{consentId}", ct);
+        await EnsureSuccess(resp, "consultar consentimento");
+        return await ReadResourceAsync<PolpConsentDto>(resp, "consultar consentimento", ct);
     }
 
-    public async Task<List<PolpAccountDto>> GetAccountsAsync(int integrationId, CancellationToken ct = default)
-    {
-        var resp = await _http.GetAsync($"integrations/{integrationId}/accounts", ct);
-        await EnsureSuccess(resp, "listar contas");
+    public Task<List<PolpAccountDto>> GetAccountsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default) =>
+        GetAllAsync<PolpAccountDto>($"consents/{consentId}/accounts", window, "listar contas", ct);
 
-        // Nenhum corpo de resposta da Polp vai pro log: ele traz número de conta, saldo, nome do
-        // titular e extrato. Já houve log cru aqui pra diagnóstico de schema, e isso expunha dado
-        // financeiro de todo usuário a quem tivesse acesso aos logs da hospedagem.
-        var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpAccountDto>>(JsonOptions, ct);
-        return envelope?.Data ?? [];
+    public Task<List<PolpCreditCardDto>> GetCreditCardsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default) =>
+        GetAllAsync<PolpCreditCardDto>($"consents/{consentId}/credit-cards", window, "listar cartões de crédito", ct);
+
+    public Task<List<PolpBillDto>> GetBillsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default) =>
+        GetAllAsync<PolpBillDto>($"credit-cards/{creditCardId}/bills", window, "listar faturas do cartão", ct);
+
+    public Task<List<PolpAccountTransactionDto>> GetAccountTransactionsAsync(Guid accountId, PolpQueryWindow? window = null, CancellationToken ct = default) =>
+        GetAllAsync<PolpAccountTransactionDto>($"accounts/{accountId}/transactions", window, "listar transações da conta", ct);
+
+    public Task<List<PolpCardTransactionDto>> GetCardTransactionsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default) =>
+        GetAllAsync<PolpCardTransactionDto>($"credit-cards/{creditCardId}/transactions", window, "listar transações do cartão", ct);
+
+    public async Task<PolpAccountDto> SyncBalanceAsync(Guid accountId, CancellationToken ct = default)
+    {
+        // skipScheduleUpdate=false (padrão): a consulta avulsa substitui a próxima sincronização
+        // automática do saldo, então não gasta cota mensal extra da instituição.
+        var resp = await _http.PostAsJsonAsync($"accounts/{accountId}/balance/sync", new { skipScheduleUpdate = false }, ct);
+        await EnsureSuccess(resp, "sincronizar saldo");
+        return await ReadResourceAsync<PolpAccountDto>(resp, "sincronizar saldo", ct);
     }
 
-    // Nomes de campo em PolpCreditCardDto ainda não confirmados contra um payload real — por isso
-    // o mesmo log cru dos outros endpoints TEMP. Uma integração sem cartão nenhum (ou que a Polp
-    // não exponha esse recurso pra aquele banco) pode voltar 404/lista vazia; ver PolpSyncService.
-    public async Task<List<PolpCreditCardDto>> GetCreditCardsAsync(int integrationId, CancellationToken ct = default)
+    public async Task DeleteConsentAsync(Guid consentId, CancellationToken ct = default)
     {
-        var resp = await _http.GetAsync($"integrations/{integrationId}/credit-cards", ct);
-        await EnsureSuccess(resp, "listar cartões de crédito");
-
-        var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpCreditCardDto>>(JsonOptions, ct);
-        return envelope?.Data ?? [];
+        var resp = await _http.DeleteAsync($"consents/{consentId}", ct);
+        if (resp.StatusCode == HttpStatusCode.NotFound) return;
+        await EnsureSuccess(resp, "revogar consentimento");
     }
 
-    public async Task<List<PolpBillDto>> GetBillsAsync(int creditCardId, CancellationToken ct = default)
+    // Segue meta.next_cursor até acabar. Nenhum corpo de resposta da Polp vai pro log: ele traz
+    // número de conta, saldo, nome e extrato.
+    private Task<List<T>> GetAllAsync<T>(string path, PolpQueryWindow? window, string action, CancellationToken ct) =>
+        GetAllRawAsync<T>(path, window?.Query, action, ct);
+
+    private async Task<List<T>> GetAllRawAsync<T>(string path, string? query, string action, CancellationToken ct)
     {
-        var resp = await _http.GetAsync($"credit-cards/{creditCardId}/bills", ct);
-        await EnsureSuccess(resp, "listar faturas do cartão");
+        var items = new List<T>();
+        string? cursor = null;
 
-        var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpBillDto>>(JsonOptions, ct);
-        return envelope?.Data ?? [];
-    }
-
-    // Antes buscava só a página 1: contas com muito histórico (ex.: vários anos de Nubank)
-    // ficavam sem transações antigas, porque a Polp devolve as mais recentes primeiro e o
-    // resto simplesmente nunca era buscado. Agora pagina até o fim, com um teto de segurança
-    // pra não fazer um número indefinido de requisições numa conta com histórico gigante.
-    private const int MaxTransactionPages = 50;
-
-    public async Task<List<PolpTransactionDto>> GetTransactionsAsync(int accountId, CancellationToken ct = default)
-    {
-        var transactions = new List<PolpTransactionDto>();
-        var page = 1;
-        int lastPage;
-
-        do
+        for (var page = 0; page < MaxPages; page++)
         {
-            var resp = await _http.GetAsync($"accounts/{accountId}/transactions?page={page}", ct);
-            await EnsureSuccess(resp, "listar transações");
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(query)) parts.Add(query);
+            if (cursor is not null) parts.Add($"cursor={Uri.EscapeDataString(cursor)}");
+            var url = parts.Count == 0 ? path : $"{path}?{string.Join('&', parts)}";
 
-            var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpTransactionDto>>(JsonOptions, ct);
+            var resp = await _http.GetAsync(url, ct);
+            await EnsureSuccess(resp, action);
+
+            var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<T>>(JsonOptions, ct);
             if (envelope?.Data is null || envelope.Data.Count == 0) break;
 
-            transactions.AddRange(envelope.Data);
-            lastPage = Math.Min(envelope.Meta?.LastPage ?? page, MaxTransactionPages);
-            page++;
+            items.AddRange(envelope.Data);
+            cursor = envelope.Meta?.NextCursor;
+            if (string.IsNullOrEmpty(cursor)) break;
+        }
 
-        } while (page <= lastPage);
-
-        return transactions;
+        return items;
     }
 
-    public async Task DeleteIntegrationAsync(int integrationId, CancellationToken ct = default)
+    // Create devolve {"data": {...}}; os "show" documentam o recurso direto na raiz. Aceita os
+    // dois formatos em vez de depender de qual deles a Polp usa em cada rota.
+    private static async Task<T> ReadResourceAsync<T>(HttpResponseMessage resp, string action, CancellationToken ct)
     {
-        var resp = await _http.DeleteAsync($"integrations/{integrationId}", ct);
-        if (resp.StatusCode == HttpStatusCode.NotFound) return;
-        await EnsureSuccess(resp, "excluir integração");
+        using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        var root = doc.RootElement;
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("data", out var data)
+            && data.ValueKind == JsonValueKind.Object)
+            root = data;
+
+        return root.Deserialize<T>(JsonOptions)
+            ?? throw new InvalidOperationException($"Resposta vazia da Polp ao {action}.");
     }
 
     // Só ação e status HTTP vão pro log e pra exceção: o corpo de erro da Polp pode repetir o
-    // CPF/CNPJ enviado (tax_id), dados da conta ou detalhes internos, e a mensagem da exceção
-    // chegava até o navegador do usuário.
+    // CPF/CNPJ enviado, dados da conta ou detalhes internos, e a mensagem da exceção chegava até
+    // o navegador do usuário.
     private Task EnsureSuccess(HttpResponseMessage resp, string action)
     {
         if (resp.IsSuccessStatusCode) return Task.CompletedTask;
