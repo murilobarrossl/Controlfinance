@@ -35,7 +35,7 @@ const MANUAL_MODALITIES = [
   {
     key: "reserva",
     label: "Reserva de emergência",
-    color: "#30A67D",
+    color: "#3FB8AF",
     Icon: ShieldIcon,
     description:
       "Dinheiro guardado pra imprevistos (saúde, conserto, perda de renda). O ideal é cobrir de 3 a 6 meses de despesas e poder resgatar na hora.",
@@ -43,7 +43,7 @@ const MANUAL_MODALITIES = [
   {
     key: "meta",
     label: "Meta de economia",
-    color: "#4988D4",
+    color: "#6C93C9",
     Icon: TargetIcon,
     description: "Um objetivo com valor e prazo (viagem, entrada de um imóvel). Você acompanha quanto falta pela barra de progresso.",
   },

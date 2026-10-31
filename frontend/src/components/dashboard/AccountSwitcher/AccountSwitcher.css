@@ -46,7 +46,7 @@
 .account-switcher__card-icon {
   display: inline-flex;
   flex-shrink: 0;
-  color: #a99ff0;
+  color: var(--color-accent-soft);
 }
 
 .account-switcher__card-icon svg {
@@ -68,8 +68,8 @@
 }
 
 .account-switcher__kind--card {
-  background-color: color-mix(in srgb, #7569d3 20%, transparent);
-  color: #a99ff0;
+  background-color: color-mix(in srgb, var(--color-accent) 20%, transparent);
+  color: var(--color-accent-soft);
 }
 
 /* Cartão logo abaixo da conta corrente do mesmo banco, recuado com uma guia na esquerda: é um

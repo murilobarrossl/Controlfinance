@@ -11,6 +11,15 @@
   --color-text-secondary: #b8b8b8;
   --color-text-tertiary: #808080;
   --color-income: #4ecdc4;
+  /* Apoio ao laranja-avermelhado e ao verde-água da marca: o mesmo conjunto de matizes dos
+     gráficos (ver FALLBACK_COLORS em components/charts/chartTheme.js, que precisa de hex porque
+     o Recharts não resolve var() em fill). Cada "-soft" é a versão clara, para texto sobre o
+     fundo escuro. */
+  --color-accent-soft: #f4806e;
+  --color-amber: #f2a33a;
+  --color-amber-soft: #f5bd6e;
+  --color-blue: #6c93c9;
+  --color-blue-soft: #9db8dc;
   --radius-pill: 999px;
   --radius-sm: 6px;
   --radius-md: 6px;

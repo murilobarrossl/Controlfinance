@@ -47,6 +47,9 @@ appsettings.Local.json
 # Auditoria jurídica interna, não publicada no repositório
 AUDITORIA_JURIDICA_CONTROL_FINANCE.md
 
+# Cópia local da solution gerada pelo editor; a versionada é Controlfinance.sln
+Controlfinance-1.sln
+
 # User-specific files
 *.rsuser
 *.suo

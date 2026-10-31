@@ -29,21 +29,21 @@ export const INVESTMENT_MODALITIES = {
   porquinho: {
     key: "porquinho",
     label: "Porquinho / Cofrinho",
-    color: "#CD517E",
+    color: "#D9628A",
     description:
       "Recurso de bancos digitais pra separar uma parte do saldo. Funciona como uma caixinha, com outro nome; as regras são definidas por cada banco.",
   },
   poupanca: {
     key: "poupanca",
     label: "Poupança",
-    color: "#BF8A22",
+    color: "#F2A33A",
     description:
       "Conta de reserva tradicional, com rendimento definido por regra legal. Conta com a garantia do FGC dentro dos limites e regras do próprio FGC (consulte fgc.org.br).",
   },
   investimento: {
     key: "investimento",
     label: "Investimento",
-    color: "#7569D3",
+    color: "#9A86D9",
     description:
       "Aplicações como CDB, LCI/LCA, Tesouro Direto ou fundos. Prazo de resgate, rendimento, riscos e garantias dependem de cada produto.",
   },

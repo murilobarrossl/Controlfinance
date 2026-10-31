@@ -1,6 +1,7 @@
 import { FALLBACK_COLORS } from "../components/charts/chartTheme.js";
 
-export const OTHERS_COLOR = "#808080";
+// Cinza neutro, fora da paleta de matizes: "Outros" é o que sobra, não uma categoria a mais.
+export const OTHERS_COLOR = "#8a8f98";
 
 // Cor estável por nome de categoria: usa a cor cadastrada na categoria quando existe (a mesma do
 // gráfico de Categorias) e, sem ela, deriva uma cor da paleta a partir do nome. Antes a cor

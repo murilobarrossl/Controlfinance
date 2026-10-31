@@ -12,13 +12,21 @@ export const TOOLTIP_ITEM_STYLE = {
   color: "#ffffff",
 };
 
+// Paleta das categorias e dos gráficos. Parte das duas cores da marca (laranja-avermelhado do
+// site, #ED4A31, e um verde-água um pouco mais fechado que o de receita, #4ECDC4, pra uma fatia
+// de despesa não parecer receita) e completa com tons quentes e frios de mesma saturação e luz.
+// Os 8 matizes seguem bem separados entre si (distinguíveis também por daltonismo); o cinza de
+// "Outros" (OTHERS_COLOR em utils/categoryColors.js) fica fora daqui de propósito.
+//
+// Precisa ficar igual a: PolpSyncService.FallbackPalette e às cores das categorias padrão (backend),
+// e à migration RetuneCategoryPaletteToBrand, que converteu as categorias já salvas.
 export const FALLBACK_COLORS = [
-  "#4988D4",
-  "#DB5824",
-  "#30A67D",
-  "#BF8A22",
-  "#CD517E",
-  "#328532",
-  "#7569D3",
-  "#D45454",
+  "#ED4A31", // laranja-avermelhado (destaque do site)
+  "#F2A33A", // âmbar
+  "#3FB8AF", // verde-água
+  "#D9628A", // rosa
+  "#6C93C9", // azul
+  "#9A86D9", // violeta
+  "#A6BE5C", // verde-oliva
+  "#B07A5B", // argila
 ];

@@ -232,18 +232,18 @@
 }
 
 .cartoes__kind--invoice {
-  background-color: color-mix(in srgb, #7569d3 20%, transparent);
-  color: #a99ff0;
+  background-color: color-mix(in srgb, var(--color-accent) 20%, transparent);
+  color: var(--color-accent-soft);
 }
 
 .cartoes__kind--installment {
-  background-color: color-mix(in srgb, #bf8a22 20%, transparent);
-  color: #e3b45a;
+  background-color: color-mix(in srgb, var(--color-amber) 20%, transparent);
+  color: var(--color-amber-soft);
 }
 
 .cartoes__kind--bill {
-  background-color: color-mix(in srgb, #4988d4 20%, transparent);
-  color: #8ab8ee;
+  background-color: color-mix(in srgb, var(--color-blue) 20%, transparent);
+  color: var(--color-blue-soft);
 }
 
 .cartoes__remove {
