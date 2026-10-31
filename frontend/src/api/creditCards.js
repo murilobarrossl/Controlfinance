@@ -9,3 +9,5 @@ export const createCreditCard = async (payload) =>
 
 export const updateCreditCard = async (id, payload) =>
   apiFetch(`/credit-cards/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+
+export const setPrimaryCard = async (id) => apiFetch(`/credit-cards/primary/${id}`, { method: "PUT" });

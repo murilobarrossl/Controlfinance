@@ -103,6 +103,9 @@ public static class CreditCardSummaryBuilder
                 ConnectionLastSyncedAt: null));
         }
 
-        return result;
+        var primaryCardId = await db.Users.Where(u => u.Id == userId).Select(u => u.PrimaryCardId).FirstOrDefaultAsync(ct);
+        var effectivePrimaryId = result.Any(c => c.Id == primaryCardId) ? primaryCardId : result.FirstOrDefault()?.Id;
+
+        return result.Select(c => c with { IsPrimary = c.Id == effectivePrimaryId }).ToList();
     }
 }

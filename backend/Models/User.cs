@@ -46,4 +46,9 @@ public class User
 
     /// <summary>Quando o e-mail de resumo mensal foi enviado pela última vez (evita reenvio no mesmo mês).</summary>
     public DateTime? LastMonthlySummarySentAt { get; set; }
+
+    /// <summary>Cartão mostrado em "Seu cartão" no Dashboard: id de uma BankAccount reconhecida como
+    /// cartão ou de um CreditCard manual. Sem FK porque pode apontar para qualquer uma das duas
+    /// tabelas; se o cartão deixar de existir, vale o primeiro da lista.</summary>
+    public Guid? PrimaryCardId { get; set; }
 }

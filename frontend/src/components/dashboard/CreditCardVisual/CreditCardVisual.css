@@ -75,6 +75,57 @@
   gap: 0.75rem;
 }
 
+.credit-card-visual__top-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.credit-card-visual__star {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--card-text-muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.credit-card-visual__star svg {
+  width: 20px;
+  height: 20px;
+}
+
+.credit-card-visual__star:hover {
+  background-color: rgba(255, 255, 255, 0.14);
+  color: var(--card-text);
+  transform: scale(1.08);
+}
+
+.credit-card-visual__star:focus-visible {
+  outline: 2px solid var(--card-text);
+  outline-offset: 1px;
+}
+
+.credit-card-visual__star--active {
+  color: #f5c84c;
+  cursor: default;
+}
+
+.credit-card-visual__star--active:hover {
+  background-color: transparent;
+  color: #f5c84c;
+  transform: none;
+}
+
 /* Chip decorativo: só um retângulo com gradiente dourado, sem nenhum vínculo com dado real —
    nenhum número/dígito aparece em lugar nenhum deste componente. */
 .credit-card-visual__chip {
@@ -137,24 +188,6 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
-}
-
-.credit-card-visual__incomplete {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.85rem;
-  padding: 0.85rem 1rem;
-  background-color: var(--color-surface-hover);
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-md);
-}
-
-.credit-card-visual__incomplete p {
-  color: var(--color-text-secondary);
-  font-size: 0.85rem;
-  line-height: 1.5;
-  margin: 0;
 }
 
 .credit-card-visual__stat {

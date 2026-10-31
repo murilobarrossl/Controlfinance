@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getCreditCardsSummary, createCreditCard, updateCreditCard } from "../../../api/creditCards.js";
-import { setBankAccountCardDetails } from "../../../api/bankAccounts.js";
+import { getCreditCardsSummary, createCreditCard, updateCreditCard, setPrimaryCard } from "../../../api/creditCards.js";
 import { getInstallments, createInstallment, deleteInstallment } from "../../../api/installments.js";
 import { getTransactions } from "../../../api/transactions.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
@@ -131,7 +130,7 @@ export default function Cartoes() {
     });
   }
 
-  async function handleSubmitDetail(e, card) {
+  async function handleSubmitDetail(e) {
     e.preventDefault();
     if (!detailForm.creditLimit) return;
 
@@ -143,11 +142,7 @@ export default function Cartoes() {
 
     setSaving(true);
     try {
-      if (card.isSynced) {
-        await setBankAccountCardDetails(card.id, payload);
-      } else {
-        await updateCreditCard(card.id, { ...payload, brand: detailForm.brand || null });
-      }
+      await updateCreditCard(detailForm.id, { ...payload, brand: detailForm.brand || null });
       setDetailForm(EMPTY_DETAIL_FORM);
       await loadAll();
     } catch (err) {
@@ -214,6 +209,21 @@ export default function Cartoes() {
     setInstallmentForm(EMPTY_INSTALLMENT_FORM);
   }
 
+  async function handleSetPrimary(id) {
+    const previousPrimaryId = cards.find((c) => c.isPrimary)?.id;
+    const markPrimary = (primaryId) =>
+      setCards((current) => current.map((c) => ({ ...c, isPrimary: c.id === primaryId })));
+
+    markPrimary(id);
+    setError("");
+    try {
+      await setPrimaryCard(id);
+    } catch (err) {
+      markPrimary(previousPrimaryId);
+      setError(err.message || "Não foi possível definir o cartão principal.");
+    }
+  }
+
   async function handleDeleteInstallment(id) {
     try {
       await deleteInstallment(id);
@@ -237,17 +247,17 @@ export default function Cartoes() {
         <CreditCardVisual
           card={card}
           cardholderName={user?.name}
-          onCompleteFields={!card.hasFullDetails ? () => openDetailForm(card) : undefined}
+          onSetPrimary={() => handleSetPrimary(card.id)}
         />
 
-        {card.hasFullDetails && detailForm.id !== card.id && (
+        {!card.isSynced && detailForm.id !== card.id && (
           <button type="button" className="cartoes__edit-link" onClick={() => openDetailForm(card)}>
             Editar limite/fatura
           </button>
         )}
 
         {detailForm.id === card.id && (
-          <form className="cartoes__form" onSubmit={(e) => handleSubmitDetail(e, card)}>
+          <form className="cartoes__form" onSubmit={handleSubmitDetail}>
             {!card.isSynced && (
               <label className="cartoes__field">
                 <span className="cartoes__field-label">Bandeira (opcional)</span>

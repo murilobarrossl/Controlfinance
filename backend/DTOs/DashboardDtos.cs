@@ -129,14 +129,6 @@ public record CreditCardDto(
     );
 }
 
-// Só os campos que a Polp não mandou (ver BankAccountsController.SetCardDetails). Não edita
-// nome/número/limite já vindos da Polp — só completa o que estiver null.
-public record UpdateBankAccountCardDetailsDto(
-    [Range(0, double.MaxValue, ErrorMessage = "Limite não pode ser negativo.")] decimal? CreditLimit,
-    [Range(1, 31, ErrorMessage = "Dia de fechamento deve ser entre 1 e 31.")] int? ClosingDay,
-    [Range(1, 31, ErrorMessage = "Dia de vencimento deve ser entre 1 e 31.")] int? DueDay
-);
-
 // ── INSTALLMENT ───────────────────────────────────────
 // CreditCardId (cartão manual) e BankAccountId (conta reconhecida como cartão) são mutuamente
 // exclusivos — o formulário manda um ou outro, nunca os dois.
@@ -202,5 +194,6 @@ public record RecognizedCardDto(
     string? InstitutionColor,
     Guid? ConnectionId,
     string? BankName,
-    DateTime? ConnectionLastSyncedAt
+    DateTime? ConnectionLastSyncedAt,
+    bool IsPrimary = false
 );

@@ -58,6 +58,7 @@ public class AccountController(
                 criadoEm = user.CreatedAt,
                 lembretesDeVencimento = user.DueRemindersEnabled,
                 avisoMensal = user.MonthlySummaryEnabled,
+                cartaoPrincipalId = user.PrimaryCardId,
             },
             aceites = await db.ConsentRecords
                 .Where(c => c.UserId == UserId)

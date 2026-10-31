@@ -213,14 +213,6 @@
   white-space: nowrap;
 }
 
-.cartoes__intro {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 0.88rem;
-  line-height: 1.5;
-  max-width: 60rem;
-}
-
 .cartoes__form--spaced {
   margin-top: 1.25rem;
 }
@@ -277,4 +269,12 @@
   .cartoes__form-actions {
     flex-direction: column;
   }
+}
+
+.cartoes__intro {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  max-width: 60rem;
 }

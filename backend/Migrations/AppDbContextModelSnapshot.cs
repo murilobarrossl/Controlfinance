@@ -533,6 +533,9 @@ namespace ControlFinance.API.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("PrimaryCardId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("TokenVersion")
                         .HasColumnType("integer");
 

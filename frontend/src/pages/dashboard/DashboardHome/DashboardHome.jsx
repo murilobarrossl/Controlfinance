@@ -255,48 +255,6 @@ export default function DashboardHome() {
         />
       </div>
 
-      <Card className="dashboard-home__explainer" title="Conta corrente x cartão de crédito">
-        <div className="dashboard-home__explainer-grid">
-          <div className="dashboard-home__explainer-item">
-            <span className="dashboard-home__explainer-icon dashboard-home__explainer-icon--account">
-              <WalletIcon />
-            </span>
-            <div>
-              <strong>Conta corrente</strong>
-              <p>
-                É o dinheiro que você tem hoje no banco. O saldo sobe com o que entra (salário, Pix recebido) e desce
-                com o que sai (pagamentos, transferências, débito).
-              </p>
-            </div>
-          </div>
-          <div className="dashboard-home__explainer-item">
-            <span className="dashboard-home__explainer-icon dashboard-home__explainer-icon--card">
-              <CardIcon />
-            </span>
-            <div>
-              <strong>Cartão de crédito</strong>
-              <p>
-                São compras feitas com crédito do banco que você paga depois, na fatura. O valor do cartão não é dinheiro
-                disponível e nunca é somado ao saldo da conta corrente.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="dashboard-home__cards-callout">
-          <span className="dashboard-home__cards-callout-icon" aria-hidden="true">
-            <CardIcon />
-          </span>
-          <p>
-            Seus cartões têm uma aba própria: fatura, limite, <strong>próximos vencimentos</strong> e parcelamentos ficam
-            em <strong>Cartões</strong>.
-          </p>
-          <Button as={Link} to="/dashboard/cartoes" variant="outline" size="sm">
-            Abrir aba Cartões
-          </Button>
-        </div>
-      </Card>
-
       <div className="dashboard-home__grid">
         <Card title={`Receitas x despesas (últimos ${TREND_MONTHS} meses)`}>
           <AreaTrendChart
@@ -330,7 +288,14 @@ export default function DashboardHome() {
 
       <div className="dashboard-home__grid">
         {activeCard && (
-          <Card title="Seu cartão">
+          <Card
+            title="Seu cartão"
+            action={
+              <Link to="/dashboard/cartoes" className="dashboard-home__card-switch">
+                Trocar
+              </Link>
+            }
+          >
             <CreditCardVisual
               card={activeCard}
               cardholderName={user?.name}

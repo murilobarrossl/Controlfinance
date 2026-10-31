@@ -95,9 +95,10 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
         // Prioriza uma conta reconhecida como cartão (com ou sem limite/fatura cadastrado ainda);
         // cai pro cartão manual mais antigo se não houver nenhuma conta reconhecida. Mesma lista
-        // que CreditCardsController.GetSummary usa pra listar todos — aqui só pega o primeiro.
+        // que CreditCardsController.GetSummary usa pra listar todos — aqui pega o marcado como
+        // principal (escolhido pelo usuário, ou o primeiro da lista).
         var recognizedCards = await CreditCardSummaryBuilder.BuildRecognizedListAsync(db, UserId, ct);
-        var cardDto = recognizedCards.FirstOrDefault();
+        var cardDto = recognizedCards.FirstOrDefault(c => c.IsPrimary);
 
         var summary = new DashboardSummaryDto(
             accountDto,
