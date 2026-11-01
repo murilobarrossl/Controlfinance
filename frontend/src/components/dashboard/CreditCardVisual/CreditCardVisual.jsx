@@ -10,8 +10,8 @@ import "./CreditCardVisual.css";
 // nada é preenchido à mão. Sem número de cartão fabricado — `number` só aparece
 // quando a própria Polp manda um (mascarado); do contrário fica só o chip decorativo.
 export default function CreditCardVisual({ card, cardholderName, onClick, onSetPrimary }) {
-  const usagePercent =
-    card.creditLimit && card.creditLimit > 0 ? Math.min(100, ((card.usedLimit ?? 0) / card.creditLimit) * 100) : null;
+  const hasLimit = card.creditLimit != null && card.creditLimit > 0;
+  const usagePercent = hasLimit && card.usedLimit != null ? Math.min(100, (card.usedLimit / card.creditLimit) * 100) : null;
   const FaceTag = onClick ? "button" : "div";
   const faceStyle = useMemo(() => {
     const gradient = getCardGradient({
@@ -81,20 +81,22 @@ export default function CreditCardVisual({ card, cardholderName, onClick, onSetP
         </div>
         <div className="credit-card-visual__stat">
           <span className="credit-card-visual__stat-label">Parcelas ativas</span>
-          <span className="credit-card-visual__stat-value">{card.installments?.length ?? 0}</span>
+          <span className="credit-card-visual__stat-value">{card.installments ? card.installments.length : "—"}</span>
         </div>
 
-        {usagePercent != null ? (
+        {hasLimit ? (
           <div className="credit-card-visual__limit">
             <div className="credit-card-visual__limit-labels">
               <span>
-                Limite usado: <strong>{formatCurrency(card.usedLimit ?? 0)}</strong> de {formatCurrency(card.creditLimit)}
+                Limite usado: <strong>{formatCurrency(card.usedLimit)}</strong> de {formatCurrency(card.creditLimit)}
               </span>
-              <span>{Math.round(usagePercent)}%</span>
+              {usagePercent != null && <span>{Math.round(usagePercent)}%</span>}
             </div>
-            <div className="credit-card-visual__progress">
-              <div className="credit-card-visual__progress-fill" style={{ width: `${usagePercent}%` }} />
-            </div>
+            {usagePercent != null && (
+              <div className="credit-card-visual__progress">
+                <div className="credit-card-visual__progress-fill" style={{ width: `${usagePercent}%` }} />
+              </div>
+            )}
           </div>
         ) : (
           <div className="credit-card-visual__limit">

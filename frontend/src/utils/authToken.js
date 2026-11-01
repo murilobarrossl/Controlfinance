@@ -2,7 +2,7 @@
 // (metas, reserva, conta selecionada) quando duas pessoas usam o mesmo computador. O token de
 // sessão não fica mais no navegador (cookie httpOnly), então o AuthContext espelha aqui só o id,
 // que é um identificador técnico sem dado pessoal.
-export const CURRENT_USER_ID_KEY = "cf_current_user_id";
+const CURRENT_USER_ID_KEY = "cf_current_user_id";
 
 export function getCurrentUserId() {
   try {

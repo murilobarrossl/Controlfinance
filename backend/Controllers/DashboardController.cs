@@ -17,21 +17,22 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
     public async Task<IActionResult> GetSummary([FromQuery] Guid? bankAccountId, CancellationToken ct)
     {
         var account = bankAccountId.HasValue
-            ? await db.BankAccounts.FirstOrDefaultAsync(b => b.Id == bankAccountId && b.UserId == UserId && b.IsActive)
-            : await db.BankAccounts.FirstOrDefaultAsync(b => b.UserId == UserId && b.IsActive);
+            ? await db.BankAccounts.AsNoTracking().FirstOrDefaultAsync(b => b.Id == bankAccountId && b.UserId == UserId && b.IsActive)
+            : await db.BankAccounts.AsNoTracking().FirstOrDefaultAsync(b => b.UserId == UserId && b.IsActive);
 
         if (account is null)
             return Ok(new { message = "Nenhuma conta bancária cadastrada." });
 
-        var accountDto = new BankAccountDto(account.Id, account.Name, account.BankCode, account.Balance, account.IsActive, account.Ownership.ToString());
+        var accountDto = BankAccountDto.FromEntity(account);
 
         var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
 
-        var now = DateTime.UtcNow;
+        var now = BrazilClock.Now;
         var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var endOfMonth = startOfMonth.AddMonths(1);
 
         var monthlyTransactions = await db.Transactions
+            .AsNoTracking()
             .Include(t => t.Category)
             .Where(t => t.UserId == UserId
                      && t.BankAccountId == account.Id
@@ -59,6 +60,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
         // contas pendentes: filtra e ordena no banco em vez de trazer o histórico inteiro da
         // conta pra memória; PaidTransactions nunca foi consumido pelo frontend, então saiu do DTO.
         var pendingEntities = await db.Transactions
+            .AsNoTracking()
             .Include(t => t.Category)
             .Include(t => t.BankAccount)
             .Where(t => t.UserId == UserId
@@ -82,6 +84,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
         var categoryIds = expensesByCategory.Select(e => e.CategoryId).ToList();
         var categories = await db.Categories
+            .AsNoTracking()
             .Where(c => c.UserId == UserId && categoryIds.Contains(c.Id))
             .ToListAsync();
 

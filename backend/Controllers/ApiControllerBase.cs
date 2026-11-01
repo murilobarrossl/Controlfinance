@@ -10,15 +10,16 @@ public abstract class ApiControllerBase : ControllerBase
     // JWT faz de "sub" para ClaimTypes.NameIdentifier: esse mapeamento some se algum dia
     // MapInboundClaims = false for configurado (comum ao migrar para JsonWebTokenHandler), e
     // toda rota autenticada quebraria de uma vez com NullReferenceException.
-    protected Guid UserId
-    {
-        get
-        {
-            var sub = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!Guid.TryParse(sub, out var userId))
-                throw new InvalidOperationException("Token autenticado sem claim 'sub' válida.");
+    private Guid? _userId;
 
-            return userId;
-        }
+    protected Guid UserId => _userId ??= ReadUserId();
+
+    private Guid ReadUserId()
+    {
+        var sub = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(sub, out var userId))
+            throw new InvalidOperationException("Token autenticado sem claim 'sub' válida.");
+
+        return userId;
     }
 }

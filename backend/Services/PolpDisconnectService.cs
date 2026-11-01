@@ -62,7 +62,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
                 await polp.DeleteConsentAsync(item.PolpIntegrationId, ct);
                 db.PendingProviderDeletions.Remove(item);
             }
-            catch (HttpRequestException)
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
             {
                 item.LastAttemptAt = DateTime.UtcNow;
             }
@@ -86,7 +86,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
             {
                 await polp.DeleteConsentAsync(local.PolpIntegrationId, ct);
             }
-            catch (HttpRequestException)
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
             {
                 db.PendingProviderDeletions.Add(new PendingProviderDeletion { PolpIntegrationId = local.PolpIntegrationId });
                 pendingCount++;
@@ -103,7 +103,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
         {
             await polp.DeleteConsentAsync(local.PolpIntegrationId, ct);
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
         {
             logger.LogWarning("Exclusão da integração {IntegrationId} na Polp ficou pendente; será tentada de novo.", local.Id);
             return RemoteDeletionOutcome.Pending;

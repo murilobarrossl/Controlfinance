@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { getTransactionsReport, setTransactionDetails } from "../../../api/transactions.js";
 import { getCategories } from "../../../api/categories.js";
+import { isAbortError } from "../../../api/client.js";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
-import { formatCurrency } from "../../../utils/financeMath.js";
+import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
+import { formatCurrency, roundMoney } from "../../../utils/financeMath.js";
 import { formatMonthLong } from "../../../utils/monthLabel.js";
 import { getMonthsWindow } from "../../../utils/monthlyTrend.js";
 import { resolveCategoryColor, categoryInitials } from "../../../utils/categoryColors.js";
@@ -61,8 +63,8 @@ function parseDescription(name) {
 
 function formatGroupDate(dateStr) {
   const date = new Date(dateStr);
-  const weekday = date.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
-  const full = date.toLocaleDateString("pt-BR");
+  const weekday = date.toLocaleDateString("pt-BR", { weekday: "short", timeZone: "UTC" }).replace(".", "");
+  const full = date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
   return `${weekday} · ${full}`;
 }
 
@@ -73,25 +75,26 @@ function groupByDate(items) {
   let current = null;
 
   for (const t of items) {
-    const key = new Date(t.dueDate).toDateString();
+    const key = t.dueDate.slice(0, 10);
     if (!current || current.key !== key) {
       current = { key, dueDate: t.dueDate, items: [], income: 0, expense: 0 };
       groups.push(current);
     }
     current.items.push(t);
-    if (t.type === "Income") current.income += t.amount;
-    else current.expense += t.amount;
+    if (!t.isTransfer) {
+      if (t.type === "Income") current.income += t.amount;
+      else current.expense += t.amount;
+    }
   }
 
   return groups;
 }
 
 export default function Relatorios() {
-  const { effectiveAccountId, dataRefreshKey } = useAccount();
-  const [report, setReport] = useState(null);
+  const { effectiveAccountId, dataRefreshKey, accountsStatus } = useAccount();
+  const [result, setResult] = useState(null);
   const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchInput, setSearchInput] = useState("");
@@ -103,13 +106,18 @@ export default function Relatorios() {
   // dizia "do período". Nada aqui limitava por mês.
   const [periodMode, setPeriodMode] = useState("all");
   const [monthOffset, setMonthOffset] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", categoryId: "" });
 
   const currentMonth = useMemo(() => getMonthsWindow(1, monthOffset)[0], [monthOffset]);
 
   useEffect(() => {
-    getCategories().then(setCategories).catch(() => {});
+    const controller = new AbortController();
+    getCategories({ signal: controller.signal })
+      .then(setCategories)
+      .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   // Busca com debounce: sem isso, cada tecla digitada dispararia uma requisição nova.
@@ -123,8 +131,8 @@ export default function Relatorios() {
     return () => clearTimeout(timeout);
   }, [searchInput]);
 
-  function loadReport() {
-    return getTransactionsReport({
+  const filters = useMemo(
+    () => ({
       status: statusFilter === "all" ? undefined : statusFilter,
       type: typeFilter === "all" ? undefined : typeFilter,
       search: search || undefined,
@@ -135,36 +143,36 @@ export default function Relatorios() {
       sortDir: sort.direction,
       page,
       pageSize: PAGE_SIZE,
-    });
-  }
+    }),
+    [statusFilter, typeFilter, search, effectiveAccountId, periodMode, currentMonth, sort, page]
+  );
+  const requestKey = `${JSON.stringify(filters)}|${dataRefreshKey}|${reloadKey}`;
+  const loading = accountsStatus !== "ready" || result?.key !== requestKey;
 
   useEffect(() => {
-    let cancelled = false;
+    if (accountsStatus !== "ready") return;
 
-    loadReport()
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    getTransactionsReport(filters, { signal })
       .then((data) => {
-        if (!cancelled) setReport(data);
+        if (signal.aborted) return;
+        setResult({ key: requestKey, report: data, error: "" });
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message || "Não foi possível carregar os relatórios.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (signal.aborted || isAbortError(err)) return;
+        setResult({ key: requestKey, report: null, error: err.message || "Não foi possível carregar os relatórios." });
       });
 
-    return () => {
-      cancelled = true;
-    };
-    // loadReport não entra nas deps de propósito: ela fecha sobre os mesmos filtros já listados
-    // aqui, mas é uma função nova a cada render: listar ela faria o efeito rodar de novo em
-    // qualquer render (ex.: ao editar um lançamento), não só quando um filtro muda de verdade.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, typeFilter, search, effectiveAccountId, dataRefreshKey, periodMode, currentMonth, sort, page]);
+    return () => controller.abort();
+  }, [filters, requestKey, accountsStatus]);
 
   function startEdit(t) {
     const match = categories.find((c) => c.name === t.categoryName);
     setEditForm({ name: t.name, categoryId: match ? match.id : "" });
     setEditingId(t.id);
+    setSaveError("");
   }
 
   function cancelEdit() {
@@ -176,10 +184,10 @@ export default function Relatorios() {
     try {
       await setTransactionDetails(id, { name: editForm.name.trim(), categoryId: editForm.categoryId || null });
       setEditingId(null);
-      const data = await loadReport();
-      setReport(data);
+      setSaveError("");
+      setReloadKey((k) => k + 1);
     } catch (err) {
-      setError(err.message || "Não foi possível salvar a edição.");
+      setSaveError(err.message || "Não foi possível salvar a edição.");
     }
   }
 
@@ -205,20 +213,29 @@ export default function Relatorios() {
     setPage(1);
   }
 
-  if (loading && !report) return <p className="relatorios__hint">Carregando...</p>;
+  const error =
+    accountsStatus === "error"
+      ? "Não foi possível carregar as contas."
+      : result?.key === requestKey
+        ? result.error
+        : "";
   if (error) return <p className="relatorios__error">{error}</p>;
 
+  const report = loading ? null : result.report;
   const items = report?.items ?? [];
   const totalCount = report?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  const totalIncome = report?.totalIncome ?? 0;
-  const totalExpense = report?.totalExpense ?? 0;
-  const balance = totalIncome - totalExpense;
+  const totalIncome = report?.totalIncome;
+  const totalExpense = report?.totalExpense;
+  const balance = loading ? null : roundMoney(totalIncome - totalExpense);
   const groups = groupByDate(items);
+  const amountSkeleton = <Skeleton width="7rem" height="1.5rem" />;
 
   return (
     <div className="relatorios">
       <SectionHeading kicker="Histórico completo" title="Relatórios" align="left" />
+
+      {saveError && <p className="relatorios__error">{saveError}</p>}
 
       <div className="relatorios__period-filter">
         <button
@@ -263,14 +280,18 @@ export default function Relatorios() {
           <span className="relatorios__totals-label">
             {periodMode === "month" ? `Entradas em ${formatMonthLong(currentMonth)}` : "Entradas (todo o período)"}
           </span>
-          <span className="relatorios__totals-value relatorios__amount--income">{formatCurrency(totalIncome)}</span>
+          <span className="relatorios__totals-value relatorios__amount--income">
+            {loading ? amountSkeleton : formatCurrency(totalIncome)}
+          </span>
         </div>
         <div className="relatorios__totals-divider" aria-hidden="true" />
         <div className="relatorios__totals-item">
           <span className="relatorios__totals-label">
             {periodMode === "month" ? `Saídas em ${formatMonthLong(currentMonth)}` : "Saídas (todo o período)"}
           </span>
-          <span className="relatorios__totals-value relatorios__amount--expense">{formatCurrency(totalExpense)}</span>
+          <span className="relatorios__totals-value relatorios__amount--expense">
+            {loading ? amountSkeleton : formatCurrency(totalExpense)}
+          </span>
         </div>
         <div className="relatorios__totals-divider" aria-hidden="true" />
         <div className="relatorios__totals-item">
@@ -279,10 +300,10 @@ export default function Relatorios() {
           </span>
           <span
             className={`relatorios__totals-value ${
-              balance >= 0 ? "relatorios__amount--income" : "relatorios__amount--expense"
+              balance === null || balance >= 0 ? "relatorios__amount--income" : "relatorios__amount--expense"
             }`}
           >
-            {formatCurrency(balance)}
+            {loading ? amountSkeleton : formatCurrency(balance)}
           </span>
         </div>
       </div>
@@ -446,7 +467,14 @@ export default function Relatorios() {
                   );
                 }),
               ])}
-              {items.length === 0 && (
+              {loading && (
+                <tr>
+                  <td colSpan={COLUMNS.length + 1} className="relatorios__empty">
+                    <Skeleton width="100%" height="8rem" />
+                  </td>
+                </tr>
+              )}
+              {!loading && items.length === 0 && (
                 <tr>
                   <td colSpan={COLUMNS.length + 1} className="relatorios__empty">
                     Nenhuma transação encontrada.
@@ -456,7 +484,9 @@ export default function Relatorios() {
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={COLUMNS.length + 1}>Totais ({totalCount} lançamentos)</td>
+                <td colSpan={COLUMNS.length + 1}>
+                  Totais ({loading ? <Skeleton width="2rem" /> : totalCount} lançamentos)
+                </td>
               </tr>
             </tfoot>
           </table>
@@ -466,11 +496,13 @@ export default function Relatorios() {
           <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} aria-label="Página anterior">
             ‹
           </button>
-          <span>Página {page} de {totalPages}</span>
+          <span>
+            Página {page} de {loading ? <Skeleton width="1.5rem" /> : totalPages}
+          </span>
           <button
             type="button"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
+            disabled={loading || page >= totalPages}
             aria-label="Próxima página"
           >
             ›

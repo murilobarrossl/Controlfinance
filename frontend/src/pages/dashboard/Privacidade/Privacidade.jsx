@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuth } from "../../../context/AuthContext.jsx";
+import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import { logoutAllSessions } from "../../../api/auth.js";
 import { downloadMyData, updateNotificationPreferences, deleteMyAccount, getDataPolicy } from "../../../api/account.js";
@@ -18,7 +19,7 @@ import "./Privacidade.css";
 export default function Privacidade() {
   const navigate = useNavigate();
   const { user, logout, updateUser } = useAuth();
-  const { accounts, connectors, disconnectConnection } = useAccount();
+  const { accounts, connectors, accountsStatus, disconnectConnection } = useAccount();
 
   const [prefs, setPrefs] = useState({
     dueRemindersEnabled: user?.dueRemindersEnabled ?? true,
@@ -35,7 +36,11 @@ export default function Privacidade() {
   const [dataPolicy, setDataPolicy] = useState(null);
 
   useEffect(() => {
-    getDataPolicy().then(setDataPolicy).catch(() => {});
+    const controller = new AbortController();
+    getDataPolicy({ signal: controller.signal })
+      .then(setDataPolicy)
+      .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   const connections = useMemo(() => {
@@ -121,7 +126,9 @@ export default function Privacidade() {
           <li><strong>Aceites:</strong> qual versão dos Termos e da Política você aceitou e quando, e cada autorização de conexão bancária.</li>
           <li>
             <strong>Prazo do histórico bancário:</strong>{" "}
-            {dataPolicy?.syncedHistoryMonths
+            {dataPolicy === null
+              ? <Skeleton width="60%" />
+              : dataPolicy.syncedHistoryMonths
               ? `transações importadas dos bancos com mais de ${dataPolicy.syncedHistoryMonths} meses não são importadas e são apagadas automaticamente (lançamentos manuais não são afetados).`
               : "sem prazo máximo definido: o histórico importado fica guardado enquanto o banco estiver conectado."}
           </li>
@@ -140,7 +147,11 @@ export default function Privacidade() {
       </Card>
 
       <Card title="Bancos conectados">
-        {connections.length === 0 ? (
+        {accountsStatus === "loading" ? (
+          <Skeleton width="100%" height="4rem" />
+        ) : accountsStatus === "error" ? (
+          <p className="privacidade__text">Não foi possível carregar as contas.</p>
+        ) : connections.length === 0 ? (
           <p className="privacidade__text">Nenhum banco conectado.</p>
         ) : (
           <ul className="privacidade__connections">

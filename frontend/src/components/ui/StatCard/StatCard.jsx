@@ -22,8 +22,8 @@ export default function StatCard({ icon, label, value, valueTone = "default", se
 
       {secondaryLines.length > 0 && (
         <div className="stat-card__secondary">
-          {secondaryLines.map((line) => (
-            <div key={line.label} className="stat-card__secondary-line">
+          {secondaryLines.map((line, index) => (
+            <div key={index} className="stat-card__secondary-line">
               <span>{line.label}</span>
               <span>{line.value}</span>
             </div>

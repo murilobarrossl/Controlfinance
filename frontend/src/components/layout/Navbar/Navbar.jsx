@@ -6,10 +6,10 @@ import logo from "../../../assets/images/cflogobranco.svg";
 import "./Navbar.css";
 
 const NAV_LINKS = [
-  { label: "Sobre Nós", href: "#sobre-nos" },
-  { label: "Funcionalidades", href: "#funcionalidades" },
-  { label: "Planos", href: "#planos" },
-  { label: "Dúvidas", href: "#faq" },
+  { label: "Sobre Nós", href: "/#sobre-nos" },
+  { label: "Funcionalidades", href: "/#funcionalidades" },
+  { label: "Planos", href: "/#planos" },
+  { label: "Dúvidas", href: "/#faq" },
 ];
 
 export default function Navbar() {

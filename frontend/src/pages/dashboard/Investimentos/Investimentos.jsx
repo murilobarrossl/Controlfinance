@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
@@ -86,10 +87,10 @@ function groupInvestmentsByInstitution(accounts, connectors) {
     }
     const institution = institutions.get(key);
     institution.items.push({ account, modality });
-    institution.total += account.balance ?? 0;
+    institution.total = institution.total === null || account.balance == null ? null : institution.total + account.balance;
   }
 
-  return [...institutions.values()].sort((a, b) => b.total - a.total);
+  return [...institutions.values()].sort((a, b) => (b.total ?? 0) - (a.total ?? 0));
 }
 
 function ModalityTag({ modality }) {
@@ -102,8 +103,8 @@ function ModalityTag({ modality }) {
   );
 }
 
-function InstitutionsSection({ institutions }) {
-  const grandTotal = institutions.reduce((sum, i) => sum + i.total, 0);
+function InstitutionsSection({ institutions, status }) {
+  const grandTotal = institutions.some((i) => i.total === null) ? null : institutions.reduce((sum, i) => sum + i.total, 0);
 
   return (
     <Card title="Suas reservas e investimentos por instituição">
@@ -113,7 +114,11 @@ function InstitutionsSection({ institutions }) {
         nome e pelo tipo da conta e pode não ser exata. Nada aqui é recomendação de investimento.
       </p>
 
-      {institutions.length === 0 ? (
+      {status === "loading" ? (
+        <Skeleton width="100%" height="8rem" />
+      ) : status === "error" ? (
+        <p className="investimentos__hint">Não foi possível carregar as contas.</p>
+      ) : institutions.length === 0 ? (
         <p className="investimentos__hint">
           Nenhuma conta de reserva ou investimento foi reconhecida nos seus bancos conectados até agora. Quando a
           sincronização trouxer uma, ela aparece aqui, agrupada pelo banco.
@@ -262,7 +267,7 @@ function GoalsSection() {
 
   function handleCreateGoal(e) {
     e.preventDefault();
-    if (!goalForm.name || !goalForm.targetAmount) return;
+    if (!goalForm.name || !(Number(goalForm.targetAmount) > 0)) return;
 
     saveGoal({
       name: goalForm.name,
@@ -486,14 +491,14 @@ function FinancingSimulator() {
 // Cada seção guarda o próprio estado: digitar no simulador ou numa meta não re-renderiza a lista
 // de instituições (nem refaz o agrupamento), como acontecia com tudo num componente só.
 export default function Investimentos() {
-  const { accounts, connectors } = useAccount();
+  const { accounts, connectors, accountsStatus } = useAccount();
   const institutions = useMemo(() => groupInvestmentsByInstitution(accounts, connectors), [accounts, connectors]);
 
   return (
     <div className="investimentos">
       <SectionHeading kicker="Planeje o futuro" title="Investimentos" align="left" />
 
-      <InstitutionsSection institutions={institutions} />
+      <InstitutionsSection institutions={institutions} status={accountsStatus} />
       <ModalitiesGuide />
 
       <div className="investimentos__grid">

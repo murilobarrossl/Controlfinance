@@ -57,7 +57,6 @@ namespace ControlFinance.API.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("Balance")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("BalanceEncrypted");
 
@@ -130,6 +129,8 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("PolpAccountId");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "IsActive");
 
                     b.ToTable("BankAccounts");
                 });
@@ -263,6 +264,9 @@ namespace ControlFinance.API.Migrations
                         .HasColumnType("text")
                         .HasColumnName("DescriptionEncrypted");
 
+                    b.Property<int?>("DueDay")
+                        .HasColumnType("integer");
+
                     b.Property<string>("InstallmentAmount")
                         .IsRequired()
                         .HasColumnType("text")
@@ -292,6 +296,8 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("BankAccountId");
 
                     b.HasIndex("CreditCardId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Installments");
                 });
@@ -480,6 +486,8 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("CategoryId");
 
                     b.HasIndex("UserId", "DueDate");
+
+                    b.HasIndex("UserId", "BankAccountId", "DueDate");
 
                     b.ToTable("Transactions");
                 });

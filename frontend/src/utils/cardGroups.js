@@ -3,21 +3,29 @@ const OTHERS_KEY = "outros";
 const byInvoiceDesc = (a, b) => (b.currentInvoice ?? 0) - (a.currentInvoice ?? 0);
 
 function sum(cards, pick) {
-  return cards.reduce((total, card) => total + (pick(card) ?? 0), 0);
+  let total = 0;
+  for (const card of cards) {
+    const value = pick(card);
+    if (value == null) return null;
+    total += value;
+  }
+  return total;
 }
 
 export function summarizeCards(cards) {
   const usedLimit = sum(cards, (c) => c.usedLimit);
-  const availableLimit = sum(cards, (c) => (c.creditLimit != null ? Math.max(0, c.creditLimit - (c.usedLimit ?? 0)) : 0));
+  const availableLimit = sum(cards, (c) =>
+    c.creditLimit != null && c.usedLimit != null ? c.creditLimit - c.usedLimit : null);
   const openInvoices = sum(cards, (c) => c.currentInvoice);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   const dated = cards
     .filter((c) => c.invoiceDueDate)
-    .map((c) => ({ card: c, date: new Date(c.invoiceDueDate) }))
-    .sort((a, b) => a.date - b.date);
-  const next = dated.find((d) => d.date >= today) ?? dated[0] ?? null;
+    .map((c) => ({ card: c, date: String(c.invoiceDueDate).slice(0, 10) }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const next = dated.find((d) => d.date >= today) ?? null;
 
   return {
     usedLimit,
@@ -56,7 +64,7 @@ export function groupCards(cards) {
 
   list.sort((a, b) => {
     if (a.isOthers !== b.isOthers) return a.isOthers ? 1 : -1;
-    return b.openInvoice - a.openInvoice;
+    return (b.openInvoice ?? 0) - (a.openInvoice ?? 0);
   });
 
   const showHeaders = !(list.length === 1 && !list[0].isOthers);

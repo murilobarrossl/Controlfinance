@@ -20,6 +20,7 @@ public class CreditCardsController(AppDbContext db) : ApiControllerBase
     public async Task<IActionResult> GetAll()
     {
         var cards = await db.CreditCards
+            .AsNoTracking()
             .Where(c => c.UserId == UserId && c.IsActive)
             .ToListAsync();
 

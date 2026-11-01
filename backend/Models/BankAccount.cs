@@ -13,7 +13,7 @@ public class BankAccount
     public User User { get; set; } = null!;
     public string Name { get; set; } = string.Empty;
     public string? BankCode { get; set; }
-    public decimal Balance { get; set; }
+    public decimal? Balance { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

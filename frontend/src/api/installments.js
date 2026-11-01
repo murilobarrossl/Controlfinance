@@ -1,6 +1,6 @@
 import { apiFetch } from "./client.js";
 
-export const getInstallments = async () => apiFetch("/installments");
+export const getInstallments = async ({ signal } = {}) => apiFetch("/installments", { signal });
 
 export const createInstallment = async (payload) =>
   apiFetch("/installments", {

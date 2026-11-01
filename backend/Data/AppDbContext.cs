@@ -77,7 +77,9 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         {
             e.HasKey(b => b.Id);
             e.Property(b => b.Name).IsRequired().HasMaxLength(100);
-            e.Property(b => b.Balance).HasConversion(decimalConverter).HasColumnName("BalanceEncrypted");
+            e.Property(b => b.Balance).HasConversion(nullableDecimalConverter).HasColumnName("BalanceEncrypted");
+            e.HasIndex(b => b.UserId);
+            e.HasIndex(b => new { b.UserId, b.IsActive });
             e.Property(b => b.Ownership).HasConversion<string>();
             // Number é dado sensível (mesmo nível de CPF/CNPJ), criptografado com o mesmo
             // conversor de User.Document. PolpAccountType/Subtype são só rótulos categóricos
@@ -146,6 +148,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             // despesas e nos relatórios: sem esse índice composto essas consultas caem num
             // scan por UserId seguido de ordenação em memória por DueDate.
             e.HasIndex(t => new { t.UserId, t.DueDate });
+            e.HasIndex(t => new { t.UserId, t.BankAccountId, t.DueDate });
         });
 
         modelBuilder.Entity<CreditCard>(e =>
@@ -163,6 +166,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<Installment>(e =>
         {
             e.HasKey(i => i.Id);
+            e.HasIndex(i => i.UserId);
             // Descrição do parcelamento é digitada pelo usuário ("Notebook", "Tratamento dentário"…)
             // e pode revelar mais do que parece (inclusive saúde): cifrada como o nome das
             // transações. Mesma transição em duas fases: linhas antigas ficam em "Description"

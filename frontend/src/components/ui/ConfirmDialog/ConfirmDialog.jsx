@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+import useModalBehavior from "../../../hooks/useModalBehavior.js";
 import Button from "../Button/Button.jsx";
 import "./ConfirmDialog.css";
 
@@ -16,23 +17,7 @@ export default function ConfirmDialog({
 }) {
   const panelRef = useRef(null);
 
-  useEffect(() => {
-    if (!open) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    panelRef.current?.focus();
-
-    function handleKeyDown(e) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open, onClose]);
+  useModalBehavior(open, onClose, panelRef);
 
   if (!open) return null;
 

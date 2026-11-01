@@ -42,7 +42,7 @@ public class InstitutionNameResolver(IPolpService polp, IMemoryCache cache, ILog
             if (names.Count > 0) cache.Set(CacheKey, names, CacheDuration);
             return names;
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
         {
             logger.LogWarning("Não foi possível carregar a lista de instituições da Polp");
             return null;

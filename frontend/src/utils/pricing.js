@@ -2,7 +2,7 @@
 // mão em mais de um lugar e eles já tinham divergido entre si (o anual mostrava R$49,90/mês mas
 // cobrava R$478,80/ano, que dá R$39,90/mês). Tudo aqui deriva do preço base do plano mensal e do
 // desconto de cada plano, então mudar um número atualiza todos os textos de uma vez.
-export const BASE_MONTHLY_PRICE = 49.9;
+const BASE_MONTHLY_PRICE = 49.9;
 export const FREE_TRIAL_DAYS = 14;
 
 // Preço "terminado em ,90": arredonda o mensal com desconto pra baixo até o inteiro e soma 0,90

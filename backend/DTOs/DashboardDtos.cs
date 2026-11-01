@@ -10,7 +10,13 @@ public record CreateBankAccountDto(
     [MaxLength(20)] string? BankCode,
     [Range(-1_000_000_000, 1_000_000_000, ErrorMessage = "Saldo fora da faixa permitida.")] decimal Balance
 );
-public record BankAccountDto(Guid Id, string Name, string? BankCode, decimal Balance, bool IsActive, string Ownership);
+public record BankAccountDto(Guid Id, string Name, string? BankCode, decimal? Balance, bool IsActive, string Ownership)
+{
+    public static BankAccountDto FromEntity(BankAccount b) =>
+        new(b.Id, b.Name, b.BankCode,
+            b.PolpAccountId.HasValue && CreditCardAccountDetector.LooksLikeCreditCard(b) ? null : b.Balance,
+            b.IsActive, b.Ownership.ToString());
+}
 
 // Ownership: "Personal" | "Business" | "Mixed", string na borda da API, igual Type/Status de
 // TransactionDto, pra não vazar o valor numérico cru do enum (o padrão do System.Text.Json sem
@@ -22,7 +28,10 @@ public record CreateCategoryDto(
     [Required(ErrorMessage = "Nome é obrigatório."), MaxLength(80)] string Name,
     [MaxLength(20)] string? Color
 );
-public record CategoryDto(Guid Id, string Name, string? Color);
+public record CategoryDto(Guid Id, string Name, string? Color)
+{
+    public static CategoryDto FromEntity(Category c) => new(c.Id, c.Name, c.Color);
+}
 
 // ── TRANSACTION ───────────────────────────────────────
 public record CreateTransactionDto(
@@ -47,6 +56,17 @@ public record SetTransactionDetailsDto(
     [Required(ErrorMessage = "Nome é obrigatório."), MaxLength(150)] string Name,
     Guid? CategoryId
 );
+
+public record AggregateMonthDto(int Year, int Month, decimal Income, decimal Expense, int Count);
+public record AggregateCategoryDto(string? CategoryName, string Type, decimal Amount, int Count);
+public record AggregateEstablishmentDto(string Key, string Label, string? CategoryName, string Type, decimal Amount, int Count, bool IsInstallmentGroup);
+public record TransactionAggregatesDto(
+    decimal TotalIncome,
+    decimal TotalExpense,
+    int Count,
+    List<AggregateMonthDto> Months,
+    List<AggregateCategoryDto> Categories,
+    List<AggregateEstablishmentDto> Establishments);
 
 public record TransactionReportDto(
     IEnumerable<TransactionDto> Items,
@@ -89,7 +109,7 @@ public record TransactionDto(
     // Compara por dia (não pelo instante exato): uma conta que vence hoje não pode virar "Atrasado"
     // só porque já passou da meia-noite UTC, continua Pending até o dia do vencimento acabar.
     public static string EffectiveStatus(TransactionStatus status, DateTime dueDate) =>
-        status == TransactionStatus.Pending && dueDate.Date < DateTime.UtcNow.Date
+        status == TransactionStatus.Pending && dueDate.Date < BrazilClock.Today
             ? nameof(TransactionStatus.Overdue)
             : status.ToString();
 }

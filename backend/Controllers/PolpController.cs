@@ -4,6 +4,7 @@ using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ControlFinance.API.Controllers;
 
@@ -17,19 +18,26 @@ public class PolpController(
     IEncryptionService encryption,
     PolpDisconnectService disconnectService,
     IServiceScopeFactory scopeFactory,
+    IMemoryCache cache,
     ILogger<PolpController> logger) : ApiControllerBase
 {
+    private const string ConnectorsCacheKey = "polp:connectors";
+    private static readonly TimeSpan ConnectorsCacheDuration = TimeSpan.FromMinutes(10);
+
     [HttpGet("connectors")]
     public async Task<IActionResult> GetConnectors(CancellationToken ct)
     {
-        List<PolpInstitutionDto> institutions;
-        try
+        if (!cache.TryGetValue(ConnectorsCacheKey, out List<PolpInstitutionDto>? institutions) || institutions is null)
         {
-            institutions = await polp.GetInstitutionsAsync(ct);
-        }
-        catch (HttpRequestException)
-        {
-            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível carregar os bancos disponíveis." });
+            try
+            {
+                institutions = await polp.GetInstitutionsAsync(ct);
+                cache.Set(ConnectorsCacheKey, institutions, ConnectorsCacheDuration);
+            }
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
+            {
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível carregar os bancos disponíveis." });
+            }
         }
 
         var connectors = institutions.Select(i =>
@@ -43,7 +51,8 @@ public class PolpController(
                 textColor = ResolveTextColor(color),
                 initials = BuildInitials(i.Name),
                 logoUrl = i.LogoUrl,
-                status = i.Status
+                status = i.Status,
+                type = i.Type
             };
         });
 
@@ -66,6 +75,7 @@ public class PolpController(
     private async Task<PolpIntegration?> FindBlockingIntegrationAsync(Guid institutionId, CancellationToken ct)
     {
         var candidates = await db.PolpIntegrations
+            .AsNoTracking()
             .Where(p => p.UserId == UserId && p.InstitutionId == institutionId)
             .ToListAsync(ct);
 
@@ -119,7 +129,7 @@ public class PolpController(
         {
             created = await polp.CreateConsentAsync(new CreatePolpConsentRequest(institutionId, document, UserId), ct);
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
         {
             return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível iniciar a conexão com o banco." });
         }
@@ -195,11 +205,13 @@ public class PolpController(
                 ? info
                 : null;
 
+            var isCreditCard = CreditCardAccountDetector.LooksLikeCreditCard(a.PolpAccountType, a.PolpAccountSubtype);
+
             return new
             {
                 a.Id,
                 a.Name,
-                a.Balance,
+                Balance = a.PolpAccountId.HasValue && isCreditCard ? (decimal?)null : a.Balance,
                 a.BankCode,
                 a.PolpIntegrationId,
                 localIntegrationId = local?.Id,
@@ -208,14 +220,14 @@ public class PolpController(
                 // estão sendo refinadas pela Polp.
                 enrichmentPending = local?.ExecutionStatus == "PARTIAL_SUCCESS",
                 // Só contas (não cartões) têm saldo que a Polp consegue consultar na hora.
-                canSyncBalance = a.PolpAccountId.HasValue && !CreditCardAccountDetector.LooksLikeCreditCard(a.PolpAccountType, a.PolpAccountSubtype),
+                canSyncBalance = a.PolpAccountId.HasValue && !isCreditCard,
                 // Tipo cru da Polp + a mesma decisão de "é cartão" que Cartões/Dashboard já usam
                 // (CreditCardAccountDetector), pra o frontend não apresentar um cartão como se fosse
                 // outra conta bancária nem reimplementar essa heurística do lado de lá. O tipo cru
                 // também é o que separa conta corrente de poupança/investimento em Investimentos.
                 accountType = a.PolpAccountType,
                 accountSubtype = a.PolpAccountSubtype,
-                isCreditCard = CreditCardAccountDetector.LooksLikeCreditCard(a.PolpAccountType, a.PolpAccountSubtype)
+                isCreditCard
             };
         });
 
@@ -249,7 +261,7 @@ public class PolpController(
                 urlToAuthenticate = remote.UrlToAuthenticate;
                 error = remote.ErrorMessage;
             }
-            catch (HttpRequestException)
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
             {
                 return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível consultar o status da conexão." });
             }
@@ -288,7 +300,7 @@ public class PolpController(
     // todos os usuários juntos) e o saldo consome a mesma cota mensal da sincronização
     // automática, por isso a janela de 1 minuto por conta.
     private static readonly TimeSpan BalanceSyncWindow = TimeSpan.FromMinutes(1);
-    private static readonly Dictionary<Guid, DateTime> LastBalanceSync = [];
+    private static readonly object BalanceSyncLock = new();
 
     [HttpPost("accounts/{id:guid}/balance-sync")]
     public async Task<IActionResult> SyncBalance(Guid id, CancellationToken ct)
@@ -299,9 +311,10 @@ public class PolpController(
         if (account?.PolpAccountId is not Guid remoteId || CreditCardAccountDetector.LooksLikeCreditCard(account))
             return NotFound();
 
-        lock (LastBalanceSync)
+        lock (BalanceSyncLock)
         {
-            if (LastBalanceSync.TryGetValue(account.Id, out var last) && DateTime.UtcNow - last < BalanceSyncWindow)
+            var cacheKey = $"polp:balance-sync:{account.Id}";
+            if (cache.TryGetValue(cacheKey, out DateTime last) && DateTime.UtcNow - last < BalanceSyncWindow)
             {
                 return StatusCode(StatusCodes.Status429TooManyRequests, new
                 {
@@ -309,7 +322,7 @@ public class PolpController(
                     retryAfterSeconds = (int)Math.Ceiling((BalanceSyncWindow - (DateTime.UtcNow - last)).TotalSeconds)
                 });
             }
-            LastBalanceSync[account.Id] = DateTime.UtcNow;
+            cache.Set(cacheKey, DateTime.UtcNow, BalanceSyncWindow);
         }
 
         PolpAccountDto remote;
@@ -317,7 +330,7 @@ public class PolpController(
         {
             remote = await polp.SyncBalanceAsync(remoteId, ct);
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
         {
             return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível atualizar o saldo agora." });
         }

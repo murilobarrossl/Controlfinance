@@ -176,7 +176,6 @@ else
     builder.Services.AddScoped<IPolpService, NullPolpService>();
 }
 builder.Services.AddSwaggerGen(c =>
-
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {

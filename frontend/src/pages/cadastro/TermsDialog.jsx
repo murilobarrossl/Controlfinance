@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Button from "../../components/ui/Button/Button.jsx";
 import { TermosDeUsoTexto, TERMS_UPDATED_AT } from "../legal/TermosDeUso.jsx";
 import "../legal/LegalPage.css";
+import useModalBehavior from "../../hooks/useModalBehavior.js";
 import "./TermsDialog.css";
 
 const BOTTOM_TOLERANCE_PX = 8;
@@ -32,21 +33,7 @@ export default function TermsDialog({ submitting, onAccept, onClose }) {
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    panelRef.current?.focus();
-
-    function handleKeyDown(e) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onClose]);
+  useModalBehavior(true, onClose, panelRef);
 
   // Links do texto (ex.: Política de Privacidade) abririam na mesma aba e apagariam o formulário.
   function handleContentClick(e) {

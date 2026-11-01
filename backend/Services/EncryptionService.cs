@@ -219,7 +219,6 @@ public class EncryptionService : IEncryptionService
 
     private static string Hmac(byte[] key, string value)
     {
-        using var hmac = new HMACSHA256(key);
-        return Convert.ToBase64String(hmac.ComputeHash(Encoding.UTF8.GetBytes(value)));
+        return Convert.ToBase64String(HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(value)));
     }
 }

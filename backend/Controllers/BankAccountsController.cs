@@ -17,22 +17,23 @@ public class BankAccountsController(AppDbContext db) : ApiControllerBase
     public async Task<IActionResult> GetAll()
     {
         var accounts = await db.BankAccounts
+            .AsNoTracking()
             .Where(b => b.UserId == UserId && b.IsActive)
-            .Select(b => new BankAccountDto(b.Id, b.Name, b.BankCode, b.Balance, b.IsActive, b.Ownership.ToString()))
             .ToListAsync();
 
-        return Ok(accounts);
+        return Ok(accounts.Select(BankAccountDto.FromEntity));
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(Guid id)
     {
         var account = await db.BankAccounts
+            .AsNoTracking()
             .FirstOrDefaultAsync(b => b.Id == id && b.UserId == UserId);
 
         if (account is null) return NotFound();
 
-        return Ok(new BankAccountDto(account.Id, account.Name, account.BankCode, account.Balance, account.IsActive, account.Ownership.ToString()));
+        return Ok(BankAccountDto.FromEntity(account));
     }
 
     [HttpPost]
@@ -56,7 +57,7 @@ public class BankAccountsController(AppDbContext db) : ApiControllerBase
         await db.SaveChangesAsync();
 
         return CreatedAtAction(nameof(GetById), new { id = account.Id },
-            new BankAccountDto(account.Id, account.Name, account.BankCode, account.Balance, account.IsActive, account.Ownership.ToString()));
+            BankAccountDto.FromEntity(account));
     }
 
     [HttpPut("{id}")]
@@ -70,7 +71,7 @@ public class BankAccountsController(AppDbContext db) : ApiControllerBase
         account.Balance = dto.Balance;
 
         await db.SaveChangesAsync();
-        return Ok(new BankAccountDto(account.Id, account.Name, account.BankCode, account.Balance, account.IsActive, account.Ownership.ToString()));
+        return Ok(BankAccountDto.FromEntity(account));
     }
 
     // Endpoint dedicado só pra corrigir o chute pessoal/empresa/mista: reaproveitar o Update
@@ -79,7 +80,7 @@ public class BankAccountsController(AppDbContext db) : ApiControllerBase
     [HttpPut("{id}/ownership")]
     public async Task<IActionResult> SetOwnership(Guid id, [FromBody] SetAccountOwnershipDto dto)
     {
-        if (!Enum.TryParse<AccountOwnership>(dto.Ownership, true, out var ownership))
+        if (!Enum.TryParse<AccountOwnership>(dto.Ownership, true, out var ownership) || !Enum.IsDefined(ownership))
             return BadRequest(new { message = "Ownership inválido. Use 'Personal', 'Business' ou 'Mixed'." });
 
         var account = await db.BankAccounts.FirstOrDefaultAsync(b => b.Id == id && b.UserId == UserId);
@@ -87,7 +88,7 @@ public class BankAccountsController(AppDbContext db) : ApiControllerBase
 
         account.Ownership = ownership;
         await db.SaveChangesAsync();
-        return Ok(new BankAccountDto(account.Id, account.Name, account.BankCode, account.Balance, account.IsActive, account.Ownership.ToString()));
+        return Ok(BankAccountDto.FromEntity(account));
     }
 
     // Remove uma conta cadastrada manualmente, junto com as transações e parcelamentos dela.

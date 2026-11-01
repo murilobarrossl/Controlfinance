@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getCreditCardsSummary, createCreditCard, updateCreditCard, setPrimaryCard } from "../../../api/creditCards.js";
 import { getInstallments, createInstallment, deleteInstallment } from "../../../api/installments.js";
 import { getTransactions } from "../../../api/transactions.js";
+import { isAbortError } from "../../../api/client.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
@@ -10,6 +11,7 @@ import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.js
 import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
+import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import { CardIcon, WalletIcon, BellIcon, HistoryIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import { formatCurrency, formatDate } from "../../../utils/financeMath.js";
@@ -39,7 +41,9 @@ function formatDateTime(value) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
 // "Próximos vencimentos" (antes no Dashboard inteligente) junta as três coisas que vencem e que
@@ -82,16 +86,20 @@ function buildUpcoming(cards, installments, pendingTransactions) {
     .slice(0, MAX_UPCOMING);
 }
 
+const EMPTY_LIST = [];
+const TRANSACTIONS_CAP = 2000;
+
 // Esta página não depende da conta selecionada no seletor lateral (useAccount()): cartões
 // reconhecidos (card.isSynced) já vêm prontos de getCreditCardsSummary(), independente de qual
 // conta está ativa no seletor — a mesma BankAccount aparece aqui sempre que for identificada como
 // cartão, sem relação com qual conta o usuário escolheu ver no Dashboard Inteligente.
 export default function Cartoes() {
   const { user } = useAuth();
-  const [cards, setCards] = useState([]);
-  const [installments, setInstallments] = useState([]);
-  const [pendingTransactions, setPendingTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [loadedKey, setLoadedKey] = useState(null);
+  const loading = loadedKey !== reloadKey;
   const [error, setError] = useState("");
   const [detailForm, setDetailForm] = useState(EMPTY_DETAIL_FORM);
   const [manualForm, setManualForm] = useState(EMPTY_MANUAL_FORM);
@@ -99,26 +107,37 @@ export default function Cartoes() {
   const [showInstallmentForm, setShowInstallmentForm] = useState(false);
   const [installmentForm, setInstallmentForm] = useState(EMPTY_INSTALLMENT_FORM);
 
-  function loadAll() {
-    return Promise.all([
-      getCreditCardsSummary(),
-      getInstallments(),
-      getTransactions({ status: "Overdue", type: "Expense" }),
-      getTransactions({ status: "Pending", type: "Expense" }),
-    ])
-      .then(([cardsData, installmentsData, overdueData, pendingData]) => {
-        setCards(cardsData);
-        setInstallments(installmentsData);
-        setPendingTransactions([...overdueData, ...pendingData]);
-      })
-      .catch((err) => setError(err.message || "Não foi possível carregar os cartões."))
-      .finally(() => setLoading(false));
-  }
+  const cards = data?.cards ?? EMPTY_LIST;
+  const installments = data?.installments ?? EMPTY_LIST;
+  const pendingTransactions = data?.pendingTransactions ?? EMPTY_LIST;
+
+  const reload = () => setReloadKey((key) => key + 1);
 
   useEffect(() => {
-    setLoading(true);
-    loadAll();
-  }, []);
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    Promise.all([
+      getCreditCardsSummary({ signal }),
+      getInstallments({ signal }),
+      getTransactions({ status: "Overdue", type: "Expense" }, { signal }),
+      getTransactions({ status: "Pending", type: "Expense" }, { signal }),
+    ])
+      .then(([cardsData, installmentsData, overdueData, pendingData]) => {
+        if (signal.aborted) return;
+        setLoadError("");
+        setData({ cards: cardsData, installments: installmentsData, pendingTransactions: [...overdueData, ...pendingData] });
+        setLoadedKey(reloadKey);
+      })
+      .catch((err) => {
+        if (signal.aborted || isAbortError(err)) return;
+        setData(null);
+        setLoadError(err.message || "Não foi possível carregar os cartões.");
+        setLoadedKey(reloadKey);
+      });
+
+    return () => controller.abort();
+  }, [reloadKey]);
 
   function openDetailForm(card) {
     setDetailForm({
@@ -144,7 +163,7 @@ export default function Cartoes() {
     try {
       await updateCreditCard(detailForm.id, { ...payload, brand: detailForm.brand || null });
       setDetailForm(EMPTY_DETAIL_FORM);
-      await loadAll();
+      reload();
     } catch (err) {
       setError(err.message || "Não foi possível salvar os dados desse cartão.");
     } finally {
@@ -166,7 +185,7 @@ export default function Cartoes() {
         dueDay: Math.min(31, Math.max(1, Number(manualForm.dueDay) || 1)),
       });
       setManualForm(EMPTY_MANUAL_FORM);
-      await loadAll();
+      reload();
     } catch (err) {
       setError(err.message || "Não foi possível cadastrar esse cartão.");
     } finally {
@@ -196,7 +215,7 @@ export default function Cartoes() {
       });
       setInstallmentForm(EMPTY_INSTALLMENT_FORM);
       setShowInstallmentForm(false);
-      await loadAll();
+      reload();
     } catch (err) {
       setError(err.message || "Não foi possível criar esse parcelamento.");
     } finally {
@@ -212,7 +231,9 @@ export default function Cartoes() {
   async function handleSetPrimary(id) {
     const previousPrimaryId = cards.find((c) => c.isPrimary)?.id;
     const markPrimary = (primaryId) =>
-      setCards((current) => current.map((c) => ({ ...c, isPrimary: c.id === primaryId })));
+      setData((current) =>
+        current && { ...current, cards: current.cards.map((c) => ({ ...c, isPrimary: c.id === primaryId })) },
+      );
 
     markPrimary(id);
     setError("");
@@ -227,7 +248,7 @@ export default function Cartoes() {
   async function handleDeleteInstallment(id) {
     try {
       await deleteInstallment(id);
-      await loadAll();
+      reload();
     } catch (err) {
       setError(err.message || "Não foi possível remover esse parcelamento.");
     }
@@ -324,7 +345,10 @@ export default function Cartoes() {
     );
   }
 
-  if (loading) return <p className="cartoes__hint">Carregando...</p>;
+  if (!loading && loadError) return <p className="cartoes__error">{loadError}</p>;
+
+  const valueSkeleton = <Skeleton width="7rem" height="1.5rem" />;
+  const listSkeleton = <Skeleton width="100%" height="6rem" />;
 
   return (
     <div className="cartoes">
@@ -339,19 +363,21 @@ export default function Cartoes() {
       </p>
 
       <div className="cartoes__summary">
-        <StatCard icon={<CardIcon />} label="Limite usado" value={formatCurrency(summary.usedLimit)} />
-        <StatCard icon={<WalletIcon />} label="Limite disponível" value={formatCurrency(summary.availableLimit)} />
-        <StatCard icon={<BellIcon />} label="Faturas abertas" value={formatCurrency(summary.openInvoices)} />
+        <StatCard icon={<CardIcon />} label="Limite usado" value={loading ? valueSkeleton : formatCurrency(summary.usedLimit)} />
+        <StatCard icon={<WalletIcon />} label="Limite disponível" value={loading ? valueSkeleton : formatCurrency(summary.availableLimit)} />
+        <StatCard icon={<BellIcon />} label="Faturas abertas" value={loading ? valueSkeleton : formatCurrency(summary.openInvoices)} />
         <StatCard
           icon={<HistoryIcon />}
           label="Próximo vencimento"
-          value={summary.nextDue ? formatDate(summary.nextDue.date) : "—"}
-          secondaryLines={summary.nextDue ? [{ label: summary.nextDue.label, value: "" }] : []}
+          value={loading ? valueSkeleton : summary.nextDue ? formatDate(summary.nextDue.date) : "—"}
+          secondaryLines={!loading && summary.nextDue ? [{ label: summary.nextDue.label, value: "" }] : []}
         />
       </div>
 
       <Card title="Seus cartões">
-        {cards.length === 0 ? (
+        {loading ? (
+          listSkeleton
+        ) : cards.length === 0 ? (
           <p className="cartoes__hint">
             Nenhum cartão reconhecido ainda. Se você tem um cartão sincronizado por um banco conectado,
             ele deve aparecer aqui sozinho na próxima sincronização — ou cadastre um manualmente abaixo.
@@ -387,7 +413,12 @@ export default function Cartoes() {
       </Card>
 
       <Card title="Próximos vencimentos">
-        {upcoming.length === 0 ? (
+        {!loading && pendingTransactions.length >= TRANSACTIONS_CAP && (
+          <p className="cartoes__hint">Mostrando os 2.000 lançamentos mais recentes.</p>
+        )}
+        {loading ? (
+          listSkeleton
+        ) : upcoming.length === 0 ? (
           <p className="cartoes__hint">Nenhuma fatura, parcela ou conta pendente por enquanto.</p>
         ) : (
           <ul className="cartoes__list">
@@ -477,7 +508,9 @@ export default function Cartoes() {
       </Card>
 
       <Card title="Parcelamentos">
-        {installments.length === 0 ? (
+        {loading ? (
+          listSkeleton
+        ) : installments.length === 0 ? (
           <p className="cartoes__hint">Nenhum parcelamento cadastrado ainda.</p>
         ) : (
           <ul className="cartoes__list">

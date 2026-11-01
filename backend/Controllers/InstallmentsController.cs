@@ -66,7 +66,7 @@ public class InstallmentsController(AppDbContext db) : ApiControllerBase
 
             // Sem limite conhecido ainda (Polp não mandou, ou o usuário não completou) não dá pra
             // validar — deixa passar em vez de bloquear por um limite que a gente nem sabe qual é.
-            if (account.CreditLimit.HasValue && (account.UsedLimit ?? 0) + remainingCommitted > account.CreditLimit)
+            if (account.PolpAccountId is null && account.CreditLimit.HasValue && (account.UsedLimit ?? 0) + remainingCommitted > account.CreditLimit)
                 return BadRequest(new { message = "Essa parcela ultrapassa o limite disponível do cartão." });
         }
 
@@ -82,12 +82,13 @@ public class InstallmentsController(AppDbContext db) : ApiControllerBase
             InstallmentAmount = dto.InstallmentAmount,
             // Mesma questão do TransactionsController: data sem timezone vem com Kind=Unspecified,
             // e o Npgsql exige Utc pra timestamptz.
-            NextDueDate = DateTime.SpecifyKind(dto.NextDueDate, DateTimeKind.Utc)
+            NextDueDate = DateTime.SpecifyKind(dto.NextDueDate, DateTimeKind.Utc),
+            DueDay = dto.NextDueDate.Day
         };
 
         if (card is not null)
             card.UsedLimit += remainingCommitted;
-        if (account is not null)
+        if (account is { PolpAccountId: null })
             account.UsedLimit = (account.UsedLimit ?? 0) + remainingCommitted;
 
         db.Installments.Add(installment);
@@ -112,7 +113,7 @@ public class InstallmentsController(AppDbContext db) : ApiControllerBase
 
         if (installment.CreditCard is not null)
             installment.CreditCard.UsedLimit = Math.Max(0, installment.CreditCard.UsedLimit - remainingCommitted);
-        if (installment.BankAccount is { UsedLimit: not null } account)
+        if (installment.BankAccount is { UsedLimit: not null, PolpAccountId: null } account)
             account.UsedLimit = Math.Max(0, account.UsedLimit.Value - remainingCommitted);
 
         db.Installments.Remove(installment);

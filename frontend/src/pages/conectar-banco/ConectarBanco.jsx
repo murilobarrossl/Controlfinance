@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import Button from "../../components/ui/Button/Button.jsx";
 import { ShieldIcon, SyncIcon } from "../../components/ui/icons/FeatureIcons.jsx";
@@ -31,8 +31,16 @@ export default function ConnectBankPage() {
   const [connectingId, setConnectingId] = useState(null);
   const [connectingStage, setConnectingStage] = useState(null); // "creating" | "waiting"
   const [error, setError] = useState("");
-  // CPF/CNPJ só vive neste estado, durante a conexão: vai pra Polp na criação da integração e é
-  // apagado em seguida. Não é guardado no navegador nem no backend.
+  const cancelledRef = useRef(false);
+
+  useEffect(() => {
+    cancelledRef.current = false;
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, []);
+  // CPF/CNPJ só vive neste estado, durante a conexão: vai pra Polp na criação da integração e some
+  // quando a tela é desmontada. Não é guardado no navegador nem no backend.
   const [document, setDocument] = useState("");
   const [noticeAccepted, setNoticeAccepted] = useState(false);
 
@@ -108,7 +116,6 @@ export default function ConnectBankPage() {
 
     try {
       const data = await createIntegration(connectorId, document.replace(/\D/g, ""), BANK_CONNECTION_NOTICE_VERSION);
-      setDocument("");
       if (data?.urlToAuthenticate) {
         await openAuthAndWait(data.integrationId, data.urlToAuthenticate, authWindow);
       } else {
@@ -126,12 +133,18 @@ export default function ConnectBankPage() {
   async function pollForAuthUrl(integrationId, authWindow) {
     setConnectingStage("waiting");
 
-    for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS && !cancelledRef.current; attempt++) {
       await wait(POLL_INTERVAL_MS);
       const status = await getIntegrationStatus(integrationId);
 
       if (status?.urlToAuthenticate) {
         await openAuthAndWait(integrationId, status.urlToAuthenticate, authWindow);
+        return;
+      }
+
+      if (status?.status === "syncing" || status?.status === "active") {
+        authWindow.close();
+        await watchAuthorised(integrationId);
         return;
       }
 
@@ -159,9 +172,16 @@ export default function ConnectBankPage() {
     setPendingIntegrationId(integrationId);
     authWindow.location.href = authUrl;
     authWindow.focus();
+    await watchAuthorised(integrationId);
+  }
+
+  async function watchAuthorised(integrationId) {
+    setPendingIntegrationId(integrationId);
     setConnectingStage("waiting");
 
-    const result = await watchPolpConnection(integrationId);
+    const result = await watchPolpConnection(integrationId, { isCancelled: () => cancelledRef.current });
+
+    if (cancelledRef.current) return;
 
     if (result === "active") {
       navigate("/dashboard");

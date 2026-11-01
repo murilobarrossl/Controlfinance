@@ -33,15 +33,20 @@ public static class CreditCardSummaryBuilder
             .GroupBy(p => p.PolpIntegrationId)
             .ToDictionary(g => g.Key, g => g.First());
 
+        var cardAccountIds = cardAccounts.Select(a => a.Id).ToList();
+        var installmentsByAccount = (await db.Installments
+                .Include(i => i.BankAccount)
+                .Where(i => i.BankAccountId != null && cardAccountIds.Contains(i.BankAccountId.Value))
+                .ToListAsync(ct))
+            .GroupBy(i => i.BankAccountId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var result = new List<RecognizedCardDto>();
 
         foreach (var account in cardAccounts)
         {
             var connection = account.PolpIntegrationId is Guid consentId ? connections.GetValueOrDefault(consentId) : null;
-            var installments = await db.Installments
-                .Include(i => i.BankAccount)
-                .Where(i => i.BankAccountId == account.Id)
-                .ToListAsync(ct);
+            var installments = installmentsByAccount.GetValueOrDefault(account.Id) ?? [];
             var activeInstallments = await InstallmentProgress.ReconcileAsync(db, installments, ct);
             var installmentDtos = activeInstallments.OrderBy(i => i.NextDueDate).Select(InstallmentDto.FromEntity).ToList();
 
@@ -77,10 +82,10 @@ public static class CreditCardSummaryBuilder
 
             // próximo vencimento da fatura: clampa pro último dia válido do mês (ex.: DueDay=31
             // em fevereiro derrubaria o dashboard inteiro com ArgumentOutOfRangeException).
-            var today = DateTime.UtcNow;
+            var today = BrazilClock.Today;
             var safeDueDay = Math.Min(card.DueDay, DateTime.DaysInMonth(today.Year, today.Month));
             var dueDate = new DateTime(today.Year, today.Month, safeDueDay, 0, 0, 0, DateTimeKind.Utc);
-            if (dueDate < today) dueDate = dueDate.AddMonths(1);
+            if (dueDate < today.Date) dueDate = dueDate.AddMonths(1);
 
             result.Add(new RecognizedCardDto(
                 card.Id,
