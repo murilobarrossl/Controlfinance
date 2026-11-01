@@ -69,6 +69,12 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
 
         var accounts = await SyncAccountsAndCardsAsync(local, userId, null, ct);
 
+        // O consentimento já chega AUTHORISED/SUCCESS antes de a Polp terminar de gerar as contas
+        // (no sandbox, ~2s depois): lista vazia aqui não é "banco sem contas", é cedo demais.
+        // Marcar como sincronizado travaria a conexão sem nenhuma conta para sempre.
+        if (accounts.Count == 0)
+            return 0;
+
         foreach (var card in accounts.Where(CreditCardAccountDetector.LooksLikeCreditCard))
             await SyncBillsAsync(card, null, ct);
 

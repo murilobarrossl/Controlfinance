@@ -181,6 +181,8 @@ public class PolpController(
         });
     }
 
+    private static readonly TimeSpan BackfillResumeWindow = TimeSpan.FromMinutes(5);
+
     [HttpGet("integrations")]
     public async Task<IActionResult> GetIntegrations(CancellationToken ct)
     {
@@ -197,7 +199,17 @@ public class PolpController(
         // vez em vez de uma query por conta.
         var localByRemoteId = await db.PolpIntegrations
             .Where(p => p.UserId == UserId)
-            .ToDictionaryAsync(p => p.PolpIntegrationId, p => new { p.Id, p.LastSyncedAt, p.ExecutionStatus }, ct);
+            .ToDictionaryAsync(p => p.PolpIntegrationId, p => new { p.Id, p.LastSyncedAt, p.ExecutionStatus, p.Status, p.SyncedLocally }, ct);
+
+        // Conexão autorizada que nunca chegou a importar nada (backfill caiu antes de a Polp gerar
+        // as contas, ou a API reiniciou no meio): retoma aqui, no máximo uma vez por janela.
+        foreach (var pending in localByRemoteId.Values.Where(p => p.Status == "AUTHORISED" && !p.SyncedLocally))
+        {
+            var retryKey = $"polp:backfill-retry:{pending.Id}";
+            if (cache.TryGetValue(retryKey, out _)) continue;
+            cache.Set(retryKey, true, BackfillResumeWindow);
+            QueueBackgroundSync(pending.Id, UserId);
+        }
 
         var result = accounts.Select(a =>
         {
@@ -371,6 +383,11 @@ public class PolpController(
     // e usá-lo depois disso numa Task solta derrubaria com ObjectDisposedException.
     // CancellationToken.None de propósito: a requisição que disparou isso já terminou (e
     // cancelaria o token dela), mas o sync em si deve seguir até o fim mesmo assim.
+    // Sem webhook garantido (ambiente local, ou o aviso se perde), o backfill não pode depender de
+    // a Polp já ter gerado as contas no primeiro instante: tenta de novo algumas vezes.
+    private static readonly TimeSpan[] BackfillRetryDelays =
+        [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30)];
+
     private void QueueBackgroundSync(Guid integrationId, Guid userId)
     {
         _ = Task.Run(async () =>
@@ -385,9 +402,18 @@ public class PolpController(
                     .FirstOrDefaultAsync(p => p.Id == integrationId && p.UserId == userId);
                 if (local is null) return;
 
-                await PolpSyncService.SyncOneWithLockAsync(
-                    () => syncService.SyncOneAsync(local, userId, CancellationToken.None),
-                    integrationId, CancellationToken.None);
+                for (var attempt = 0; ; attempt++)
+                {
+                    var synced = await PolpSyncService.SyncOneWithLockAsync(async () =>
+                    {
+                        await scopedDb.Entry(local).ReloadAsync();
+                        if (local.SyncedLocally) return 1;
+                        return await syncService.SyncOneAsync(local, userId, CancellationToken.None);
+                    }, integrationId, CancellationToken.None);
+
+                    if (synced != 0 || attempt == BackfillRetryDelays.Length) return;
+                    await Task.Delay(BackfillRetryDelays[attempt]);
+                }
             }
             catch (Exception ex)
             {

@@ -4,7 +4,7 @@ import Button from "../../components/ui/Button/Button.jsx";
 import { ShieldIcon, SyncIcon } from "../../components/ui/icons/FeatureIcons.jsx";
 import { EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
 import { getConnectors, createIntegration, getIntegrationStatus } from "../../api/polp.js";
-import { groupConnectorsByType } from "../../utils/bankSorting.js";
+import { filterConnectorsByName, groupConnectorsByType } from "../../utils/bankSorting.js";
 import { applyMask, getCpfCnpjMask, CNPJ_MASK } from "../../utils/masks.js";
 import { BANK_CONNECTION_NOTICE_VERSION } from "../../legal/versions.js";
 import { setPendingIntegrationId, watchPolpConnection, wait } from "../../services/polpConnection.js";
@@ -27,6 +27,7 @@ export default function ConnectBankPage() {
   const [step, setStep] = useState("intro"); // "intro" | "choosing"
   const [connectors, setConnectors] = useState([]);
   const [personType, setPersonType] = useState("personal"); // "personal" | "business"
+  const [search, setSearch] = useState("");
   const [loadingConnectors, setLoadingConnectors] = useState(false);
   const [connectingId, setConnectingId] = useState(null);
   const [connectingStage, setConnectingStage] = useState(null); // "creating" | "waiting"
@@ -49,7 +50,10 @@ export default function ConnectBankPage() {
     [connectors]
   );
 
-  const visibleConnectors = personType === "personal" ? personal : business;
+  const visibleConnectors = useMemo(
+    () => filterConnectorsByName(personType === "personal" ? personal : business, search),
+    [personType, personal, business, search]
+  );
 
   function handleDocumentChange(e) {
     const digits = e.target.value.replace(/\D/g, "").slice(0, 14);
@@ -69,6 +73,7 @@ export default function ConnectBankPage() {
       const data = await getConnectors();
       const list = Array.isArray(data) ? data : data?.data ?? [];
       setConnectors(list);
+      setPersonType(digits.length === 14 ? "business" : "personal");
       setStep("choosing");
     } catch (err) {
       setError(err.message || "Não foi possível carregar os bancos disponíveis.");
@@ -326,45 +331,59 @@ export default function ConnectBankPage() {
               </button>
             </div>
 
-            {visibleConnectors.length === 0 ? (
-              <p className="connect-bank__empty">Nenhum banco disponível nessa categoria.</p>
-            ) : (
-              <ul className="connect-bank__connector-list">
-                {visibleConnectors.map((connector) => {
-                  const logoUrl = connector.logoUrl;
-                  const rawColor = connector.color || "3a3a3a";
-                  const stripeColor = rawColor.startsWith("#") ? rawColor : `#${rawColor}`;
+            <input
+              type="search"
+              className="connect-bank__search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Pesquisar banco"
+              aria-label="Pesquisar banco"
+              autoComplete="off"
+            />
 
-                  return (
-                    <li key={connector.id}>
-                      <button
-                        type="button"
-                        className="connect-bank__connector"
-                        onClick={() => handleSelectConnector(connector.id)}
-                        disabled={connectingId !== null}
-                      >
-                        <span
-                          className="connect-bank__connector-stripe"
-                          style={{ backgroundColor: stripeColor }}
-                        />
-                        {logoUrl && (
-                          <img src={logoUrl} alt="" className="connect-bank__connector-icon" referrerPolicy="no-referrer" />
-                        )}
-                        <span className="connect-bank__connector-name">{connector.name}</span>
-                        {connectingId === connector.id && (
-                          <span className="connect-bank__connector-status">
-                            <span className="connect-bank__spinner" />
-                            {connectingStage === "waiting"
-                              ? "Aguardando confirmação do banco..."
-                              : "Conectando..."}
-                          </span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            <div className="connect-bank__connector-panel">
+              {visibleConnectors.length === 0 ? (
+                <p className="connect-bank__empty">
+                  {search.trim() ? "Nenhum banco encontrado com esse nome." : "Nenhum banco disponível nessa categoria."}
+                </p>
+              ) : (
+                <ul className="connect-bank__connector-list">
+                  {visibleConnectors.map((connector) => {
+                    const logoUrl = connector.logoUrl;
+                    const rawColor = connector.color || "3a3a3a";
+                    const stripeColor = rawColor.startsWith("#") ? rawColor : `#${rawColor}`;
+
+                    return (
+                      <li key={connector.id}>
+                        <button
+                          type="button"
+                          className="connect-bank__connector"
+                          onClick={() => handleSelectConnector(connector.id)}
+                          disabled={connectingId !== null}
+                        >
+                          <span
+                            className="connect-bank__connector-stripe"
+                            style={{ backgroundColor: stripeColor }}
+                          />
+                          {logoUrl && (
+                            <img src={logoUrl} alt="" className="connect-bank__connector-icon" referrerPolicy="no-referrer" />
+                          )}
+                          <span className="connect-bank__connector-name">{connector.name}</span>
+                          {connectingId === connector.id && (
+                            <span className="connect-bank__connector-status">
+                              <span className="connect-bank__spinner" />
+                              {connectingStage === "waiting"
+                                ? "Aguardando confirmação do banco..."
+                                : "Conectando..."}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           </>
         )}
 

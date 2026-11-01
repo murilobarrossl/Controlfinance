@@ -13,19 +13,33 @@ export default function CreditCardVisual({ card, cardholderName, onClick, onSetP
   const hasLimit = card.creditLimit != null && card.creditLimit > 0;
   const usagePercent = hasLimit && card.usedLimit != null ? Math.min(100, (card.usedLimit / card.creditLimit) * 100) : null;
   const FaceTag = onClick ? "button" : "div";
-  const faceStyle = useMemo(() => {
-    const gradient = getCardGradient({
-      name: card.name,
-      productType: card.productType,
-      institutionColor: card.institutionColor,
-    });
-    return {
-      "--card-from": gradient.from,
-      "--card-to": gradient.to,
+  const gradient = useMemo(
+    () =>
+      getCardGradient({
+        name: card.name,
+        productType: card.productType,
+        institutionColor: card.institutionColor,
+      }),
+    [card.name, card.productType, card.institutionColor],
+  );
+  const faceStyle = useMemo(
+    () => ({
+      "--card-light": gradient.light,
+      "--card-base": gradient.base,
+      "--card-dark": gradient.dark,
       "--card-text": gradient.text,
       "--card-text-muted": gradient.textMuted,
-    };
-  }, [card.name, card.productType, card.institutionColor]);
+      "--card-text-shadow-large": gradient.textShadowLarge,
+      "--card-text-shadow-small": gradient.textShadowSmall,
+      "--card-gloss": gradient.gloss,
+      "--card-edge": gradient.edge,
+      "--card-sheen": gradient.sheen,
+      "--card-shade": gradient.shade,
+      "--card-footer": gradient.footer,
+      "--card-noise": `var(--card-noise-${gradient.noise})`,
+    }),
+    [gradient],
+  );
 
   return (
     <div className="credit-card-visual">
@@ -36,7 +50,7 @@ export default function CreditCardVisual({ card, cardholderName, onClick, onSetP
         onClick={onClick}
       >
         <div className="credit-card-visual__top">
-          <span className="credit-card-visual__chip" aria-hidden="true" />
+          <span className={`credit-card-visual__chip credit-card-visual__chip--${gradient.chip}`} aria-hidden="true" />
           <div className="credit-card-visual__top-right">
             <span className="credit-card-visual__brand">
               {card.brand || (card.isSynced ? "Sincronizado via Polp" : "Cartão de crédito")}
