@@ -11,7 +11,7 @@ public class CreditCardSummaryTests
     {
         t.User.PrimaryCardId = primary;
         await t.Db.SaveChangesAsync();
-        return await CreditCardSummaryBuilder.BuildRecognizedListAsync(t.Db, t.User.Id);
+        return await CreditCardSummaryBuilder.BuildRecognizedListAsync(t.Db, t.User.Id, Dates.Today);
     }
 
     [Fact]

@@ -12,15 +12,14 @@ namespace ControlFinance.API.Services;
 public static class InstallmentProgress
 {
     public static async Task<List<Installment>> ReconcileAsync(
-        AppDbContext db, List<Installment> installments, CancellationToken ct = default)
+        AppDbContext db, List<Installment> installments, DateTime today, CancellationToken ct = default)
     {
-        var now = BrazilClock.Today;
         var stillActive = new List<Installment>();
         var changed = false;
 
         foreach (var installment in installments)
         {
-            var elapsed = MonthsPassed(installment.NextDueDate, installment.DueDay, now);
+            var elapsed = MonthsPassed(installment.NextDueDate, installment.DueDay, today);
             if (elapsed == 0)
             {
                 stillActive.Add(installment);

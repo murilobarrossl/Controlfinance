@@ -51,6 +51,8 @@ builder.Services.AddScoped<SessionValidator>();
 builder.Services.AddScoped<AccessLogService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 builder.Services.AddSingleton<RateLimitService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IJobLock, PostgresJobLock>();
 builder.Services.AddHttpClient<EmailService>();
 builder.Services.AddHostedService<ScheduledEmailService>();
 builder.Services.AddHostedService<PendingDisconnectRetryService>();

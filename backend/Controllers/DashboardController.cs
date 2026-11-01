@@ -27,8 +27,8 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
         var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
 
-        var now = BrazilClock.Now;
-        var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var today = await UserTodayAsync(db, ct);
+        var startOfMonth = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var endOfMonth = startOfMonth.AddMonths(1);
 
         var monthlyTransactions = await db.Transactions
@@ -70,7 +70,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             .Take(100)
             .ToListAsync();
 
-        var pending = pendingEntities.Select(t => TransactionDto.FromEntity(t, ownerName)).ToList();
+        var pending = pendingEntities.Select(t => TransactionDto.FromEntity(t, today, ownerName)).ToList();
 
         var expensesByCategory = nonTransferMonthly
             .Where(t => t.Type == TransactionType.Expense && t.CategoryId.HasValue)
@@ -100,7 +100,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
         // cai pro cartão manual mais antigo se não houver nenhuma conta reconhecida. Mesma lista
         // que CreditCardsController.GetSummary usa pra listar todos — aqui pega o marcado como
         // principal (escolhido pelo usuário, ou o primeiro da lista).
-        var recognizedCards = await CreditCardSummaryBuilder.BuildRecognizedListAsync(db, UserId, ct);
+        var recognizedCards = await CreditCardSummaryBuilder.BuildRecognizedListAsync(db, UserId, today, ct);
         var cardDto = recognizedCards.FirstOrDefault(c => c.IsPrimary);
 
         var summary = new DashboardSummaryDto(

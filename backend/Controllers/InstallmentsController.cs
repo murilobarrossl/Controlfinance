@@ -27,7 +27,7 @@ public class InstallmentsController(AppDbContext db) : ApiControllerBase
             .OrderBy(i => i.NextDueDate)
             .ToListAsync();
 
-        var active = await InstallmentProgress.ReconcileAsync(db, installments);
+        var active = await InstallmentProgress.ReconcileAsync(db, installments, await UserTodayAsync(db));
 
         return Ok(active.OrderBy(i => i.NextDueDate).Select(InstallmentDto.FromEntity));
     }

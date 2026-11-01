@@ -9,7 +9,7 @@ public class InstallmentProgressTests
 {
     private static async Task<List<Installment>> Reconcile(TestDb t) =>
         await InstallmentProgress.ReconcileAsync(t.Db,
-            await t.Db.Installments.Include(i => i.CreditCard).Include(i => i.BankAccount).ToListAsync());
+            await t.Db.Installments.Include(i => i.CreditCard).Include(i => i.BankAccount).ToListAsync(), Dates.Today);
 
     [Fact]
     public async Task Cartao12x100_criado_na_1a_parcela_apos_5_meses_avanca_para_6a_e_usado_cai_de_1200_para_700()

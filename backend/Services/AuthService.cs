@@ -100,6 +100,7 @@ public class AuthService : IAuthService
             DocumentHash = documentHash,
             DocumentType = DocumentTypes.FromDigits(cleanDocument),
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+            TimeZone = UserClock.Normalize(dto.TimeZone),
         };
 
         _db.Users.Add(user);
@@ -156,10 +157,15 @@ public class AuthService : IAuthService
         // aproveita pra regravar o hash com a chave de busca ativa (rotação gradual, já que o
         // documento não é guardado e não dá pra recalcular em lote).
         if (identifierHashCandidates.Contains(user.DocumentHash) && !_encryption.IsActiveLookupHash(user.DocumentHash))
-        {
             user.DocumentHash = _encryption.ComputeLookupHash(cleanIdentifierDocument);
+
+        // Login sem fuso (Swagger, cliente de API) ou com fuso inválido não derruba o que já
+        // estava gravado para o padrão.
+        if (UserClock.IsValid(dto.TimeZone) && dto.TimeZone != user.TimeZone)
+            user.TimeZone = dto.TimeZone!;
+
+        if (_db.ChangeTracker.HasChanges())
             await _db.SaveChangesAsync();
-        }
 
         var token = _tokenService.GenerateToken(user);
         return (true, string.Empty, new AuthResult(user, token));

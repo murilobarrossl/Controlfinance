@@ -1,5 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using ControlFinance.API.Data;
+using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ControlFinance.API.Controllers;
@@ -22,4 +24,10 @@ public abstract class ApiControllerBase : ControllerBase
 
         return userId;
     }
+
+    protected Task<DateTime> UserTodayAsync(AppDbContext db, CancellationToken ct = default) =>
+        UserClock.TodayForUserAsync(db, UserId, Clock, ct);
+
+    private TimeProvider Clock =>
+        HttpContext?.RequestServices?.GetService<TimeProvider>() ?? TimeProvider.System;
 }

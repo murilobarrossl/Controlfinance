@@ -69,6 +69,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasIndex(u => u.DocumentHash).IsUnique();
             e.Property(u => u.DocumentType).HasMaxLength(4);
             e.Property(u => u.DueRemindersEnabled).HasDefaultValue(true);
+            e.Property(u => u.TimeZone).IsRequired().HasMaxLength(64).HasDefaultValue(UserClock.DefaultTimeZoneId);
 
             e.Property(u => u.PasswordHash).IsRequired();
         });

@@ -154,7 +154,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
 }
 
 // Tenta de novo, de hora em hora, as exclusões na Polp que ficaram pendentes.
-public class PendingDisconnectRetryService(IServiceScopeFactory scopeFactory, ILogger<PendingDisconnectRetryService> logger) : BackgroundService
+public class PendingDisconnectRetryService(IServiceScopeFactory scopeFactory, IJobLock jobLock, ILogger<PendingDisconnectRetryService> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
 
@@ -164,9 +164,12 @@ public class PendingDisconnectRetryService(IServiceScopeFactory scopeFactory, IL
         {
             try
             {
-                using var scope = scopeFactory.CreateScope();
-                var service = scope.ServiceProvider.GetRequiredService<PolpDisconnectService>();
-                await service.RetryPendingAsync(stoppingToken);
+                await jobLock.RunExclusiveAsync(JobLockKeys.PendingDisconnectRetry, async () =>
+                {
+                    using var scope = scopeFactory.CreateScope();
+                    var service = scope.ServiceProvider.GetRequiredService<PolpDisconnectService>();
+                    await service.RetryPendingAsync(stoppingToken);
+                }, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

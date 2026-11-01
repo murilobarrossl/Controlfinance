@@ -10,37 +10,37 @@ public class StatusAndDatesTests
     [Fact]
     public void Pendente_com_vencimento_ontem_vira_Overdue()
     {
-        Assert.Equal("Overdue", TransactionDto.EffectiveStatus(TransactionStatus.Pending, Dates.Today.AddDays(-1)));
+        Assert.Equal("Overdue", TransactionDto.EffectiveStatus(TransactionStatus.Pending, Dates.Today.AddDays(-1), Dates.Today));
     }
 
     [Fact]
     public void Pendente_com_vencimento_hoje_a_meia_noite_utc_continua_Pending()
     {
-        Assert.Equal("Pending", TransactionDto.EffectiveStatus(TransactionStatus.Pending, Dates.Today));
+        Assert.Equal("Pending", TransactionDto.EffectiveStatus(TransactionStatus.Pending, Dates.Today, Dates.Today));
     }
 
     [Fact]
     public void Pendente_com_vencimento_hoje_as_23h59_continua_Pending()
     {
-        Assert.Equal("Pending", TransactionDto.EffectiveStatus(TransactionStatus.Pending, Dates.Today.AddHours(23).AddMinutes(59)));
+        Assert.Equal("Pending", TransactionDto.EffectiveStatus(TransactionStatus.Pending, Dates.Today.AddHours(23).AddMinutes(59), Dates.Today));
     }
 
     [Fact]
     public void Pendente_com_vencimento_amanha_continua_Pending()
     {
-        Assert.Equal("Pending", TransactionDto.EffectiveStatus(TransactionStatus.Pending, Dates.Today.AddDays(1)));
+        Assert.Equal("Pending", TransactionDto.EffectiveStatus(TransactionStatus.Pending, Dates.Today.AddDays(1), Dates.Today));
     }
 
     [Fact]
     public void Pago_com_vencimento_no_passado_continua_Paid()
     {
-        Assert.Equal("Paid", TransactionDto.EffectiveStatus(TransactionStatus.Paid, Dates.Today.AddDays(-400)));
+        Assert.Equal("Paid", TransactionDto.EffectiveStatus(TransactionStatus.Paid, Dates.Today.AddDays(-400), Dates.Today));
     }
 
     [Fact]
     public void Overdue_marcado_a_mao_com_vencimento_futuro_continua_Overdue()
     {
-        Assert.Equal("Overdue", TransactionDto.EffectiveStatus(TransactionStatus.Overdue, Dates.Today.AddDays(5)));
+        Assert.Equal("Overdue", TransactionDto.EffectiveStatus(TransactionStatus.Overdue, Dates.Today.AddDays(5), Dates.Today));
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class StatusAndDatesTests
     {
         var t = new Transaction { Name = "Luz", Status = TransactionStatus.Pending, Type = TransactionType.Expense, Amount = 10m, DueDate = Dates.Today.AddDays(-3) };
 
-        Assert.Equal("Overdue", TransactionDto.FromEntity(t).Status);
+        Assert.Equal("Overdue", TransactionDto.FromEntity(t, Dates.Today).Status);
     }
 
     [Fact]
@@ -116,14 +116,14 @@ public class BrazilDayBoundaryTests
     public void Pendente_que_vence_hoje_em_Brasilia_nunca_e_Overdue_mesmo_com_UTC_ja_no_dia_seguinte()
     {
         Assert.Equal("Pending", ControlFinance.API.DTOs.TransactionDto.EffectiveStatus(
-            ControlFinance.API.Models.TransactionStatus.Pending, Dates.Today));
+            ControlFinance.API.Models.TransactionStatus.Pending, Dates.Today, Dates.Today));
     }
 
     [Fact]
     public void Pendente_que_venceu_ontem_em_Brasilia_e_Overdue_mesmo_quando_UTC_ainda_e_o_mesmo_dia()
     {
         Assert.Equal("Overdue", ControlFinance.API.DTOs.TransactionDto.EffectiveStatus(
-            ControlFinance.API.Models.TransactionStatus.Pending, Dates.Today.AddDays(-1)));
+            ControlFinance.API.Models.TransactionStatus.Pending, Dates.Today.AddDays(-1), Dates.Today));
     }
 
     [Fact]
@@ -149,7 +149,7 @@ public class BrazilDayBoundaryTests
         var card = t.AddCard(5000m, 1200m);
         var installment = t.AddInstallment(card, null, 100m, 1, 12, Dates.Today);
 
-        await ControlFinance.API.Services.InstallmentProgress.ReconcileAsync(t.Db, [installment]);
+        await ControlFinance.API.Services.InstallmentProgress.ReconcileAsync(t.Db, [installment], Dates.Today);
 
         Assert.Equal(1, installment.CurrentInstallment);
         Assert.Equal(1200.00m, card.UsedLimit);
@@ -162,7 +162,7 @@ public class BrazilDayBoundaryTests
         var today = Dates.Today;
         t.AddCard(5000m, 0m, dueDay: today.Day);
 
-        var dto = Assert.Single(await ControlFinance.API.Services.CreditCardSummaryBuilder.BuildRecognizedListAsync(t.Db, t.User.Id));
+        var dto = Assert.Single(await ControlFinance.API.Services.CreditCardSummaryBuilder.BuildRecognizedListAsync(t.Db, t.User.Id, Dates.Today));
 
         Assert.Equal(new DateTime(today.Year, today.Month, today.Day), dto.InvoiceDueDate);
     }
@@ -175,7 +175,7 @@ public class BrazilDayBoundaryTests
         using var t = new TestDb();
         t.AddCard(5000m, 0m, dueDay: today.Day - 1);
 
-        var dto = Assert.Single(await ControlFinance.API.Services.CreditCardSummaryBuilder.BuildRecognizedListAsync(t.Db, t.User.Id));
+        var dto = Assert.Single(await ControlFinance.API.Services.CreditCardSummaryBuilder.BuildRecognizedListAsync(t.Db, t.User.Id, Dates.Today));
 
         Assert.Equal(new DateTime(today.Year, today.Month, today.Day - 1).AddMonths(1), dto.InvoiceDueDate);
     }
@@ -187,7 +187,7 @@ public class BrazilDayBoundaryTests
         var card = t.AddCard(1_000_000m, 200_000m);
         var installment = t.AddInstallment(card, null, 100m, current: 2, total: 2000, new DateTime(2024, 2, 29), dueDay: 31);
 
-        await ControlFinance.API.Services.InstallmentProgress.ReconcileAsync(t.Db, [installment]);
+        await ControlFinance.API.Services.InstallmentProgress.ReconcileAsync(t.Db, [installment], Dates.Today);
 
         var d = installment.NextDueDate;
         Assert.Equal(DateTime.DaysInMonth(d.Year, d.Month), d.Day);

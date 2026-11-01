@@ -18,7 +18,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? status, [FromQuery] string? type, [FromQuery] Guid? bankAccountId)
     {
-        var query = FilteredQuery(bankAccountId, status, type);
+        var today = await UserTodayAsync(db);
+        var query = FilteredQuery(bankAccountId, status, type, today);
 
         // Cap de segurança: Categorias/ReceitasDespesas hoje esperam a lista completa pra
         // agregar no cliente, então isso não pagina de verdade, só limita o pior caso (uma
@@ -29,12 +30,12 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         var result = await ProjectToDto(query.OrderByDescending(t => t.DueDate).Take(MaxResults)).ToListAsync();
 
         var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
-        result = WithComputedFields(result, ownerName);
+        result = WithComputedFields(result, ownerName, today);
 
         return Ok(result);
     }
 
-    private IQueryable<Transaction> FilteredQuery(Guid? bankAccountId, string? status, string? type)
+    private IQueryable<Transaction> FilteredQuery(Guid? bankAccountId, string? status, string? type, DateTime today)
     {
         var query = db.Transactions
             .Where(t => t.UserId == UserId)
@@ -46,7 +47,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         if (bankAccountId.HasValue)
             query = query.Where(t => t.BankAccountId == bankAccountId);
 
-        query = ApplyStatusFilter(query, status);
+        query = ApplyStatusFilter(query, status, today);
 
         if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, true, out var tp))
             query = query.Where(t => t.Type == tp);
@@ -54,12 +55,12 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         return query;
     }
 
-    private static List<TransactionDto> WithComputedFields(List<TransactionDto> items, string? ownerName) =>
+    private static List<TransactionDto> WithComputedFields(List<TransactionDto> items, string? ownerName, DateTime today) =>
         items
             .Select(t => t with
             {
                 IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName),
-                Status = t.Status == nameof(TransactionStatus.Pending) && t.DueDate.Date < BrazilClock.Today
+                Status = t.Status == nameof(TransactionStatus.Pending) && t.DueDate.Date < today
                     ? nameof(TransactionStatus.Overdue)
                     : t.Status,
             })
@@ -69,13 +70,12 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
     // banco, então o filtro por status precisa enxergar a mesma coisa, senão status=Overdue não
     // acha nada (nenhuma linha guarda literalmente Overdue a não ser quando o usuário seta à mão)
     // e status=Pending mostra até pendências que a tela já rotula como Atrasado.
-    private static IQueryable<Transaction> ApplyStatusFilter(IQueryable<Transaction> query, string? status)
+    private static IQueryable<Transaction> ApplyStatusFilter(IQueryable<Transaction> query, string? status, DateTime today)
     {
         if (string.IsNullOrEmpty(status) || !Enum.TryParse<TransactionStatus>(status, true, out var s))
             return query;
 
         // Por dia, não pelo instante exato: uma conta que vence hoje ainda é Pending, não Overdue.
-        var today = BrazilClock.Today;
         return s switch
         {
             TransactionStatus.Overdue => query.Where(t =>
@@ -105,7 +105,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         pageSize = Math.Clamp(pageSize, 1, 100);
         var desc = !string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
 
-        var query = FilteredQuery(bankAccountId, status, type);
+        var today = await UserTodayAsync(db);
+        var query = FilteredQuery(bankAccountId, status, type, today);
 
         // year/month chegam como inteiros (não como DateTime cru na query string) de propósito:
         // o model binder de DateTime da ASP.NET não garante Kind=Utc a partir de string, e essa
@@ -147,7 +148,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             if (!string.IsNullOrWhiteSpace(search))
                 all = all.Where(t => MatchesSearch(t.Name, search)).ToList();
             totalCount = all.Count;
-            all = WithComputedFields(all, ownerName);
+            all = WithComputedFields(all, ownerName, today);
             items = SortInMemory(all, sortBy, desc).Skip((page - 1) * pageSize).Take(pageSize).ToList();
         }
         else
@@ -155,7 +156,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             totalCount = await query.CountAsync();
             var ordered = ApplySort(query, sortBy, desc);
             items = await ProjectToDto(ordered.Skip((page - 1) * pageSize).Take(pageSize)).ToListAsync();
-            items = WithComputedFields(items, ownerName);
+            items = WithComputedFields(items, ownerName, today);
         }
 
         (totalIncome, totalExpense) = await SumTotalsAsync(query, search, ownerName);
@@ -184,7 +185,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync(ct);
 
-        var rows = FilteredQuery(bankAccountId, null, null)
+        var today = await UserTodayAsync(db, ct);
+        var rows = FilteredQuery(bankAccountId, null, null, today)
             .Where(t => t.DueDate >= start && t.DueDate < end)
             .OrderByDescending(t => t.DueDate)
             .ThenBy(t => t.Id)
@@ -302,7 +304,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync(ct);
 
-        var rows = ProjectToDto(FilteredQuery(bankAccountId, null, type)
+        var today = await UserTodayAsync(db, ct);
+        var rows = ProjectToDto(FilteredQuery(bankAccountId, null, type, today)
                 .Where(t => t.DueDate >= start && t.DueDate < end)
                 .OrderByDescending(t => t.DueDate)
                 .ThenBy(t => t.Id)
@@ -318,7 +321,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             items.Add(t);
         }
 
-        return Ok(WithComputedFields(items, ownerName));
+        return Ok(WithComputedFields(items, ownerName, today));
     }
 
     private static (DateTime Start, DateTime End, string? Error) ParseRange(string? from, string? to)
@@ -402,7 +405,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         db.Transactions.Add(transaction);
         await db.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetAll), new { id = transaction.Id }, TransactionDto.FromEntity(transaction));
+        return CreatedAtAction(nameof(GetAll), new { id = transaction.Id }, TransactionDto.FromEntity(transaction, await UserTodayAsync(db)));
     }
 
     [HttpPut("{id}")]
@@ -451,7 +454,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         transaction.IsFixed = dto.IsFixed;
         await db.SaveChangesAsync();
-        return Ok(TransactionDto.FromEntity(transaction));
+        return Ok(TransactionDto.FromEntity(transaction, await UserTodayAsync(db)));
     }
 
     // Endpoint dedicado só pra corrigir nome/categoria (ex.: categorização errada vinda da Polp).
@@ -476,7 +479,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         // Recarrega a categoria pro DTO de resposta refletir a mudança (o Include acima ainda
         // aponta pra categoria antiga depois de só trocar o CategoryId na entidade).
         await db.Entry(transaction).Reference(t => t.Category).LoadAsync();
-        return Ok(TransactionDto.FromEntity(transaction));
+        return Ok(TransactionDto.FromEntity(transaction, await UserTodayAsync(db)));
     }
 
     [HttpDelete("{id}")]

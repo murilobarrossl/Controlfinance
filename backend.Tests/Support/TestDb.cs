@@ -23,6 +23,7 @@ public sealed class TestDb : IDisposable
     public IEncryptionService Encryption { get; }
     public AppDbContext Db { get; }
     public User User { get; }
+    public TestClock Clock { get; } = new();
 
     public TestDb(string userName = "Maria Silva")
     {
@@ -47,6 +48,7 @@ public sealed class TestDb : IDisposable
             .AddSingleton<IMemoryCache>(new MemoryCache(new MemoryCacheOptions()))
             .AddSingleton(Db)
             .AddSingleton<SessionValidator>()
+            .AddSingleton<TimeProvider>(Clock)
             .BuildServiceProvider();
     }
 
@@ -132,6 +134,13 @@ public sealed class TestDb : IDisposable
         Db.Dispose();
         _connection.Dispose();
     }
+}
+
+public sealed class TestClock : TimeProvider
+{
+    public DateTimeOffset? UtcNow { get; set; }
+
+    public override DateTimeOffset GetUtcNow() => UtcNow ?? base.GetUtcNow();
 }
 
 public static class TestEncryption

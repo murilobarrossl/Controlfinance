@@ -526,6 +526,12 @@ namespace ControlFinance.API.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<DateOnly?>("LastDueReminderLocalDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("LastMonthlySummaryMonth")
+                        .HasColumnType("date");
+
                     b.Property<DateTime?>("LastMonthlySummarySentAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -543,6 +549,13 @@ namespace ControlFinance.API.Migrations
 
                     b.Property<Guid?>("PrimaryCardId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("America/Sao_Paulo");
 
                     b.Property<int>("TokenVersion")
                         .HasColumnType("integer");
