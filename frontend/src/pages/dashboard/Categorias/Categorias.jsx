@@ -12,7 +12,7 @@ import { getGoals } from "../../../utils/investmentStorage.js";
 import { getReserve } from "../../../utils/emergencyReserveStorage.js";
 import { calculateCutImpact } from "../../../utils/cutImpact.js";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
-import { resolveCategoryColor } from "../../../utils/categoryColors.js";
+import { donutSliceColors, resolveCategoryColor } from "../../../utils/categoryColors.js";
 import "./Categorias.css";
 
 const CUT_RATE_OPTIONS = [0.1, 0.2, 0.3, 0.5];
@@ -182,13 +182,18 @@ export default function Categorias() {
 
     const total = [...totals.values()].reduce((sum, e) => sum + e.value, 0);
 
-    return [...totals.values()]
+    const sorted = [...totals.values()]
       .map((e) => ({
         ...e,
         color: resolveCategoryColor(e.name, categories),
         percentage: total > 0 ? (e.value / total) * 100 : 0,
       }))
       .sort((a, b) => b.value - a.value);
+
+    // A cor da rosca vem da posição na ordenação (tons do laranja), então as barras da lista e o
+    // resumo usam a mesma cor em vez da cor cadastrada da categoria.
+    const shades = donutSliceColors(sorted);
+    return sorted.map((e, index) => ({ ...e, color: shades[index] }));
   }, [expenseTransactions, categories]);
 
   const totalExpense = useMemo(() => breakdown.reduce((sum, c) => sum + c.value, 0), [breakdown]);

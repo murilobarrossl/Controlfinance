@@ -240,6 +240,8 @@ export default function ConnectBankPage() {
             <label className="connect-bank__field">
               <span className="connect-bank__field-label">CPF/CNPJ do titular</span>
               <input
+                id="connect-bank-holder-document"
+                name="holderDocument"
                 type="text"
                 value={document}
                 onChange={handleDocumentChange}
