@@ -14,8 +14,8 @@ export const createIntegration = async (connectorId, document, consentVersion) =
 export const disconnectIntegration = async (localIntegrationId) =>
   apiFetch(`/polp/integrations/${localIntegrationId}`, { method: "DELETE" });
 
-export const getIntegrations = async () =>
-  apiFetch("/polp/integrations");
+export const getIntegrations = async ({ signal } = {}) =>
+  apiFetch("/polp/integrations", { signal });
 
 export const getIntegrationStatus = async (integrationId) =>
   apiFetch(`/polp/integrations/${integrationId}`);
@@ -28,6 +28,6 @@ export const syncAccountBalance = async (accountId) =>
     method: "POST",
   });
 
-export const getConnectors = async () =>
-  apiFetch("/polp/connectors");
+export const getConnectors = async ({ signal } = {}) =>
+  apiFetch("/polp/connectors", { signal });
 

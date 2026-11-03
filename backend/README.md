@@ -19,22 +19,12 @@
 
 ## Configuração
 
-1. **Clone/copie** a pasta `ControlFinance.API` para seu projeto.
+1. **Banco:** crie um banco PostgreSQL vazio e informe a conexão em `appsettings.Local.json`
+   (gitignorado) ou na variável `ConnectionStrings__DefaultConnection`.
 
-2. **Configure o banco** em `appsettings.json`:
-   ```json
-   "ConnectionStrings": {
-     "DefaultConnection": "Host=localhost;Port=5432;Database=controlfinance;Username=postgres;Password=SUA_SENHA"
-   }
-   ```
-
-3. **Configure a chave JWT** (mínimo 32 caracteres):
-   ```json
-   "JwtSettings": {
-     "SecretKey": "COLOQUE_UMA_CHAVE_FORTE_AQUI_COM_32_CHARS+"
-   }
-   ```
-   > ⚠️ Em produção, use variáveis de ambiente ou Azure Key Vault - nunca versione a chave real.
+2. **Segredos:** defina `JwtSettings:SecretKey` (mínimo 32 caracteres) e `Encryption:Key` em
+   `appsettings.Local.json` ou em variáveis de ambiente, nunca no `appsettings.json` versionado.
+   O passo a passo, com o JSON de exemplo e como gerar as chaves, está no `README.md` da raiz.
 
    Fora de Development a API **não sobe** se `ConnectionStrings:DefaultConnection`,
    `JwtSettings:SecretKey` ou `Encryption:Key` estiverem ausentes, forem placeholders ou tiverem
@@ -51,23 +41,19 @@
    Os dois segredos precisam ser diferentes entre si e das demais chaves. Respostas: `404` token
    errado, `401` assinatura ausente ou inválida, `503` signing secret não configurado.
 
-4. **Restaure os pacotes:**
+3. **Restaure os pacotes e rode a API** (as migrations são aplicadas automaticamente na
+   inicialização):
    ```bash
    dotnet restore
-   ```
-
-5. **Crie e aplique a migration inicial:**
-   ```bash
-   dotnet ef migrations add InitialCreate
-   dotnet ef database update
-   ```
-   > O `Program.cs` já chama `db.Database.Migrate()` automaticamente na inicialização em dev.
-
-6. **Rode a API:**
-   ```bash
    dotnet run
    ```
-   Acesse o Swagger em: `http://localhost:5000/swagger`
+   A API usa o profile `http` de `Properties/launchSettings.json` (`http://localhost:5080`, ambiente
+   Development). Swagger: `http://localhost:5080/swagger`.
+
+4. **Migrations** (só ao alterar Models ou `AppDbContext`):
+   ```bash
+   dotnet ef migrations add NomeDaMigration
+   ```
 
 ---
 
@@ -129,19 +115,15 @@ API, `Authorization: Bearer {token}` continua aceito e dispensa o cabeçalho de 
 ## Estrutura de pastas
 
 ```
-ControlFinance.API/
-├── Controllers/
-│   └── AuthController.cs       # Rotas POST /api/auth/register e /login
-├── DTOs/
-│   └── AuthDtos.cs             # Request e Response DTOs
-├── Models/
-│   └── User.cs                 # Entidade do banco
-├── Data/
-│   └── AppDbContext.cs         # EF Core DbContext
-├── Services/
-│   ├── AuthService.cs          # Lógica de negócio
-│   └── TokenService.cs         # Geração de JWT
-├── appsettings.json
+backend/
+├── Controllers/    # Endpoints (herdam de ApiControllerBase)
+├── DTOs/           # Requests e responses
+├── Data/           # AppDbContext (EF Core, conversores de criptografia)
+├── Migrations/     # Migrations do EF Core
+├── Models/         # Entidades
+├── Properties/     # launchSettings.json (porta 5080, Development)
+├── Services/       # Regras de negócio, Polp, criptografia, e-mail
+├── appsettings.json              # só placeholders
 ├── Program.cs
 └── ControlFinance.API.csproj
 ```

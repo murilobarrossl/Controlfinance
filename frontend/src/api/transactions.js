@@ -1,12 +1,5 @@
 import { apiFetch } from "./client.js";
 
-// Categorias, Relatórios e Receitas x Despesas buscam a mesma lista completa de transações
-// de forma independente uma da outra e a filtram no cliente por mês. Sem esse cache, trocar
-// de aba refaz a mesma requisição de rede. TTL curto porque os dados mudam com frequência
-// (CRUD manual, sync do Polp) e ficam invalidados nas mutações abaixo.
-const CACHE_TTL_MS = 15_000;
-const cache = new Map(); // query string -> { promise, expiresAt }
-
 const buildQuery = ({ status, type, bankAccountId } = {}) => {
   const params = new URLSearchParams();
   if (status) params.set("status", status);
@@ -15,23 +8,12 @@ const buildQuery = ({ status, type, bankAccountId } = {}) => {
   return params.toString();
 };
 
-export const getTransactions = async (filters = {}) => {
+const transactionsPath = (filters) => {
   const query = buildQuery(filters);
-  const cached = cache.get(query);
-  if (cached && cached.expiresAt > Date.now()) return cached.promise;
-
-  const promise = apiFetch(`/transactions${query ? `?${query}` : ""}`);
-  cache.set(query, { promise, expiresAt: Date.now() + CACHE_TTL_MS });
-
-  promise.catch(() => cache.delete(query));
-  return promise;
+  return `/transactions${query ? `?${query}` : ""}`;
 };
 
-const invalidateCache = () => cache.clear();
-
-// Também chamado ao sair, desconectar um banco ou excluir a conta: sem isso, até 15 s depois o
-// cache em memória ainda podia devolver o extrato de uma conexão já apagada (ou de outra sessão).
-export const clearTransactionsCache = invalidateCache;
+export const getTransactions = async (filters = {}, { signal } = {}) => apiFetch(transactionsPath(filters), { signal });
 
 const buildReportQuery = ({ status, type, search, bankAccountId, year, month, sortBy, sortDir, page, pageSize } = {}) => {
   const params = new URLSearchParams();
@@ -48,60 +30,34 @@ const buildReportQuery = ({ status, type, search, bankAccountId, year, month, so
   return params.toString();
 };
 
-// Paginado/filtrado/ordenado no backend, ao contrário de getTransactions acima (que traz tudo
-// pra Categorias/ReceitasDespesas agregarem no cliente). Usa o mesmo cache do resto do arquivo,
-// então as mutações abaixo (create/update/delete/setFixed) já invalidam essas entradas também.
-export const getTransactionsReport = async (filters = {}) => {
+const reportPath = (filters) => {
   const query = buildReportQuery(filters);
-  const cacheKey = `report:${query}`;
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.promise;
-
-  const promise = apiFetch(`/transactions/report${query ? `?${query}` : ""}`);
-  cache.set(cacheKey, { promise, expiresAt: Date.now() + CACHE_TTL_MS });
-
-  promise.catch(() => cache.delete(cacheKey));
-  return promise;
+  return `/transactions/report${query ? `?${query}` : ""}`;
 };
 
-export const createTransaction = async (payload) => {
-  const result = await apiFetch("/transactions", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  invalidateCache();
-  return result;
-};
-
-export const updateTransaction = async (id, payload) => {
-  const result = await apiFetch(`/transactions/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-  invalidateCache();
-  return result;
-};
-
-export const deleteTransaction = async (id) => {
-  const result = await apiFetch(`/transactions/${id}`, { method: "DELETE" });
-  invalidateCache();
-  return result;
-};
-
-export const setTransactionFixed = async (id, isFixed) => {
-  const result = await apiFetch(`/transactions/${id}/fixed`, {
-    method: "PUT",
-    body: JSON.stringify({ isFixed }),
-  });
-  invalidateCache();
-  return result;
-};
+export const getTransactionsReport = async (filters = {}, { signal } = {}) => apiFetch(reportPath(filters), { signal });
 
 export const setTransactionDetails = async (id, { name, categoryId }) => {
-  const result = await apiFetch(`/transactions/${id}/details`, {
+  return apiFetch(`/transactions/${id}/details`, {
     method: "PUT",
     body: JSON.stringify({ name, categoryId: categoryId || null }),
   });
-  invalidateCache();
-  return result;
+};
+
+export const getTransactionAggregates = async ({ bankAccountId, from, to }, { signal } = {}) => {
+  const params = new URLSearchParams({ from, to });
+  if (bankAccountId) params.set("bankAccountId", bankAccountId);
+  return apiFetch(`/transactions/aggregates?${params.toString()}`, { signal });
+};
+
+export const getTransactionDetails = async (
+  { bankAccountId, from, to, type, category, establishment },
+  { signal } = {}
+) => {
+  const params = new URLSearchParams({ from, to });
+  if (bankAccountId) params.set("bankAccountId", bankAccountId);
+  if (type) params.set("type", type);
+  if (category) params.set("category", category);
+  if (establishment) params.set("establishment", establishment);
+  return apiFetch(`/transactions/details?${params.toString()}`, { signal });
 };

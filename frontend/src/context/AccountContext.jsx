@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { getIntegrations, getConnectors, disconnectIntegration } from "../api/polp.js";
 import { deleteBankAccount } from "../api/bankAccounts.js";
-import { clearTransactionsCache } from "../api/transactions.js";
+import { isAbortError } from "../api/client.js";
 import { getCurrentUserId } from "../utils/authToken.js";
 
 const AccountContext = createContext(null);
@@ -20,6 +20,7 @@ function storageKey() {
 export function AccountProvider({ children }) {
   const [accounts, setAccounts] = useState([]);
   const [connectors, setConnectors] = useState([]);
+  const [accountsStatus, setAccountsStatus] = useState("loading");
   const [selectedAccountId, setSelectedAccountIdState] = useState(() => {
     try {
       return localStorage.getItem(storageKey()) || null;
@@ -35,7 +36,7 @@ export function AccountProvider({ children }) {
   // seletor fecha ao confirmar, então o resultado não pode ficar só lá dentro).
   const [notice, setNotice] = useState(null);
 
-  function setSelectedAccountId(id) {
+  const setSelectedAccountId = useCallback((id) => {
     setSelectedAccountIdState(id);
     try {
       if (id) localStorage.setItem(storageKey(), id);
@@ -43,11 +44,30 @@ export function AccountProvider({ children }) {
     } catch {
       // localStorage indisponível, segue só em memória nesta sessão
     }
-  }
+  }, []);
 
   useEffect(() => {
-    getIntegrations().then(setAccounts).catch(() => {});
-    getConnectors().then(setConnectors).catch(() => {});
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    Promise.all([
+      getIntegrations({ signal }),
+      getConnectors({ signal }).catch((err) => {
+        if (isAbortError(err)) throw err;
+        return [];
+      }),
+    ])
+      .then(([accountsData, connectorsData]) => {
+        setAccounts(accountsData);
+        setConnectors(connectorsData);
+        setAccountsStatus("ready");
+      })
+      .catch((err) => {
+        if (isAbortError(err)) return;
+        setAccountsStatus("error");
+      });
+
+    return () => controller.abort();
   }, [dataRefreshKey]);
 
   // Se a conta selecionada foi desconectada (ou o id salvo no localStorage não existe mais),
@@ -62,16 +82,17 @@ export function AccountProvider({ children }) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedAccountId(null);
     }
-  }, [accounts, selectedAccountId]);
+  }, [accounts, selectedAccountId, setSelectedAccountId]);
 
-  function bumpDataRefresh() {
+  const bumpDataRefresh = useCallback(() => {
+    setAccountsStatus("loading");
     setDataRefreshKey((key) => key + 1);
-  }
+  }, []);
 
   // Desconecta um banco inteiro (conta corrente + cartão da mesma conexão). O aviso diz o que
   // realmente aconteceu do lado da Polp: "pedido aceito" ou "pendente", nunca "excluído" sem
   // confirmação do fornecedor.
-  async function disconnectConnection(localIntegrationId) {
+  const disconnectConnection = useCallback(async (localIntegrationId) => {
     try {
       const result = await disconnectIntegration(localIntegrationId);
       setNotice({
@@ -84,23 +105,23 @@ export function AccountProvider({ children }) {
     } catch (err) {
       setNotice({ tone: "error", text: err.message || "Não foi possível desconectar o banco. Tente novamente." });
     }
-    clearTransactionsCache();
     setSelectedAccountId(null);
     bumpDataRefresh();
-  }
+  }, [setSelectedAccountId, bumpDataRefresh]);
 
   // Só pra contas cadastradas manualmente: apaga a conta, as transações e os parcelamentos dela.
-  async function removeManualAccount(accountId) {
+  const removeManualAccount = useCallback(async (accountId) => {
     try {
       await deleteBankAccount(accountId);
       setNotice({ tone: "success", text: "Conta removida, junto com os lançamentos dela." });
     } catch (err) {
       setNotice({ tone: "error", text: err.message || "Não foi possível remover a conta." });
     }
-    clearTransactionsCache();
     if (selectedAccountId === accountId) setSelectedAccountId(null);
     bumpDataRefresh();
-  }
+  }, [selectedAccountId, setSelectedAccountId, bumpDataRefresh]);
+
+  const dismissNotice = useCallback(() => setNotice(null), []);
 
   // selectedAccountId pode ser null (usuário nunca escolheu, ou a conta escolhida sumiu). Nesse
   // caso o resumo do dashboard (GetSummary) já sabe escolher uma conta padrão sozinho no backend,
@@ -110,25 +131,25 @@ export function AccountProvider({ children }) {
   // mostra como "ativo" (accounts[0] como fallback, igual o AccountSwitcher faz internamente).
   const effectiveAccountId = selectedAccountId ?? accounts[0]?.id ?? null;
 
-  return (
-    <AccountContext.Provider
-      value={{
-        accounts,
-        connectors,
-        selectedAccountId,
-        effectiveAccountId,
-        setSelectedAccountId,
-        dataRefreshKey,
-        bumpDataRefresh,
-        disconnectConnection,
-        removeManualAccount,
-        notice,
-        dismissNotice: () => setNotice(null),
-      }}
-    >
-      {children}
-    </AccountContext.Provider>
+  const value = useMemo(
+    () => ({
+      accounts,
+      connectors,
+      accountsStatus,
+      selectedAccountId,
+      effectiveAccountId,
+      setSelectedAccountId,
+      dataRefreshKey,
+      bumpDataRefresh,
+      disconnectConnection,
+      removeManualAccount,
+      notice,
+      dismissNotice,
+    }),
+    [accounts, connectors, accountsStatus, selectedAccountId, effectiveAccountId, setSelectedAccountId, dataRefreshKey, bumpDataRefresh, disconnectConnection, removeManualAccount, notice, dismissNotice],
   );
+
+  return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

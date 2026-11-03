@@ -62,7 +62,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
                 await polp.DeleteConsentAsync(item.PolpIntegrationId, ct);
                 db.PendingProviderDeletions.Remove(item);
             }
-            catch (HttpRequestException)
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
             {
                 item.LastAttemptAt = DateTime.UtcNow;
             }
@@ -86,7 +86,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
             {
                 await polp.DeleteConsentAsync(local.PolpIntegrationId, ct);
             }
-            catch (HttpRequestException)
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
             {
                 db.PendingProviderDeletions.Add(new PendingProviderDeletion { PolpIntegrationId = local.PolpIntegrationId });
                 pendingCount++;
@@ -103,7 +103,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
         {
             await polp.DeleteConsentAsync(local.PolpIntegrationId, ct);
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
         {
             logger.LogWarning("Exclusão da integração {IntegrationId} na Polp ficou pendente; será tentada de novo.", local.Id);
             return RemoteDeletionOutcome.Pending;
@@ -154,7 +154,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
 }
 
 // Tenta de novo, de hora em hora, as exclusões na Polp que ficaram pendentes.
-public class PendingDisconnectRetryService(IServiceScopeFactory scopeFactory, ILogger<PendingDisconnectRetryService> logger) : BackgroundService
+public class PendingDisconnectRetryService(IServiceScopeFactory scopeFactory, IJobLock jobLock, ILogger<PendingDisconnectRetryService> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
 
@@ -164,9 +164,12 @@ public class PendingDisconnectRetryService(IServiceScopeFactory scopeFactory, IL
         {
             try
             {
-                using var scope = scopeFactory.CreateScope();
-                var service = scope.ServiceProvider.GetRequiredService<PolpDisconnectService>();
-                await service.RetryPendingAsync(stoppingToken);
+                await jobLock.RunExclusiveAsync(JobLockKeys.PendingDisconnectRetry, async () =>
+                {
+                    using var scope = scopeFactory.CreateScope();
+                    var service = scope.ServiceProvider.GetRequiredService<PolpDisconnectService>();
+                    await service.RetryPendingAsync(stoppingToken);
+                }, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

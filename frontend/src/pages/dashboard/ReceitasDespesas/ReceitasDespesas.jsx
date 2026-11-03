@@ -1,26 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { getTransactions } from "../../../api/transactions.js";
+import { getTransactionAggregates } from "../../../api/transactions.js";
+import { isAbortError } from "../../../api/client.js";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
+import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import BreakdownRows from "../../../components/dashboard/BreakdownRows/BreakdownRows.jsx";
+import TransactionDetails from "../../../components/dashboard/TransactionDetails/TransactionDetails.jsx";
 import { TrendUpIcon, TrendDownIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
-import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
-import { monthKey, formatMonthLong } from "../../../utils/monthLabel.js";
-import { getMonthsWindow } from "../../../utils/monthlyTrend.js";
+import { formatCurrency, formatDate, roundMoney, formatPercentage } from "../../../utils/financeMath.js";
+import { formatMonthLong } from "../../../utils/monthLabel.js";
+import { getMonthsWindow, monthRange } from "../../../utils/monthlyTrend.js";
 import { computeTrend } from "../../../utils/trend.js";
 import "./ReceitasDespesas.css";
 
-function breakdownByCategory(transactions) {
+
+function breakdownFromAggregates(categories, type) {
   const totals = new Map();
-  for (const t of transactions) {
-    const name = t.categoryName || "Sem categoria";
+  for (const c of categories ?? []) {
+    if (c.type !== type) continue;
+    const name = c.categoryName || "Sem categoria";
     const entry = totals.get(name) || { name, value: 0, count: 0 };
-    entry.value += t.amount;
-    entry.count += 1;
+    entry.value += c.amount;
+    entry.count += c.count;
     totals.set(name, entry);
   }
   const total = [...totals.values()].reduce((sum, e) => sum + e.value, 0);
@@ -62,7 +67,7 @@ function expenseSummarySentence(breakdown) {
 }
 
 function closingSentence(totalIncome, totalExpense) {
-  const leftover = totalIncome - totalExpense;
+  const leftover = roundMoney(totalIncome - totalExpense);
   if (totalIncome === 0 && totalExpense === 0) return "Nenhuma movimentação neste período.";
   if (leftover >= 0) {
     const pct = totalIncome > 0 ? (leftover / totalIncome) * 100 : 0;
@@ -77,64 +82,60 @@ function closingSentence(totalIncome, totalExpense) {
 
 export default function ReceitasDespesas() {
   const navigate = useNavigate();
-  const { effectiveAccountId, dataRefreshKey } = useAccount();
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { effectiveAccountId, dataRefreshKey, accountsStatus } = useAccount();
+  const [aggregateResult, setAggregateResult] = useState(null);
   const [monthOffset, setMonthOffset] = useState(0);
   const [expandedIncomeSources, setExpandedIncomeSources] = useState(() => new Set());
-
-  useEffect(() => {
-    let cancelled = false;
-    // Mesmo padrão (guarda "cancelled" + reset condicional no finally) já usado sem aviso de
-    // lint em DashboardHome.jsx: necessário aqui pra mostrar "Carregando..." de novo ao trocar
-    // de conta, não só na carga inicial da página.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-
-    getTransactions({ bankAccountId: effectiveAccountId })
-      .then((data) => {
-        if (!cancelled) setTransactions(data);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.message || "Não foi possível carregar as transações.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [effectiveAccountId, dataRefreshKey]);
+  const requestKey = `${effectiveAccountId ?? ""}|${dataRefreshKey}`;
+  const aggregateKey = `${requestKey}|${monthOffset}`;
+  const loading = accountsStatus !== "ready" || aggregateResult?.key !== aggregateKey;
 
   const currentMonth = useMemo(() => getMonthsWindow(1, monthOffset)[0], [monthOffset]);
   const previousMonth = useMemo(() => getMonthsWindow(1, monthOffset + 1)[0], [monthOffset]);
 
-  const { incomes, expenses, previousTotalIncome, previousTotalExpense } = useMemo(() => {
-    const currentKey = monthKey(currentMonth);
-    const previousKey = monthKey(previousMonth);
-    const nonTransfer = transactions.filter((t) => !t.isTransfer);
+  useEffect(() => {
+    if (accountsStatus !== "ready") return;
 
-    const currentTx = nonTransfer.filter((t) => monthKey(new Date(t.dueDate)) === currentKey);
-    const previousTx = nonTransfer.filter((t) => monthKey(new Date(t.dueDate)) === previousKey);
+    const controller = new AbortController();
+    const { signal } = controller;
+    const key = `${effectiveAccountId ?? ""}|${dataRefreshKey}|${monthOffset}`;
 
-    return {
-      incomes: currentTx.filter((t) => t.type === "Income"),
-      expenses: currentTx.filter((t) => t.type === "Expense"),
-      previousTotalIncome: previousTx.filter((t) => t.type === "Income").reduce((sum, t) => sum + t.amount, 0),
-      previousTotalExpense: previousTx.filter((t) => t.type === "Expense").reduce((sum, t) => sum + t.amount, 0),
-    };
-  }, [transactions, currentMonth, previousMonth]);
+    Promise.all([
+      getTransactionAggregates({ bankAccountId: effectiveAccountId, ...monthRange(currentMonth) }, { signal }),
+      getTransactionAggregates({ bankAccountId: effectiveAccountId, ...monthRange(previousMonth) }, { signal }),
+    ])
+      .then(([current, previous]) => {
+        if (signal.aborted) return;
+        setAggregateResult({ key, current, previous, error: "" });
+      })
+      .catch((err) => {
+        if (signal.aborted || isAbortError(err)) return;
+        setAggregateResult({
+          key,
+          current: null,
+          previous: null,
+          error: err.message || "Não foi possível carregar as transações.",
+        });
+      });
 
-  const totalIncome = useMemo(() => incomes.reduce((sum, t) => sum + t.amount, 0), [incomes]);
-  const totalExpense = useMemo(() => expenses.reduce((sum, t) => sum + t.amount, 0), [expenses]);
+    return () => controller.abort();
+  }, [effectiveAccountId, dataRefreshKey, monthOffset, currentMonth, previousMonth, accountsStatus]);
 
-  const incomeBreakdown = useMemo(() => breakdownByCategory(incomes), [incomes]);
-  const expenseBreakdown = useMemo(() => breakdownByCategory(expenses), [expenses]);
+  const current = aggregateResult?.current ?? null;
+  const previous = aggregateResult?.previous ?? null;
+  const error =
+    accountsStatus === "error"
+      ? "Não foi possível carregar as contas."
+      : (aggregateResult?.key === aggregateKey && aggregateResult.error) || "";
 
-  const incomeTrend = computeTrend(totalIncome, previousTotalIncome);
-  const expenseTrend = computeTrend(totalExpense, previousTotalExpense, { invertTone: true });
+  const totalIncome = current?.totalIncome;
+  const totalExpense = current?.totalExpense;
+
+  const incomeBreakdown = useMemo(() => breakdownFromAggregates(current?.categories, "Income"), [current]);
+  const expenseBreakdown = useMemo(() => breakdownFromAggregates(current?.categories, "Expense"), [current]);
+
+  const incomeTrend = computeTrend(totalIncome, previous?.totalIncome);
+  const expenseTrend = computeTrend(totalExpense, previous?.totalExpense, { invertTone: true });
 
   function toggleIncomeSource(name) {
     setExpandedIncomeSources((prev) => {
@@ -149,10 +150,9 @@ export default function ReceitasDespesas() {
     navigate(`/dashboard/categorias?categoria=${encodeURIComponent(categoryName)}`);
   }
 
-  if (loading) return <p className="receitas-despesas__hint">Carregando...</p>;
   if (error) return <p className="receitas-despesas__error">{error}</p>;
 
-  const leftover = totalIncome - totalExpense;
+  const leftover = roundMoney(totalIncome - totalExpense);
 
   return (
     <div className="receitas-despesas">
@@ -165,17 +165,20 @@ export default function ReceitasDespesas() {
         nextDisabled={monthOffset === 0}
       />
 
+
       <div className="receitas-despesas__halves">
         <section className="receitas-despesas__half">
           <StatCard
             icon={<TrendUpIcon />}
             label="Receitas"
-            value={formatCurrency(totalIncome)}
+            value={loading ? <Skeleton width="7rem" height="1.5rem" /> : formatCurrency(totalIncome)}
             valueTone="income"
-            trend={incomeTrend}
+            trend={loading ? null : incomeTrend}
           />
 
-          {incomeBreakdown.length === 0 ? (
+          {loading ? (
+            <Skeleton width="100%" height="12rem" />
+          ) : incomeBreakdown.length === 0 ? (
             <p className="receitas-despesas__hint">Sem receitas neste período.</p>
           ) : (
             <>
@@ -186,18 +189,23 @@ export default function ReceitasDespesas() {
                 onRowClick={toggleIncomeSource}
                 expandedNames={expandedIncomeSources}
                 renderExpanded={(name) => (
-                  <ul className="rd-transactions">
-                    {incomes
-                      .filter((t) => (t.categoryName || "Sem categoria") === name)
-                      .sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate))
-                      .map((t) => (
-                        <li key={t.id} className="rd-transactions__item">
-                          <span className="rd-transactions__name">{t.name}</span>
-                          <span className="rd-transactions__date">{new Date(t.dueDate).toLocaleDateString("pt-BR")}</span>
-                          <span className="rd-transactions__amount">{formatCurrency(t.amount)}</span>
-                        </li>
-                      ))}
-                  </ul>
+                  <TransactionDetails
+                    className="rd-transactions"
+                    query={{
+                      bankAccountId: effectiveAccountId,
+                      ...monthRange(currentMonth),
+                      type: "Income",
+                      category: name,
+                      refresh: dataRefreshKey,
+                    }}
+                    renderItem={(t) => (
+                      <li key={t.id} className="rd-transactions__item">
+                        <span className="rd-transactions__name">{t.name}</span>
+                        <span className="rd-transactions__date">{formatDate(t.dueDate)}</span>
+                        <span className="rd-transactions__amount">{formatCurrency(t.amount)}</span>
+                      </li>
+                    )}
+                  />
                 )}
               />
             </>
@@ -208,12 +216,14 @@ export default function ReceitasDespesas() {
           <StatCard
             icon={<TrendDownIcon />}
             label="Despesas"
-            value={formatCurrency(totalExpense)}
+            value={loading ? <Skeleton width="7rem" height="1.5rem" /> : formatCurrency(totalExpense)}
             valueTone="expense"
-            trend={expenseTrend}
+            trend={loading ? null : expenseTrend}
           />
 
-          {expenseBreakdown.length === 0 ? (
+          {loading ? (
+            <Skeleton width="100%" height="12rem" />
+          ) : expenseBreakdown.length === 0 ? (
             <p className="receitas-despesas__hint">Sem despesas neste período.</p>
           ) : (
             <>
@@ -225,14 +235,23 @@ export default function ReceitasDespesas() {
       </div>
 
       <Card title="Resultado do período" className="receitas-despesas__closing">
-        <p
-          className={`receitas-despesas__closing-value ${
-            leftover >= 0 ? "receitas-despesas__closing-value--income" : "receitas-despesas__closing-value--expense"
-          }`}
-        >
-          {formatCurrency(leftover)}
-        </p>
-        <p className="receitas-despesas__closing-text">{closingSentence(totalIncome, totalExpense)}</p>
+        {loading ? (
+          <>
+            <Skeleton width="8rem" height="2rem" />
+            <Skeleton width="100%" height="1rem" />
+          </>
+        ) : (
+          <>
+            <p
+              className={`receitas-despesas__closing-value ${
+                leftover >= 0 ? "receitas-despesas__closing-value--income" : "receitas-despesas__closing-value--expense"
+              }`}
+            >
+              {formatCurrency(leftover)}
+            </p>
+            <p className="receitas-despesas__closing-text">{closingSentence(totalIncome, totalExpense)}</p>
+          </>
+        )}
       </Card>
     </div>
   );

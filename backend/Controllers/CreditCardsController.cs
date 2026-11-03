@@ -20,6 +20,7 @@ public class CreditCardsController(AppDbContext db) : ApiControllerBase
     public async Task<IActionResult> GetAll()
     {
         var cards = await db.CreditCards
+            .AsNoTracking()
             .Where(c => c.UserId == UserId && c.IsActive)
             .ToListAsync();
 
@@ -31,7 +32,7 @@ public class CreditCardsController(AppDbContext db) : ApiControllerBase
     // lista todos. Ver CreditCardSummaryBuilder.BuildRecognizedListAsync.
     [HttpGet("summary")]
     public async Task<IActionResult> GetSummary(CancellationToken ct) =>
-        Ok(await CreditCardSummaryBuilder.BuildRecognizedListAsync(db, UserId, ct));
+        Ok(await CreditCardSummaryBuilder.BuildRecognizedListAsync(db, UserId, await UserTodayAsync(db, ct), ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCreditCardDto dto)

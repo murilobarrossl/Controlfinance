@@ -41,6 +41,7 @@ public static class PrivacyBackfill
         {
             var batch = await db.Installments
                 .Where(i => EF.Property<string?>(i, "LegacyDescription") != null)
+                .OrderBy(i => i.Id)
                 .Take(BatchSize)
                 .ToListAsync(ct);
             if (batch.Count == 0) return total;
@@ -80,7 +81,7 @@ public static class PrivacyBackfill
         var total = 0;
         while (true)
         {
-            var batch = await db.Users.Where(u => u.Document != null).Take(BatchSize).ToListAsync(ct);
+            var batch = await db.Users.Where(u => u.Document != null).OrderBy(u => u.Id).Take(BatchSize).ToListAsync(ct);
             if (batch.Count == 0) return total;
 
             foreach (var user in batch)
@@ -104,6 +105,7 @@ public static class PrivacyBackfill
         {
             var batch = await db.Transactions
                 .Where(t => EF.Property<string?>(t, "LegacyName") != null)
+                .OrderBy(t => t.Id)
                 .Take(BatchSize)
                 .ToListAsync(ct);
             if (batch.Count == 0) return total;

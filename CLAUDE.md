@@ -48,7 +48,7 @@ There is no test runner configured (no Jest/Vitest).
   (`Program.cs`) refuses to start if any of these is missing, a placeholder, shorter than 32 chars
   or reused between keys. Polp counts as enabled only when ClientId/ClientSecret are not placeholders.
 - Frontend reads `VITE_API_URL` (see `frontend/.env.example`); defaults to
-  `http://localhost:5000/api` if unset.
+  `http://localhost:5080/api` if unset.
 - Requires a local PostgreSQL instance (port 5432 by default).
 
 ## Architecture

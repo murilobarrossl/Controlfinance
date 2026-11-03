@@ -1,15 +1,23 @@
 import { apiFetch } from "./client.js";
 
+const browserTimeZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export const login = async (identifier, password) =>
   apiFetch("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ identifier, password }),
+    body: JSON.stringify({ identifier, password, timeZone: browserTimeZone() }),
   });
 
 export const register = async (payload) =>
   apiFetch("/auth/register", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, timeZone: browserTimeZone() }),
   });
 
 // Descobre se já existe sessão (o cookie é httpOnly, o JavaScript não consegue olhar). Devolve

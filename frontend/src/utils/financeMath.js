@@ -1,23 +1,28 @@
+export const roundMoney = (value) => Math.round(value * 100) / 100 || 0;
+
 export function formatCurrency(value) {
-  return (value ?? 0).toLocaleString("pt-BR", {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return roundMoney(value).toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
   });
 }
 
 export function formatPercentage(value) {
-  return `${(value ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `${value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 }
 
 export function formatDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString("pt-BR");
+  if (!dateStr || Number.isNaN(new Date(dateStr).getTime())) return "—";
+  return new Date(dateStr).toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
 // Tabela Price: parcela fixa para um financiamento/consórcio.
 // financedAmount = valor total - entrada; monthlyRate em decimal (ex: 0.02 = 2% a.m.)
 export function calculateInstallment(financedAmount, monthlyRate, installmentsCount) {
   if (financedAmount <= 0 || installmentsCount <= 0) {
-    return { installmentAmount: 0, totalPaid: 0, totalInterest: 0 };
+    return { installmentAmount: null, totalPaid: null, totalInterest: null };
   }
 
   if (monthlyRate === 0) {

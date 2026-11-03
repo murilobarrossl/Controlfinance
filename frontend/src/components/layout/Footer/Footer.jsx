@@ -4,17 +4,17 @@ import { ShieldIcon } from "../../ui/icons/FeatureIcons.jsx";
 import "./Footer.css";
 
 const PRODUTO_LINKS = [
-  { label: "Funcionalidades", href: "#funcionalidades" },
-  { label: "Planos", href: "#planos" },
-  { label: "Sincronização bancária", href: "#funcionalidades" },
+  { label: "Funcionalidades", href: "/#funcionalidades" },
+  { label: "Planos", href: "/#planos" },
+  { label: "Sincronização bancária", href: "/#funcionalidades" },
 ];
 
 const ANO_LANCAMENTO = 2026;
 
 const EMPRESA_LINKS = [
-  { label: "Sobre nós", href: "#sobre-nos" },
+  { label: "Sobre nós", href: "/#sobre-nos" },
   { label: "Time", href: "#time" },
-  { label: "Dúvidas frequentes", href: "#faq" },
+  { label: "Dúvidas frequentes", href: "/#faq" },
 ];
 
 export default function Footer() {
@@ -32,7 +32,6 @@ export default function Footer() {
             com conexão bancária via Open Finance.
           </p>
           <p className="footer__security">
-            <ShieldIcon />
             O Control Finance não é instituição financeira. A conexão com bancos usa o
             Open Finance (regulado pelo Banco Central), por meio de fornecedor parceiro.
           </p>

@@ -34,7 +34,7 @@ public static class DataRetentionPolicy
     }
 }
 
-public class DataRetentionService(IServiceScopeFactory scopeFactory, IConfiguration config, ILogger<DataRetentionService> logger) : BackgroundService
+public class DataRetentionService(IServiceScopeFactory scopeFactory, IJobLock jobLock, IConfiguration config, ILogger<DataRetentionService> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
 
@@ -44,29 +44,32 @@ public class DataRetentionService(IServiceScopeFactory scopeFactory, IConfigurat
         {
             try
             {
-                using var scope = scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var now = DateTime.UtcNow;
-
-                var cutoff = DataRetentionPolicy.SyncedHistoryCutoff(config, now);
-                var transactions = 0;
-                if (cutoff.HasValue)
+                await jobLock.RunExclusiveAsync(JobLockKeys.DataRetention, async () =>
                 {
-                    transactions = await db.Transactions
-                        .Where(t => t.DueDate < cutoff.Value
-                                 && t.Status != TransactionStatus.Pending
-                                 && t.BankAccount != null
-                                 && t.BankAccount.PolpAccountId != null)
+                    using var scope = scopeFactory.CreateScope();
+                    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    var now = DateTime.UtcNow;
+
+                    var cutoff = DataRetentionPolicy.SyncedHistoryCutoff(config, now);
+                    var transactions = 0;
+                    if (cutoff.HasValue)
+                    {
+                        transactions = await db.Transactions
+                            .Where(t => t.DueDate < cutoff.Value
+                                     && t.Status != TransactionStatus.Pending
+                                     && t.BankAccount != null
+                                     && t.BankAccount.PolpAccountId != null)
+                            .ExecuteDeleteAsync(stoppingToken);
+                    }
+
+                    var accessCutoff = now.AddDays(-DataRetentionPolicy.AccessLogRetentionDays(config));
+                    var accessLogs = await db.AccessLogs
+                        .Where(a => a.OccurredAt < accessCutoff)
                         .ExecuteDeleteAsync(stoppingToken);
-                }
 
-                var accessCutoff = now.AddDays(-DataRetentionPolicy.AccessLogRetentionDays(config));
-                var accessLogs = await db.AccessLogs
-                    .Where(a => a.OccurredAt < accessCutoff)
-                    .ExecuteDeleteAsync(stoppingToken);
-
-                if (transactions + accessLogs > 0)
-                    logger.LogInformation("Retenção: {Transactions} transação(ões) importada(s) fora do prazo e {AccessLogs} registro(s) de acesso expirado(s) apagados.", transactions, accessLogs);
+                    if (transactions + accessLogs > 0)
+                        logger.LogInformation("Retenção: {Transactions} transação(ões) importada(s) fora do prazo e {AccessLogs} registro(s) de acesso expirado(s) apagados.", transactions, accessLogs);
+                }, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

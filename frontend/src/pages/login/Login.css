@@ -245,18 +245,6 @@
   cursor: not-allowed;
 }
 
-.login__forgot {
-  align-self: flex-end;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  text-decoration: none;
-  margin-bottom: 2rem;
-}
-
-.login__forgot:hover {
-  color: var(--color-text-primary);
-}
-
 .login__mode-toggle {
   display: block;
   text-align: center;

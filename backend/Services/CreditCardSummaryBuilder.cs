@@ -12,7 +12,7 @@ namespace ControlFinance.API.Services;
 public static class CreditCardSummaryBuilder
 {
     public static async Task<List<RecognizedCardDto>> BuildRecognizedListAsync(
-        AppDbContext db, Guid userId, CancellationToken ct = default)
+        AppDbContext db, Guid userId, DateTime today, CancellationToken ct = default)
     {
         var accounts = await db.BankAccounts
             .Where(a => a.UserId == userId && a.IsActive)
@@ -33,16 +33,21 @@ public static class CreditCardSummaryBuilder
             .GroupBy(p => p.PolpIntegrationId)
             .ToDictionary(g => g.Key, g => g.First());
 
+        var cardAccountIds = cardAccounts.Select(a => a.Id).ToList();
+        var installmentsByAccount = (await db.Installments
+                .Include(i => i.BankAccount)
+                .Where(i => i.BankAccountId != null && cardAccountIds.Contains(i.BankAccountId.Value))
+                .ToListAsync(ct))
+            .GroupBy(i => i.BankAccountId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var result = new List<RecognizedCardDto>();
 
         foreach (var account in cardAccounts)
         {
             var connection = account.PolpIntegrationId is Guid consentId ? connections.GetValueOrDefault(consentId) : null;
-            var installments = await db.Installments
-                .Include(i => i.BankAccount)
-                .Where(i => i.BankAccountId == account.Id)
-                .ToListAsync(ct);
-            var activeInstallments = await InstallmentProgress.ReconcileAsync(db, installments, ct);
+            var installments = installmentsByAccount.GetValueOrDefault(account.Id) ?? [];
+            var activeInstallments = await InstallmentProgress.ReconcileAsync(db, installments, today, ct);
             var installmentDtos = activeInstallments.OrderBy(i => i.NextDueDate).Select(InstallmentDto.FromEntity).ToList();
 
             result.Add(new RecognizedCardDto(
@@ -71,16 +76,15 @@ public static class CreditCardSummaryBuilder
             // Reconcilia antes de ler CreditLimit/UsedLimit: parcelamento já quitado (todas as
             // parcelas restantes já venceram) libera limite aqui, senão "Fatura atual"/"Limite
             // usado" ficavam inflados pra sempre por um parcelamento que devia ter sumido sozinho.
-            var activeInstallments = await InstallmentProgress.ReconcileAsync(db, card.Installments.ToList(), ct);
+            var activeInstallments = await InstallmentProgress.ReconcileAsync(db, card.Installments.ToList(), today, ct);
             var installmentDtos = activeInstallments.OrderBy(i => i.NextDueDate).Select(InstallmentDto.FromEntity).ToList();
             var currentInvoice = activeInstallments.Sum(i => i.InstallmentAmount);
 
             // próximo vencimento da fatura: clampa pro último dia válido do mês (ex.: DueDay=31
             // em fevereiro derrubaria o dashboard inteiro com ArgumentOutOfRangeException).
-            var today = DateTime.UtcNow;
             var safeDueDay = Math.Min(card.DueDay, DateTime.DaysInMonth(today.Year, today.Month));
             var dueDate = new DateTime(today.Year, today.Month, safeDueDay, 0, 0, 0, DateTimeKind.Utc);
-            if (dueDate < today) dueDate = dueDate.AddMonths(1);
+            if (dueDate < today.Date) dueDate = dueDate.AddMonths(1);
 
             result.Add(new RecognizedCardDto(
                 card.Id,

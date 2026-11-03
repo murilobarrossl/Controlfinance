@@ -17,7 +17,7 @@ namespace ControlFinance.API.Services;
 // O fluxo normal é orientado a webhook: a Polp sincroniza por agenda com a instituição e avisa;
 // cada aviso vira uma das operações pontuais abaixo, limitada à janela que ela informou. O sync
 // completo (SyncOneAsync) só roda uma vez, na conexão (backfill inicial).
-public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration config, InstitutionNameResolver institutionNames)
+public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration config, InstitutionNameResolver institutionNames, TimeProvider time)
 {
     // Serializa syncs concorrentes da mesma integração (ex.: dois webhooks seguidos, ou um webhook
     // cruzando com o backfill): sem isso, duas execuções liam o mesmo snapshot de "transações já
@@ -68,6 +68,12 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
             return 0;
 
         var accounts = await SyncAccountsAndCardsAsync(local, userId, null, ct);
+
+        // O consentimento já chega AUTHORISED/SUCCESS antes de a Polp terminar de gerar as contas
+        // (no sandbox, ~2s depois): lista vazia aqui não é "banco sem contas", é cedo demais.
+        // Marcar como sincronizado travaria a conexão sem nenhuma conta para sempre.
+        if (accounts.Count == 0)
+            return 0;
 
         foreach (var card in accounts.Where(CreditCardAccountDetector.LooksLikeCreditCard))
             await SyncBillsAsync(card, null, ct);
@@ -185,8 +191,9 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
         }
 
         // Fatura "atual" = a de vencimento mais próximo que ainda não passou; se todas já
-        // venceram (ou não vier nenhuma), cai pra mais recente disponível.
-        var today = DateTime.UtcNow.Date;
+        // venceram (ou não vier nenhuma), cai pra mais recente disponível. "Hoje" é o do dono do
+        // cartão: em UTC, a fatura que vence hoje já contava como vencida a partir das 21h de Brasília.
+        var today = await UserClock.TodayForUserAsync(db, card.UserId, time, ct);
         var parsed = bills
             .Select(b => (bill: b, due: ParseDateOrNull(b.DueDate)))
             .Where(x => x.due.HasValue)

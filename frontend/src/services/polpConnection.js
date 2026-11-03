@@ -19,12 +19,12 @@ export function setPendingIntegrationId(integrationId) {
   localStorage.setItem(PENDING_KEY, integrationId);
 }
 
-export function clearPendingIntegrationId() {
+function clearPendingIntegrationId() {
   localStorage.removeItem(PENDING_KEY);
 }
 
 // Acompanha o status da conexão até ficar ativa, dar erro/rejeição ou esgotar as tentativas.
-// Retorna "active" | "login_error" | "timeout". O backend dispara a carga inicial dos dados sozinho
+// Retorna "active" | "login_error" | "timeout" | "cancelled". O backend dispara a carga inicial dos dados sozinho
 // quando o consentimento é autorizado ("syncing" até ela terminar), então aqui não há nada a pedir.
 export async function watchPolpConnection(integrationId, { isCancelled = () => false } = {}) {
   for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS && !isCancelled(); attempt++) {
@@ -46,6 +46,8 @@ export async function watchPolpConnection(integrationId, { isCancelled = () => f
 
     await wait(POLL_INTERVAL_MS);
   }
+
+  if (isCancelled()) return "cancelled";
 
   clearPendingIntegrationId();
   return "timeout";

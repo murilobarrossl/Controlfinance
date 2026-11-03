@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import useModalBehavior from "../../../hooks/useModalBehavior.js";
 import Button from "../../../components/ui/Button/Button.jsx";
 import "../../../components/ui/ConfirmDialog/ConfirmDialog.css";
 
@@ -7,21 +8,7 @@ export default function DeleteAccountDialog({ deleting, error, onConfirm, onClos
   const [password, setPassword] = useState("");
   const [confirmed, setConfirmed] = useState(false);
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    passwordRef.current?.focus();
-
-    function handleKeyDown(e) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onClose]);
+  useModalBehavior(true, onClose, passwordRef);
 
   function handleSubmit(e) {
     e.preventDefault();

@@ -57,7 +57,6 @@ namespace ControlFinance.API.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("Balance")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("BalanceEncrypted");
 
@@ -130,6 +129,8 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("PolpAccountId");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "IsActive");
 
                     b.ToTable("BankAccounts");
                 });
@@ -263,6 +264,9 @@ namespace ControlFinance.API.Migrations
                         .HasColumnType("text")
                         .HasColumnName("DescriptionEncrypted");
 
+                    b.Property<int?>("DueDay")
+                        .HasColumnType("integer");
+
                     b.Property<string>("InstallmentAmount")
                         .IsRequired()
                         .HasColumnType("text")
@@ -292,6 +296,8 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("BankAccountId");
 
                     b.HasIndex("CreditCardId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Installments");
                 });
@@ -481,6 +487,8 @@ namespace ControlFinance.API.Migrations
 
                     b.HasIndex("UserId", "DueDate");
 
+                    b.HasIndex("UserId", "BankAccountId", "DueDate");
+
                     b.ToTable("Transactions");
                 });
 
@@ -518,6 +526,12 @@ namespace ControlFinance.API.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<DateOnly?>("LastDueReminderLocalDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("LastMonthlySummaryMonth")
+                        .HasColumnType("date");
+
                     b.Property<DateTime?>("LastMonthlySummarySentAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -535,6 +549,13 @@ namespace ControlFinance.API.Migrations
 
                     b.Property<Guid?>("PrimaryCardId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("America/Sao_Paulo");
 
                     b.Property<int>("TokenVersion")
                         .HasColumnType("integer");
