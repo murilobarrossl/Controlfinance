@@ -4,11 +4,13 @@ import { getInstallments, createInstallment, deleteInstallment } from "../../../
 import { getTransactions } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
+import { useAccount } from "../../../context/AccountContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
 import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
+import BankLogo from "../../../components/ui/BankLogo/BankLogo.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
@@ -16,6 +18,7 @@ import { CardIcon, WalletIcon, BellIcon, HistoryIcon } from "../../../components
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import { formatCurrency, formatDate } from "../../../utils/financeMath.js";
 import { summarizeCards, groupCards } from "../../../utils/cardGroups.js";
+import CardStatement from "./CardStatement.jsx";
 import "./Cartoes.css";
 
 const EMPTY_DETAIL_FORM = { id: null, brand: "", creditLimit: "", closingDay: "1", dueDay: "10" };
@@ -89,12 +92,26 @@ function buildUpcoming(cards, installments, pendingTransactions) {
 const EMPTY_LIST = [];
 const TRANSACTIONS_CAP = 2000;
 
+function normalizeName(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function normalizeColor(raw) {
+  if (!raw) return undefined;
+  return raw.startsWith("#") ? raw : `#${raw}`;
+}
+
 // Esta página não depende da conta selecionada no seletor lateral (useAccount()): cartões
 // reconhecidos (card.isSynced) já vêm prontos de getCreditCardsSummary(), independente de qual
 // conta está ativa no seletor — a mesma BankAccount aparece aqui sempre que for identificada como
 // cartão, sem relação com qual conta o usuário escolheu ver no Dashboard Inteligente.
 export default function Cartoes() {
   const { user } = useAuth();
+  const { connectors } = useAccount();
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
@@ -106,6 +123,8 @@ export default function Cartoes() {
   const [saving, setSaving] = useState(false);
   const [showInstallmentForm, setShowInstallmentForm] = useState(false);
   const [installmentForm, setInstallmentForm] = useState(EMPTY_INSTALLMENT_FORM);
+  // Os quatro números do topo podem somar todos os cartões ("all") ou mostrar só um deles (id).
+  const [summaryScope, setSummaryScope] = useState("all");
 
   const cards = data?.cards ?? EMPTY_LIST;
   const installments = data?.installments ?? EMPTY_LIST;
@@ -259,8 +278,29 @@ export default function Cartoes() {
     [cards, installments, pendingTransactions]
   );
 
-  const summary = useMemo(() => summarizeCards(cards), [cards]);
-  const { groups, showHeaders } = useMemo(() => groupCards(cards), [cards]);
+  // Se o cartão escolhido deixou de existir (banco desconectado), volta pra "todos" sozinho.
+  const scopeCard = useMemo(() => cards.find((c) => c.id === summaryScope) ?? null, [cards, summaryScope]);
+  const summary = useMemo(() => summarizeCards(scopeCard ? [scopeCard] : cards), [scopeCard, cards]);
+  const { groups } = useMemo(() => groupCards(cards), [cards]);
+
+  // O cartão traz só o nome do banco (e a cor); a logo vem do conector da Polp com o mesmo nome.
+  // Sem correspondência, BankLogo cai nas iniciais do banco na cor dele.
+  const connectorsByName = useMemo(
+    () => new Map(connectors.map((c) => [normalizeName(c.name), c])),
+    [connectors],
+  );
+  function brandOf(source) {
+    const name = source.bankName || "Banco conectado";
+    const connector = connectorsByName.get(normalizeName(name));
+    return {
+      name,
+      logoUrl: connector?.logoUrl,
+      color: normalizeColor(connector?.color ?? source.color ?? source.institutionColor),
+    };
+  }
+
+  const scopeLabel = scopeCard ? `${brandOf(scopeCard).name} · ${scopeCard.name}` : `Todos os cartões (${cards.length})`;
+  const scopeLines = [{ label: scopeLabel, value: "" }];
 
   function renderCardBlock(card) {
     return (
@@ -362,10 +402,73 @@ export default function Cartoes() {
         cartões.
       </p>
 
+      {!loading && cards.length > 0 && (
+        <div className="cartoes__scope">
+          <p className="cartoes__scope-title">
+            Os números abaixo mostram: <strong>{scopeLabel}</strong>
+          </p>
+          {cards.length > 1 && (
+            <div className="cartoes__scope-options" role="radiogroup" aria-label="Escolha de qual cartão mostrar os números">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={!scopeCard}
+                className={`cartoes__statement-card ${!scopeCard ? "cartoes__statement-card--active" : ""}`}
+                onClick={() => setSummaryScope("all")}
+              >
+                <span className="cartoes__scope-all-icon" aria-hidden="true">
+                  <CardIcon />
+                </span>
+                <span className="cartoes__statement-card-text">
+                  <span className="cartoes__statement-card-bank">Todos os cartões</span>
+                  <span className="cartoes__statement-card-name">Soma de {cards.length} cartões</span>
+                </span>
+              </button>
+              {cards.map((card) => {
+                const brand = brandOf(card);
+                const active = scopeCard?.id === card.id;
+                return (
+                  <button
+                    key={card.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`cartoes__statement-card ${active ? "cartoes__statement-card--active" : ""}`}
+                    style={{ "--group-color": brand.color ?? "var(--color-border-strong)" }}
+                    onClick={() => setSummaryScope(card.id)}
+                  >
+                    <BankLogo name={brand.name} logoUrl={brand.logoUrl} color={brand.color} size={28} />
+                    <span className="cartoes__statement-card-text">
+                      <span className="cartoes__statement-card-bank">{brand.name}</span>
+                      <span className="cartoes__statement-card-name">{card.name}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="cartoes__summary">
-        <StatCard icon={<CardIcon />} label="Limite usado" value={loading ? valueSkeleton : formatCurrency(summary.usedLimit)} />
-        <StatCard icon={<WalletIcon />} label="Limite disponível" value={loading ? valueSkeleton : formatCurrency(summary.availableLimit)} />
-        <StatCard icon={<BellIcon />} label="Faturas abertas" value={loading ? valueSkeleton : formatCurrency(summary.openInvoices)} />
+        <StatCard
+          icon={<CardIcon />}
+          label="Limite usado"
+          value={loading ? valueSkeleton : formatCurrency(summary.usedLimit)}
+          secondaryLines={loading ? [] : scopeLines}
+        />
+        <StatCard
+          icon={<WalletIcon />}
+          label="Limite disponível"
+          value={loading ? valueSkeleton : formatCurrency(summary.availableLimit)}
+          secondaryLines={loading ? [] : scopeLines}
+        />
+        <StatCard
+          icon={<BellIcon />}
+          label="Faturas abertas"
+          value={loading ? valueSkeleton : formatCurrency(summary.openInvoices)}
+          secondaryLines={loading ? [] : scopeLines}
+        />
         <StatCard
           icon={<HistoryIcon />}
           label="Próximo vencimento"
@@ -384,33 +487,57 @@ export default function Cartoes() {
           </p>
         ) : (
           <div className="cartoes__groups">
-            {groups.map((group) => (
-              <section key={group.key} className="cartoes__group">
-                {showHeaders && (
-                  <header className="cartoes__group-header" style={{ "--group-color": group.color ?? "var(--color-border-strong)" }}>
-                    <div className="cartoes__group-title">
-                      <span className="cartoes__group-marker" aria-hidden="true" />
+            {groups.map((group) => {
+              const brand = brandOf(group);
+              return (
+              <section
+                key={group.key}
+                className="cartoes__group"
+                style={{ "--group-color": group.color ?? "var(--color-border-strong)" }}
+              >
+                <header className="cartoes__group-header">
+                  <div className="cartoes__group-brand">
+                    {group.isOthers ? (
+                      <span className="cartoes__group-icon" aria-hidden="true">
+                        <CardIcon />
+                      </span>
+                    ) : (
+                      <BankLogo name={brand.name} logoUrl={brand.logoUrl} color={brand.color} size={52} />
+                    )}
+                    <div className="cartoes__group-heading">
                       <h3 className="cartoes__group-name">{group.bankName}</h3>
+                      <span className="cartoes__group-count">
+                        {group.cards.length} {group.cards.length === 1 ? "cartão" : "cartões"}
+                        {group.isOthers && " cadastrados manualmente"}
+                      </span>
                     </div>
-                    <div className="cartoes__group-meta">
-                      <span>Fatura aberta: <strong>{formatCurrency(group.openInvoice)}</strong></span>
-                      <span>Limite usado: <strong>{formatCurrency(group.usedLimit)}</strong></span>
-                      {!group.isOthers && (
-                        <span className="cartoes__group-sync">
-                          {group.lastSyncedAt
-                            ? `Atualizado em ${formatDateTime(group.lastSyncedAt)}`
-                            : "Ainda não atualizado"}
-                        </span>
-                      )}
+                  </div>
+                  <div className="cartoes__group-meta">
+                    <div className="cartoes__group-stat">
+                      <span>Fatura aberta</span>
+                      <strong>{formatCurrency(group.openInvoice)}</strong>
                     </div>
-                  </header>
-                )}
+                    <div className="cartoes__group-stat">
+                      <span>Limite usado</span>
+                      <strong>{formatCurrency(group.usedLimit)}</strong>
+                    </div>
+                    {!group.isOthers && (
+                      <div className="cartoes__group-stat">
+                        <span>Atualizado em</span>
+                        <strong>{group.lastSyncedAt ? formatDateTime(group.lastSyncedAt) : "Ainda não"}</strong>
+                      </div>
+                    )}
+                  </div>
+                </header>
                 <div className="cartoes__grid">{group.cards.map(renderCardBlock)}</div>
               </section>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>
+
+      {!loading && <CardStatement cards={cards} getBrand={brandOf} />}
 
       <Card title="Próximos vencimentos">
         {!loading && pendingTransactions.length >= TRANSACTIONS_CAP && (
@@ -635,9 +762,9 @@ export default function Cartoes() {
 
       <Card title="Sobre os dados desta página">
         <p className="cartoes__hint">
-          Cartões reconhecidos automaticamente (pela sua conta sincronizada) já têm extrato real
-          disponível: selecione essa conta no seletor do cabeçalho e veja transações/categorias em
-          Relatórios ou Categorias. Limite, fechamento, vencimento e fatura tentam vir direto da
+          Cartões reconhecidos automaticamente (pela sua conta sincronizada) têm extrato real, logo
+          acima, e as transações deles também aparecem em Relatórios e Categorias ao selecionar a
+          conta no seletor do cabeçalho. Limite, fechamento, vencimento e fatura tentam vir direto da
           Polp; quando ela não manda algum desses dados pra um banco específico, só o que faltar
           pede preenchimento manual aqui. Um relatório de gastos por categoria dentro do próprio
           cartão ainda não é possível de forma confiável (falta vínculo entre lançamentos e cartão

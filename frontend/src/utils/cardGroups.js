@@ -31,7 +31,9 @@ export function summarizeCards(cards) {
     usedLimit,
     availableLimit,
     openInvoices,
-    nextDue: next ? { date: next.card.invoiceDueDate, label: next.card.bankName || next.card.name } : null,
+    nextDue: next
+      ? { date: next.card.invoiceDueDate, label: [next.card.bankName, next.card.name].filter(Boolean).join(" · ") }
+      : null,
   };
 }
 
