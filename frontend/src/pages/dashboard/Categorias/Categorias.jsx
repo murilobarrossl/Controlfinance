@@ -7,6 +7,9 @@ import { useAccount } from "../../../context/AccountContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
+import BankLogo from "../../../components/ui/BankLogo/BankLogo.jsx";
+import { CardIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
+import { getAccountKindLabel, isCreditCardAccount } from "../../../utils/accountKind.js";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
 import TransactionDetails from "../../../components/dashboard/TransactionDetails/TransactionDetails.jsx";
@@ -16,6 +19,7 @@ import { getReserve } from "../../../utils/emergencyReserveStorage.js";
 import { calculateCutImpact } from "../../../utils/cutImpact.js";
 import { formatCurrency, formatDate, formatPercentage } from "../../../utils/financeMath.js";
 import { donutSliceColors, resolveCategoryColor } from "../../../utils/categoryColors.js";
+import { formatMonthLong, toIsoDate } from "../../../utils/monthLabel.js";
 import "./Categorias.css";
 
 const EMPTY_LIST = [];
@@ -32,6 +36,29 @@ const CATEGORY_SORT_OPTIONS = [
   { value: "value-asc", label: "Menor gasto" },
   { value: "count-desc", label: "Mais ativas" },
 ];
+
+const PERIOD_MODES = [
+  { value: "month", label: "Mês" },
+  { value: "year", label: "Ano" },
+  { value: "all", label: "Todo o período" },
+];
+
+// Intervalo [from, to) e rótulo do período escolhido. offset = quantos meses/anos pra trás a partir
+// do atual (0 = o atual). "Todo o período" não tem navegação: pega do começo de 2000 até o fim do
+// ano atual, o que cobre qualquer histórico real (o backend aceita intervalos de até 50 anos).
+function resolvePeriod({ mode, offset }) {
+  const now = new Date();
+  if (mode === "month") {
+    const start = new Date(Date.UTC(now.getFullYear(), now.getMonth() - offset, 1));
+    const end = new Date(Date.UTC(now.getFullYear(), now.getMonth() - offset + 1, 1));
+    return { key: `month:${offset}`, from: toIsoDate(start), to: toIsoDate(end), label: formatMonthLong(start) };
+  }
+  if (mode === "year") {
+    const year = now.getFullYear() - offset;
+    return { key: `year:${offset}`, from: `${year}-01-01`, to: `${year + 1}-01-01`, label: String(year) };
+  }
+  return { key: "all", from: "2000-01-01", to: `${now.getFullYear() + 1}-01-01`, label: "Todo o período" };
+}
 
 function cutImpactSentence(categoryName, categoryAmount, cutRate, impact) {
   const destinations = [
@@ -78,12 +105,14 @@ function installmentLabel(name) {
 export default function Categorias() {
   const [searchParams] = useSearchParams();
   const [categoryFromLink] = useState(() => searchParams.get("categoria"));
-  const { effectiveAccountId, dataRefreshKey, accountsStatus } = useAccount();
+  const { accounts, connectors, effectiveAccountId, setSelectedAccountId, dataRefreshKey, accountsStatus } = useAccount();
   const [result, setResult] = useState(null);
   const [aggregateResult, setAggregateResult] = useState(null);
-  const [yearOffset, setYearOffset] = useState(0); // 0 = ano atual; 1 = ano anterior; e por aí vai.
+  // Período mostrado: um mês, um ano ou tudo. offset 0 = o atual, 1 = o anterior, e assim por diante.
+  const [period, setPeriod] = useState({ mode: "year", offset: 0 });
+  const range = useMemo(() => resolvePeriod(period), [period]);
   const requestKey = `${effectiveAccountId ?? ""}|${dataRefreshKey}`;
-  const aggregateKey = `${requestKey}|${yearOffset}`;
+  const aggregateKey = `${requestKey}|${range.key}`;
   const loading = accountsStatus !== "ready" || result?.key !== requestKey || aggregateResult?.key !== aggregateKey;
   const categories = result?.categories ?? EMPTY_LIST;
   const aggregates = aggregateResult?.aggregates ?? null;
@@ -129,20 +158,18 @@ export default function Categorias() {
     return () => controller.abort();
   }, [effectiveAccountId, dataRefreshKey, accountsStatus]);
 
-  const selectedYear = new Date().getFullYear() - yearOffset;
-
   useEffect(() => {
     if (accountsStatus !== "ready") return;
 
     const controller = new AbortController();
     const { signal } = controller;
-    const key = `${effectiveAccountId ?? ""}|${dataRefreshKey}|${yearOffset}`;
+    const key = `${effectiveAccountId ?? ""}|${dataRefreshKey}|${range.key}`;
 
     getTransactionAggregates(
       {
         bankAccountId: effectiveAccountId,
-        from: `${selectedYear}-01-01`,
-        to: `${selectedYear + 1}-01-01`,
+        from: range.from,
+        to: range.to,
       },
       { signal }
     )
@@ -179,7 +206,7 @@ export default function Categorias() {
       });
 
     return () => controller.abort();
-  }, [effectiveAccountId, dataRefreshKey, yearOffset, selectedYear, categoryFromLink, accountsStatus]);
+  }, [effectiveAccountId, dataRefreshKey, range, categoryFromLink, accountsStatus]);
 
   const breakdown = useMemo(() => {
     const totals = new Map();
@@ -276,6 +303,28 @@ export default function Categorias() {
     drilldownRef.current.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
   }, [selectedCategory]);
 
+  // Esta aba mostra UMA conta por vez (a do seletor de contas): sem deixar isso explícito, parecia
+  // somar tudo. Cada opção traz banco, nome e tipo (conta corrente, cartão...) pra não haver dúvida.
+  const connectorsById = useMemo(() => new Map(connectors.map((c) => [c.id, c])), [connectors]);
+  const accountOptions = useMemo(
+    () =>
+      [...accounts]
+        .sort((a, b) => Number(isCreditCardAccount(a)) - Number(isCreditCardAccount(b)))
+        .map((account) => {
+          const connector = connectorsById.get(account.bankCode);
+          return {
+            account,
+            bankName: connector?.name ?? "Conta cadastrada manualmente",
+            logoUrl: connector?.logoUrl,
+            color: connector?.color ? (connector.color.startsWith("#") ? connector.color : `#${connector.color}`) : undefined,
+            kind: getAccountKindLabel(account),
+            isCard: isCreditCardAccount(account),
+          };
+        }),
+    [accounts, connectorsById],
+  );
+  const activeOption = accountOptions.find((o) => o.account.id === effectiveAccountId) ?? null;
+
   function toggleCategory(name) {
     setSelectedCategory((prev) => (prev === name ? null : name));
     setExpandedEstablishments(new Set());
@@ -296,16 +345,79 @@ export default function Categorias() {
     <div className="categorias">
       <SectionHeading kicker="Onde seu dinheiro vai" title="Categorias" align="left" />
 
-      <RangePicker
-        label={String(selectedYear)}
-        onPrev={() => setYearOffset((prev) => prev + 1)}
-        onNext={() => setYearOffset((prev) => Math.max(0, prev - 1))}
-        nextDisabled={yearOffset === 0}
-      />
+      <div className="categorias__period">
+        <div className="categorias__period-modes" role="radiogroup" aria-label="Período">
+          {PERIOD_MODES.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={period.mode === option.value}
+              className={`categorias__period-chip ${period.mode === option.value ? "categorias__period-chip--active" : ""}`}
+              onClick={() => setPeriod({ mode: option.value, offset: 0 })}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        {period.mode === "all" ? (
+          <span className="categorias__period-label">{range.label}</span>
+        ) : (
+          <RangePicker
+            label={range.label}
+            onPrev={() => setPeriod((prev) => ({ ...prev, offset: prev.offset + 1 }))}
+            onNext={() => setPeriod((prev) => ({ ...prev, offset: Math.max(0, prev.offset - 1) }))}
+            nextDisabled={period.offset === 0}
+          />
+        )}
+      </div>
 
-      <p className="categorias__section-hint">
-        Considerando todas as contas conectadas. Só despesas. Receitas ficam em Receitas e despesas.
-      </p>
+      {activeOption && (
+        <div className="categorias__scope">
+          <p className="categorias__scope-title">
+            Mostrando as despesas de:{" "}
+            <strong>
+              {activeOption.bankName} · {activeOption.account.name}
+            </strong>{" "}
+            <span className={`categorias__scope-kind ${activeOption.isCard ? "categorias__scope-kind--card" : ""}`}>
+              {activeOption.isCard && <CardIcon />}
+              {activeOption.kind}
+            </span>
+          </p>
+          {accountOptions.length > 1 && (
+            <div className="categorias__scope-options" role="radiogroup" aria-label="Escolha a conta ou cartão">
+              {accountOptions.map((option) => {
+                const active = option.account.id === effectiveAccountId;
+                return (
+                  <button
+                    key={option.account.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`categorias__scope-option ${active ? "categorias__scope-option--active" : ""}`}
+                    style={{ "--option-color": option.color ?? "var(--color-border-strong)" }}
+                    onClick={() => {
+                      setSelectedAccountId(option.account.id);
+                      setSelectedCategory(null);
+                      setCategoryPage(1);
+                    }}
+                  >
+                    <BankLogo name={option.bankName} logoUrl={option.logoUrl} color={option.color} size={26} />
+                    <span className="categorias__scope-option-text">
+                      <span className="categorias__scope-option-bank">{option.bankName}</span>
+                      <span className="categorias__scope-option-name">
+                        {option.account.name} · {option.kind}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      <p className="categorias__section-hint">Só despesas. Receitas ficam em Receitas e despesas.</p>
 
 
       <div className="categorias__grid">
@@ -313,7 +425,7 @@ export default function Categorias() {
           {loading ? (
             <Skeleton width="100%" height="340px" />
           ) : breakdown.length === 0 ? (
-            <p className="categorias__hint">Nenhuma despesa categorizada ainda.</p>
+            <p className="categorias__hint">Nenhuma despesa categorizada em {range.label}.</p>
           ) : (
             <div className="categorias__donut-block">
               <div className="categorias__donut-wrap">
@@ -421,8 +533,8 @@ export default function Categorias() {
                     className="categorias__visits"
                     query={{
                       bankAccountId: effectiveAccountId,
-                      from: `${selectedYear}-01-01`,
-                      to: `${selectedYear + 1}-01-01`,
+                      from: range.from,
+                      to: range.to,
                       type: "Expense",
                       category: selectedCategory,
                       establishment: name,
