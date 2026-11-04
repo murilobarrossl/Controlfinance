@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import Button from "../../components/ui/Button/Button.jsx";
 import { EyeIcon, EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
@@ -7,6 +7,7 @@ import { useAuth } from "../../context/AuthContext.jsx";
 import { applyMask, CNPJ_MASK, getCpfCnpjMask } from "../../utils/masks.js";
 import { TERMS_VERSION, PRIVACY_VERSION } from "../../legal/versions.js";
 import logo from "../../assets/images/cflogobranco.svg";
+import TermsDialog from "./TermsDialog.jsx";
 import "./Cadastro.css";
 
 const STEPS = [
@@ -32,7 +33,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
   const [confirmsAdult, setConfirmsAdult] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -45,7 +46,7 @@ export default function RegisterPage() {
     setDocument(masked);
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
     setError("");
 
@@ -54,6 +55,14 @@ export default function RegisterPage() {
       return;
     }
 
+    setTermsOpen(true);
+  }
+
+  const closeTerms = useCallback(() => {
+    if (!submitting) setTermsOpen(false);
+  }, [submitting]);
+
+  async function handleAcceptTerms() {
     setSubmitting(true);
     try {
       const data = await register({
@@ -71,6 +80,7 @@ export default function RegisterPage() {
       startSession(data);
       navigate("/conectar-banco");
     } catch (err) {
+      setTermsOpen(false);
       setError(err.message || "Não foi possível criar a conta. Tente novamente.");
     } finally {
       setSubmitting(false);
@@ -233,23 +243,6 @@ export default function RegisterPage() {
             <span className="register__terms-text">Declaro que tenho 18 anos ou mais.</span>
           </label>
 
-          <label className="register__terms">
-            <input
-              type="checkbox"
-              checked={acceptedTerms}
-              onChange={(e) => setAcceptedTerms(e.target.checked)}
-              className="register__checkbox"
-              required
-            />
-            <span className="register__terms-text">
-              Li e aceito os{" "}
-              <Link to="/termos-de-uso" className="register__link" target="_blank" rel="noopener noreferrer">
-                Termos de uso
-              </Link>
-              .
-            </span>
-          </label>
-
           <p className="register__privacy-note">
             Seus dados são tratados como descrito na{" "}
             <Link to="/politica-de-privacidade" className="register__link" target="_blank" rel="noopener noreferrer">
@@ -273,6 +266,10 @@ export default function RegisterPage() {
           </Button>
         </form>
       </div>
+
+      {termsOpen && (
+        <TermsDialog submitting={submitting} onAccept={handleAcceptTerms} onClose={closeTerms} />
+      )}
     </div>
   );
 }

@@ -17,10 +17,12 @@ public class RecurrencesController(AppDbContext db, IEncryptionService encryptio
     public async Task<IActionResult> GetAll()
     {
         var accounts = await db.BankAccounts
+            .AsNoTracking()
             .Where(b => b.UserId == UserId && b.IsActive)
             .ToDictionaryAsync(b => b.Id, b => b);
 
         var transactions = await db.Transactions
+            .AsNoTracking()
             .Where(t => t.UserId == UserId
                      && t.Type == TransactionType.Expense
                      && t.BankAccountId != null
@@ -28,6 +30,7 @@ public class RecurrencesController(AppDbContext db, IEncryptionService encryptio
             .ToListAsync();
 
         var decisions = await db.RecurrenceDecisions
+            .AsNoTracking()
             .Where(d => d.UserId == UserId)
             .ToDictionaryAsync(d => (d.BankAccountId, d.NormalizedName), d => d);
 
@@ -67,7 +70,7 @@ public class RecurrencesController(AppDbContext db, IEncryptionService encryptio
         RecurrenceDecisionStatus? status = null;
         if (statusProvided)
         {
-            if (!Enum.TryParse<RecurrenceDecisionStatus>(dto.Status, true, out var parsedStatus))
+            if (!Enum.TryParse<RecurrenceDecisionStatus>(dto.Status, true, out var parsedStatus) || !Enum.IsDefined(parsedStatus))
                 return BadRequest(new { message = "Status inválido. Use 'Confirmed' ou 'Dismissed'." });
             status = parsedStatus;
         }
@@ -75,7 +78,7 @@ public class RecurrencesController(AppDbContext db, IEncryptionService encryptio
         RecurrenceFrequency? assumedFrequency = null;
         if (!string.IsNullOrEmpty(dto.AssumedFrequency))
         {
-            if (!Enum.TryParse<RecurrenceFrequency>(dto.AssumedFrequency, true, out var frequency))
+            if (!Enum.TryParse<RecurrenceFrequency>(dto.AssumedFrequency, true, out var frequency) || !Enum.IsDefined(frequency))
                 return BadRequest(new { message = "AssumedFrequency inválida. Use 'Monthly' ou 'Yearly'." });
             assumedFrequency = frequency;
         }

@@ -34,6 +34,26 @@ function DashboardLayoutContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
+    const prefetch = () => {
+      import("../../components/charts/AreaTrendChart.jsx");
+      import("../../components/charts/CategoryDonutChart.jsx");
+      import("../../pages/dashboard/DashboardHome/DashboardHome.jsx");
+      import("../../pages/dashboard/Cartoes/Cartoes.jsx");
+      import("../../pages/dashboard/ReceitasDespesas/ReceitasDespesas.jsx");
+      import("../../pages/dashboard/Relatorios/Relatorios.jsx");
+      import("../../pages/dashboard/Categorias/Categorias.jsx");
+      import("../../pages/dashboard/Investimentos/Investimentos.jsx");
+      import("../../pages/dashboard/Privacidade/Privacidade.jsx");
+    };
+    if ("requestIdleCallback" in window) {
+      const id = requestIdleCallback(prefetch);
+      return () => cancelIdleCallback(id);
+    }
+    const id = setTimeout(prefetch, 1500);
+    return () => clearTimeout(id);
+  }, []);
+
+  useEffect(() => {
     if (!sidebarOpen) return;
 
     // Trava o scroll do conteúdo atrás da sidebar aberta e permite fechar com Esc.

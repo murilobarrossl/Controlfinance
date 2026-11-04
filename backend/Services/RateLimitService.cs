@@ -36,8 +36,7 @@ public class RateLimitService : IDisposable
 
     private string Key(string value)
     {
-        using var hmac = new HMACSHA256(_keyHmacSecret);
-        return Convert.ToBase64String(hmac.ComputeHash(Encoding.UTF8.GetBytes(value)));
+        return Convert.ToBase64String(HMACSHA256.HashData(_keyHmacSecret, Encoding.UTF8.GetBytes(value)));
     }
 
     public RateLimitService()

@@ -6,8 +6,8 @@ namespace ControlFinance.API.Services;
 
 public enum RemoteDeletionOutcome
 {
-    /// <summary>A Polp aceitou o pedido de exclusão (202). A exclusão do lado dela é assíncrona:
-    /// "aceito" não é o mesmo que "concluído", e a tela diz isso.</summary>
+    /// <summary>A Polp aceitou a revogação do consentimento. O apagamento dos dados do lado dela
+    /// segue as regras do fornecedor: "aceito" não é o mesmo que "concluído", e a tela diz isso.</summary>
     Requested,
 
     /// <summary>Não deu pra falar com a Polp agora (sem credenciais, fora do ar, erro). O dado
@@ -59,10 +59,10 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
         {
             try
             {
-                await polp.DeleteIntegrationAsync(item.PolpIntegrationId, ct);
+                await polp.DeleteConsentAsync(item.PolpIntegrationId, ct);
                 db.PendingProviderDeletions.Remove(item);
             }
-            catch (HttpRequestException)
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
             {
                 item.LastAttemptAt = DateTime.UtcNow;
             }
@@ -84,9 +84,9 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
         {
             try
             {
-                await polp.DeleteIntegrationAsync(local.PolpIntegrationId, ct);
+                await polp.DeleteConsentAsync(local.PolpIntegrationId, ct);
             }
-            catch (HttpRequestException)
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
             {
                 db.PendingProviderDeletions.Add(new PendingProviderDeletion { PolpIntegrationId = local.PolpIntegrationId });
                 pendingCount++;
@@ -101,9 +101,9 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
     {
         try
         {
-            await polp.DeleteIntegrationAsync(local.PolpIntegrationId, ct);
+            await polp.DeleteConsentAsync(local.PolpIntegrationId, ct);
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
         {
             logger.LogWarning("Exclusão da integração {IntegrationId} na Polp ficou pendente; será tentada de novo.", local.Id);
             return RemoteDeletionOutcome.Pending;
@@ -115,7 +115,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
         return RemoteDeletionOutcome.Requested;
     }
 
-    private async Task DeleteConnectionDataAsync(Guid userId, int polpIntegrationId, CancellationToken ct)
+    private async Task DeleteConnectionDataAsync(Guid userId, Guid polpIntegrationId, CancellationToken ct)
     {
         var accountIds = await db.BankAccounts
             .Where(b => b.UserId == userId && b.PolpIntegrationId == polpIntegrationId)
@@ -154,7 +154,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
 }
 
 // Tenta de novo, de hora em hora, as exclusões na Polp que ficaram pendentes.
-public class PendingDisconnectRetryService(IServiceScopeFactory scopeFactory, ILogger<PendingDisconnectRetryService> logger) : BackgroundService
+public class PendingDisconnectRetryService(IServiceScopeFactory scopeFactory, IJobLock jobLock, ILogger<PendingDisconnectRetryService> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
 
@@ -164,9 +164,12 @@ public class PendingDisconnectRetryService(IServiceScopeFactory scopeFactory, IL
         {
             try
             {
-                using var scope = scopeFactory.CreateScope();
-                var service = scope.ServiceProvider.GetRequiredService<PolpDisconnectService>();
-                await service.RetryPendingAsync(stoppingToken);
+                await jobLock.RunExclusiveAsync(JobLockKeys.PendingDisconnectRetry, async () =>
+                {
+                    using var scope = scopeFactory.CreateScope();
+                    var service = scope.ServiceProvider.GetRequiredService<PolpDisconnectService>();
+                    await service.RetryPendingAsync(stoppingToken);
+                }, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

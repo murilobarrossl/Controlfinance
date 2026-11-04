@@ -20,6 +20,7 @@ public class CreditCardsController(AppDbContext db) : ApiControllerBase
     public async Task<IActionResult> GetAll()
     {
         var cards = await db.CreditCards
+            .AsNoTracking()
             .Where(c => c.UserId == UserId && c.IsActive)
             .ToListAsync();
 
@@ -31,7 +32,7 @@ public class CreditCardsController(AppDbContext db) : ApiControllerBase
     // lista todos. Ver CreditCardSummaryBuilder.BuildRecognizedListAsync.
     [HttpGet("summary")]
     public async Task<IActionResult> GetSummary(CancellationToken ct) =>
-        Ok(await CreditCardSummaryBuilder.BuildRecognizedListAsync(db, UserId, ct));
+        Ok(await CreditCardSummaryBuilder.BuildRecognizedListAsync(db, UserId, await UserTodayAsync(db, ct), ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCreditCardDto dto)
@@ -51,6 +52,22 @@ public class CreditCardsController(AppDbContext db) : ApiControllerBase
         await db.SaveChangesAsync();
 
         return CreatedAtAction(nameof(GetAll), new { id = card.Id }, CreditCardDto.FromEntity(card));
+    }
+
+    [HttpPut("primary/{id:guid}")]
+    public async Task<IActionResult> SetPrimary(Guid id, CancellationToken ct)
+    {
+        var isManualCard = await db.CreditCards.AnyAsync(c => c.Id == id && c.UserId == UserId && c.IsActive, ct);
+        var account = isManualCard
+            ? null
+            : await db.BankAccounts.FirstOrDefaultAsync(b => b.Id == id && b.UserId == UserId && b.IsActive, ct);
+        if (!isManualCard && (account is null || !CreditCardAccountDetector.LooksLikeCreditCard(account)))
+            return NotFound();
+
+        var user = await db.Users.FirstAsync(u => u.Id == UserId, ct);
+        user.PrimaryCardId = id;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
     }
 
     [HttpPut("{id}")]

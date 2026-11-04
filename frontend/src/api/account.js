@@ -18,7 +18,7 @@ export async function downloadMyData() {
 }
 
 // Prazos de retenção configurados no servidor (podem ser nulos = sem prazo definido).
-export const getDataPolicy = async () => apiFetch("/account/data-policy");
+export const getDataPolicy = async ({ signal } = {}) => apiFetch("/account/data-policy", { signal });
 
 export const updateNotificationPreferences = async (preferences) =>
   apiFetch("/account/notifications", { method: "PUT", body: JSON.stringify(preferences) });

@@ -10,6 +10,10 @@ namespace ControlFinance.API.Services;
 // real, é só olhar PolpAccountType dela e ajustar aqui — não precisa adivinhar de novo.
 public static class CreditCardAccountDetector
 {
+    /// <summary>Valor gravado em BankAccount.PolpAccountType para cartões da API v2 (na v2 o
+    /// cartão é um recurso próprio, sem "type" de conta). Casa com o filtro "credit" abaixo.</summary>
+    public const string CardType = "CREDIT_CARD";
+
     public static bool LooksLikeCreditCard(BankAccount account) =>
         LooksLikeCreditCard(account.PolpAccountType, account.PolpAccountSubtype);
 

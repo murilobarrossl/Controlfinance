@@ -38,6 +38,9 @@ public class RegisterRequestDto
     /// <summary>Versão da Política de Privacidade exibida e lida (ver LegalDocuments).</summary>
     [Required(ErrorMessage = "É preciso ler a Política de Privacidade.")]
     public string AcceptedPrivacyVersion { get; set; } = string.Empty;
+
+    /// <summary>Fuso IANA do navegador. Inválido ou ausente vira America/Sao_Paulo.</summary>
+    public string? TimeZone { get; set; }
 }
 
 public class LoginRequestDto
@@ -50,6 +53,9 @@ public class LoginRequestDto
 
     [Required(ErrorMessage = "Senha é obrigatória.")]
     public string Password { get; set; } = string.Empty;
+
+    /// <summary>Fuso IANA do navegador; só substitui o gravado quando é válido.</summary>
+    public string? TimeZone { get; set; }
 }
 
 // O JWT não vai mais no corpo: fica só no cookie httpOnly (SessionCookie). O corpo leva o

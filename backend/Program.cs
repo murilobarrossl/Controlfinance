@@ -18,6 +18,18 @@ var builder = WebApplication.CreateBuilder(args);
 // ambiente: appsettings.json versionado no git só tem placeholders.
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
+// Fora de Development, segredo ausente ou placeholder impede a subida: senão a API sobe usando um
+// valor público do repositório como chave.
+var secretErrors = ConfigSecrets.Validate(builder.Configuration);
+if (secretErrors.Count > 0)
+{
+    if (!builder.Environment.IsDevelopment())
+        throw new InvalidOperationException("Configuração de segredos inválida: " + string.Join("; ", secretErrors));
+
+    foreach (var error in secretErrors)
+        Console.Error.WriteLine($"ATENÇÃO: {error}");
+}
+
 // ──────────────────────────────────────────
 //  BANCO DE DADOS
 // ──────────────────────────────────────────
@@ -33,10 +45,14 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenRevocationService, TokenRevocationService>();
 builder.Services.AddScoped<PolpSyncService>();
 builder.Services.AddScoped<PolpDisconnectService>();
+builder.Services.AddScoped<PolpWebhookProcessor>();
+builder.Services.AddScoped<InstitutionNameResolver>();
 builder.Services.AddScoped<SessionValidator>();
 builder.Services.AddScoped<AccessLogService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 builder.Services.AddSingleton<RateLimitService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IJobLock, PostgresJobLock>();
 builder.Services.AddHttpClient<EmailService>();
 builder.Services.AddHostedService<ScheduledEmailService>();
 builder.Services.AddHostedService<PendingDisconnectRetryService>();
@@ -146,25 +162,22 @@ builder.Services.AddEndpointsApiExplorer();
 // sincronizadas pro seletor lateral). NullPolpService devolve listas vazias pras leituras e recusa
 // com uma mensagem clara as ações que exigiriam falar de verdade com a Polp (conectar banco novo,
 // sincronizar) — reversível: voltando a preencher as duas chaves, a integração real volta sozinha.
-var polpClientId = builder.Configuration["Polp:ClientId"];
-var polpClientSecret = builder.Configuration["Polp:ClientSecret"];
-if (!string.IsNullOrWhiteSpace(polpClientId) && !string.IsNullOrWhiteSpace(polpClientSecret))
+if (ConfigSecrets.IsPolpEnabled(builder.Configuration))
 {
     builder.Services.AddHttpClient<IPolpService, PolpService>();
 
-    // A URL de sandbox (dev.polp.com.br) é ambiente de teste do fornecedor: dados reais de
-    // usuários não devem passar por ela. Não bloqueia (a configuração de produção é do
-    // operador), mas deixa o alerta explícito no log de inicialização.
+    // O Sandbox da Polp (/api/v2/sandbox) gera dados fictícios e nunca conecta ao banco de
+    // verdade: em produção, um usuário "conectaria" um banco e veria contas inventadas. Não
+    // bloqueia (a configuração de produção é do operador), mas deixa o alerta explícito no log.
     var polpBaseUrl = builder.Configuration["Polp:BaseUrl"] ?? string.Empty;
-    if (!builder.Environment.IsDevelopment() && polpBaseUrl.Contains("dev.polp.com.br", StringComparison.OrdinalIgnoreCase))
-        Console.Error.WriteLine("ATENÇÃO: Polp:BaseUrl aponta para o ambiente de testes (dev.polp.com.br) fora de Development.");
+    if (!builder.Environment.IsDevelopment() && polpBaseUrl.Contains("/sandbox", StringComparison.OrdinalIgnoreCase))
+        Console.Error.WriteLine("ATENÇÃO: Polp:BaseUrl aponta para o Sandbox da Polp fora de Development.");
 }
 else
 {
     builder.Services.AddScoped<IPolpService, NullPolpService>();
 }
 builder.Services.AddSwaggerGen(c =>
-
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
@@ -225,6 +238,7 @@ using (var scope = app.Services.CreateScope())
     var startupLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     var encryption = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
     await PrivacyBackfill.RunAsync(db, encryption, app.Configuration, startupLogger);
+    await InstitutionNameResolver.BackfillAsync(db, scope.ServiceProvider.GetRequiredService<InstitutionNameResolver>());
     // Opt-in (Encryption:RotateOnStartup): regrava colunas cifradas com a chave ativa.
     await EncryptionKeyRotation.RunAsync(db, app.Configuration, startupLogger);
 

@@ -1,21 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ChevronDownIcon, CardIcon } from "../../ui/icons/FeatureIcons.jsx";
-import { syncIntegration } from "../../../api/polp.js";
+import { syncAccountBalance } from "../../../api/polp.js";
 import ConfirmDialog from "../../ui/ConfirmDialog/ConfirmDialog.jsx";
 import { groupAccounts } from "../../../utils/accountGrouping.js";
 import { isCreditCardAccount, getAccountKindLabel } from "../../../utils/accountKind.js";
 import "./AccountSwitcher.css";
 
-// Some tempo suficiente pro usuário ler o resultado ("Sincronização iniciada" ou o erro) antes
-// do botão voltar sozinho pro estado normal, sem precisar de um clique extra pra limpar o feedback.
+// Tempo suficiente pro usuário ler o resultado ("Saldo atualizado" ou o erro) antes do botão
+// voltar sozinho pro estado normal, sem precisar de um clique extra pra limpar o feedback.
 const SYNC_FEEDBACK_DURATION_MS = 4000;
-
-// O sync roda em background no servidor (a Polp já levou até 20s por chamada nos logs). O
-// clique só confirma que foi enfileirado, não que já terminou. Espera um tempo plausível antes
-// de recarregar os dados do dashboard, em vez de recarregar na hora e mostrar o estado antigo
-// como se já fosse o resultado da sincronização.
-const SYNC_REFRESH_DELAY_MS = 8000;
 
 // Mesma cor usada na tarja ao lado de cada banco na tela de conectar-banco, nunca
 // escolhida à mão aqui, só repassada do conector correspondente (via bankCode).
@@ -59,7 +53,7 @@ export default function AccountSwitcher({ accounts, activeAccountId, connectors,
   const [open, setOpen] = useState(false);
   // { kind: "connection", id, label } | { kind: "manual", id, label } | null
   const [pendingRemoval, setPendingRemoval] = useState(null);
-  const [syncState, setSyncState] = useState({}); // localIntegrationId -> { status: "loading" | "success" | "error", message? }
+  const [syncState, setSyncState] = useState({}); // accountId -> { status: "loading" | "done" | "error", message? }
   const rootRef = useRef(null);
 
   useEffect(() => {
@@ -70,18 +64,21 @@ export default function AccountSwitcher({ accounts, activeAccountId, connectors,
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  async function handleSync(localIntegrationId) {
-    setSyncState((prev) => ({ ...prev, [localIntegrationId]: { status: "loading" } }));
+  // Única consulta "na hora" que sobrou: o saldo de uma conta, a pedido do usuário. O resto
+  // (transações, faturas, limites) chega por webhook, no ritmo da agenda da Polp. A resposta já
+  // traz o saldo novo, então dá pra recarregar os dados logo em seguida.
+  async function handleBalanceSync(accountId) {
+    setSyncState((prev) => ({ ...prev, [accountId]: { status: "loading" } }));
     try {
-      await syncIntegration(localIntegrationId);
-      setSyncState((prev) => ({ ...prev, [localIntegrationId]: { status: "queued" } }));
-      setTimeout(() => onSynced?.(), SYNC_REFRESH_DELAY_MS);
+      await syncAccountBalance(accountId);
+      setSyncState((prev) => ({ ...prev, [accountId]: { status: "done" } }));
+      onSynced?.();
     } catch (err) {
-      setSyncState((prev) => ({ ...prev, [localIntegrationId]: { status: "error", message: err.message } }));
+      setSyncState((prev) => ({ ...prev, [accountId]: { status: "error", message: err.message } }));
     } finally {
       setTimeout(() => {
         setSyncState((prev) => {
-          const { [localIntegrationId]: _removed, ...rest } = prev;
+          const { [accountId]: _removed, ...rest } = prev;
           return rest;
         });
       }, SYNC_FEEDBACK_DURATION_MS);
@@ -157,23 +154,30 @@ export default function AccountSwitcher({ accounts, activeAccountId, connectors,
 
               {group.accounts[0].localIntegrationId && (
                 <div className="account-switcher__sync-row">
-                  <button
-                    type="button"
-                    className="account-switcher__sync-btn"
-                    disabled={syncState[group.accounts[0].localIntegrationId]?.status === "loading"}
-                    onClick={() => handleSync(group.accounts[0].localIntegrationId)}
-                  >
-                    {syncState[group.accounts[0].localIntegrationId]?.status === "loading"
-                      ? "Iniciando..."
-                      : syncState[group.accounts[0].localIntegrationId]?.status === "queued"
-                      ? "Sincronização iniciada"
-                      : "Sincronizar agora"}
-                  </button>
-                  {syncState[group.accounts[0].localIntegrationId]?.status === "error" && (
-                    <span className="account-switcher__sync-error">
-                      {syncState[group.accounts[0].localIntegrationId].message}
-                    </span>
-                  )}
+                  {(() => {
+                    const balanceAccount = group.accounts.find((a) => a.canSyncBalance);
+                    if (!balanceAccount) return null;
+                    const state = syncState[balanceAccount.id];
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          className="account-switcher__sync-btn"
+                          disabled={state?.status === "loading"}
+                          onClick={() => handleBalanceSync(balanceAccount.id)}
+                        >
+                          {state?.status === "loading"
+                            ? "Atualizando..."
+                            : state?.status === "done"
+                            ? "Saldo atualizado"
+                            : "Atualizar saldo"}
+                        </button>
+                        {state?.status === "error" && (
+                          <span className="account-switcher__sync-error">{state.message}</span>
+                        )}
+                      </>
+                    );
+                  })()}
                   <button
                     type="button"
                     className="account-switcher__disconnect"

@@ -3,17 +3,17 @@ import logo from "../../../assets/images/cflogobranco.svg";
 import "./Footer.css";
 
 const PRODUTO_LINKS = [
-  { label: "Funcionalidades", href: "#funcionalidades" },
-  { label: "Planos", href: "#planos" },
-  { label: "Sincronização bancária", href: "#funcionalidades" },
+  { label: "Funcionalidades", href: "/#funcionalidades" },
+  { label: "Planos", href: "/#planos" },
+  { label: "Sincronização bancária", href: "/#funcionalidades" },
 ];
 
 const ANO_LANCAMENTO = 2026;
 
 const EMPRESA_LINKS = [
-  { label: "Sobre nós", href: "#sobre-nos" },
+  { label: "Sobre nós", href: "/#sobre-nos" },
   { label: "Time", href: "#time" },
-  { label: "Dúvidas frequentes", href: "#faq" },
+  { label: "Dúvidas frequentes", href: "/#faq" },
 ];
 
 export default function Footer() {

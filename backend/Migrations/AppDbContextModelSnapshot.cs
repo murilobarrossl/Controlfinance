@@ -57,7 +57,6 @@ namespace ControlFinance.API.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("Balance")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("BalanceEncrypted");
 
@@ -103,8 +102,8 @@ namespace ControlFinance.API.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int?>("PolpAccountId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("PolpAccountId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("PolpAccountSubtype")
                         .HasColumnType("text");
@@ -112,8 +111,11 @@ namespace ControlFinance.API.Migrations
                     b.Property<string>("PolpAccountType")
                         .HasColumnType("text");
 
-                    b.Property<int?>("PolpIntegrationId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("PolpIntegrationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProductType")
+                        .HasColumnType("text");
 
                     b.Property<string>("UsedLimit")
                         .HasColumnType("text")
@@ -124,9 +126,13 @@ namespace ControlFinance.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PolpAccountId");
+
                     b.HasIndex("UserId");
 
-                    b.ToTable("BankAccounts", (string)null);
+                    b.HasIndex("UserId", "IsActive");
+
+                    b.ToTable("BankAccounts");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.Category", b =>
@@ -154,7 +160,7 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("UserId", "Name")
                         .IsUnique();
 
-                    b.ToTable("Categories", (string)null);
+                    b.ToTable("Categories");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.ConsentRecord", b =>
@@ -187,7 +193,7 @@ namespace ControlFinance.API.Migrations
 
                     b.HasIndex("UserId", "Kind");
 
-                    b.ToTable("ConsentRecords", (string)null);
+                    b.ToTable("ConsentRecords");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.CreditCard", b =>
@@ -233,7 +239,7 @@ namespace ControlFinance.API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("CreditCards", (string)null);
+                    b.ToTable("CreditCards");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.Installment", b =>
@@ -258,15 +264,18 @@ namespace ControlFinance.API.Migrations
                         .HasColumnType("text")
                         .HasColumnName("DescriptionEncrypted");
 
-                    b.Property<string>("LegacyDescription")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("Description");
+                    b.Property<int?>("DueDay")
+                        .HasColumnType("integer");
 
                     b.Property<string>("InstallmentAmount")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("InstallmentAmountEncrypted");
+
+                    b.Property<string>("LegacyDescription")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("Description");
 
                     b.Property<DateTime>("NextDueDate")
                         .HasColumnType("timestamp with time zone");
@@ -288,7 +297,9 @@ namespace ControlFinance.API.Migrations
 
                     b.HasIndex("CreditCardId");
 
-                    b.ToTable("Installments", (string)null);
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Installments");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.PendingProviderDeletion", b =>
@@ -300,15 +311,15 @@ namespace ControlFinance.API.Migrations
                     b.Property<DateTime?>("LastAttemptAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("PolpIntegrationId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("PolpIntegrationId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("RequestedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
-                    b.ToTable("PendingProviderDeletions", (string)null);
+                    b.ToTable("PendingProviderDeletions");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.PolpIntegration", b =>
@@ -320,8 +331,11 @@ namespace ControlFinance.API.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("InstitutionId")
-                        .HasColumnType("integer");
+                    b.Property<string>("ExecutionStatus")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("InstitutionId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("InstitutionName")
                         .HasColumnType("text");
@@ -329,8 +343,8 @@ namespace ControlFinance.API.Migrations
                     b.Property<DateTime?>("LastSyncedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("PolpIntegrationId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("PolpIntegrationId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -342,15 +356,17 @@ namespace ControlFinance.API.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PolpIntegrationId")
+                        .IsUnique();
+
                     b.HasIndex("UserId");
 
-                    b.ToTable("PolpIntegrations", (string)null);
+                    b.ToTable("PolpIntegrations");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.RecurrenceDecision", b =>
@@ -392,7 +408,7 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("UserId", "BankAccountId", "NormalizedName")
                         .IsUnique();
 
-                    b.ToTable("RecurrenceDecisions", (string)null);
+                    b.ToTable("RecurrenceDecisions");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.RevokedToken", b =>
@@ -405,7 +421,7 @@ namespace ControlFinance.API.Migrations
 
                     b.HasKey("Jti");
 
-                    b.ToTable("RevokedTokens", (string)null);
+                    b.ToTable("RevokedTokens");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.Transaction", b =>
@@ -471,7 +487,9 @@ namespace ControlFinance.API.Migrations
 
                     b.HasIndex("UserId", "DueDate");
 
-                    b.ToTable("Transactions", (string)null);
+                    b.HasIndex("UserId", "BankAccountId", "DueDate");
+
+                    b.ToTable("Transactions");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.User", b =>
@@ -508,6 +526,12 @@ namespace ControlFinance.API.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<DateOnly?>("LastDueReminderLocalDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("LastMonthlySummaryMonth")
+                        .HasColumnType("date");
+
                     b.Property<DateTime?>("LastMonthlySummarySentAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -523,6 +547,16 @@ namespace ControlFinance.API.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("PrimaryCardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("America/Sao_Paulo");
+
                     b.Property<int>("TokenVersion")
                         .HasColumnType("integer");
 
@@ -534,7 +568,7 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
@@ -553,7 +587,7 @@ namespace ControlFinance.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DataProtectionKeys", (string)null);
+                    b.ToTable("DataProtectionKeys");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.BankAccount", b =>

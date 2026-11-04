@@ -4,6 +4,7 @@ using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ControlFinance.API.Controllers;
 
@@ -13,78 +14,82 @@ namespace ControlFinance.API.Controllers;
 public class PolpController(
     AppDbContext db,
     IPolpService polp,
+    InstitutionNameResolver institutionNames,
     IEncryptionService encryption,
     PolpDisconnectService disconnectService,
     IServiceScopeFactory scopeFactory,
+    IMemoryCache cache,
     ILogger<PolpController> logger) : ApiControllerBase
 {
+    private const string ConnectorsCacheKey = "polp:connectors";
+    private static readonly TimeSpan ConnectorsCacheDuration = TimeSpan.FromMinutes(10);
+
     [HttpGet("connectors")]
     public async Task<IActionResult> GetConnectors(CancellationToken ct)
     {
-        List<PolpInstitutionDto> institutions;
-        try
+        if (!cache.TryGetValue(ConnectorsCacheKey, out List<PolpInstitutionDto>? institutions) || institutions is null)
         {
-            institutions = await polp.GetInstitutionsAsync(ct);
-        }
-        catch (HttpRequestException)
-        {
-            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível carregar os bancos disponíveis." });
+            try
+            {
+                institutions = await polp.GetInstitutionsAsync(ct);
+                cache.Set(ConnectorsCacheKey, institutions, ConnectorsCacheDuration);
+            }
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
+            {
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível carregar os bancos disponíveis." });
+            }
         }
 
-        var connectors = institutions.Select(i => new
+        var connectors = institutions.Select(i =>
         {
-            id = i.Id.ToString(),
-            name = i.Name,
-            color = i.Color ?? "#000000",
-            textColor = ResolveTextColor(i.Color),
-            initials = BuildInitials(i.Name),
-            logoUrl = i.LogoUrl,
-            status = i.Status
+            var color = i.Color ?? BankBrandColors.Find(i.Name);
+            return new
+            {
+                id = i.Id.ToString(),
+                name = i.Name,
+                color,
+                textColor = ResolveTextColor(color),
+                initials = BuildInitials(i.Name),
+                logoUrl = i.LogoUrl,
+                status = i.Status,
+                type = i.Type
+            };
         });
 
         return Ok(connectors);
     }
 
-    // UPDATING/WAITING_USER_INPUT só bloqueiam uma conexão nova se atualizados há menos de 1h:
-    // autenticar um banco aqui leva 5-10min no máximo, então uma integração parada há mais tempo
-    // que isso foi abandonada (aba fechada, MFA nunca completado). Bloquear pra sempre trancaria
-    // o usuário de tentar de novo. UPDATED sempre bloqueia (já está conectado de verdade). A linha
-    // antiga abandonada fica órfã no banco até a limpeza, o que foge do escopo deste guard.
-    private static readonly TimeSpan StaleIntegrationThreshold = TimeSpan.FromHours(1);
+    // AWAITING_AUTHORIZATION só bloqueia uma conexão nova se atualizada há menos de 1h: autorizar
+    // um banco aqui leva 5-10min no máximo, então um consentimento parado há mais tempo que isso
+    // foi abandonado (aba fechada, autorização nunca concluída). Bloquear pra sempre trancaria o
+    // usuário de tentar de novo. AUTHORISED sempre bloqueia (já está conectado de verdade).
+    private static readonly TimeSpan StaleConsentThreshold = TimeSpan.FromHours(1);
 
-    // Throttle do "sincronizar agora" (manual e automático no mount do dashboard): já tivemos um
-    // bug de polling sem limite martelando uma API externa, então tanto o botão manual quanto o
-    // sync-all automático respeitam essa janela por integração, não só a UI.
-    private static readonly TimeSpan SyncThrottleWindow = TimeSpan.FromMinutes(5);
+    // Consulta de status do consentimento só quando o webhook "consents" ainda não chegou: a Polp
+    // orienta a não fazer polling (240 req/min por usuário), então no máximo uma consulta por
+    // janela, por conexão.
+    private static readonly TimeSpan StatusRefreshWindow = TimeSpan.FromSeconds(5);
 
-    private static bool IsSyncThrottled(PolpIntegration local) =>
-        local.LastSyncedAt is { } last && DateTime.UtcNow - last < SyncThrottleWindow;
-
-    private static int SyncThrottleRemainingSeconds(PolpIntegration local) =>
-        local.LastSyncedAt is { } last
-            ? Math.Max(0, (int)Math.Ceiling((SyncThrottleWindow - (DateTime.UtcNow - last)).TotalSeconds))
-            : 0;
-
-    // Impede o clique duplo (ou um retry depois de um timeout) de criar uma segunda
-    // PolpIntegration local pro mesmo banco e, pior, uma segunda integração do lado da Polp
-    // também, que depois recusa com 422 ITEM_IS_ALREADY_UPDATING.
-    private async Task<PolpIntegration?> FindBlockingIntegrationAsync(int institutionId, CancellationToken ct)
+    // Impede o clique duplo (ou um retry depois de um timeout) de criar uma segunda PolpIntegration
+    // local pro mesmo banco.
+    private async Task<PolpIntegration?> FindBlockingIntegrationAsync(Guid institutionId, CancellationToken ct)
     {
         var candidates = await db.PolpIntegrations
+            .AsNoTracking()
             .Where(p => p.UserId == UserId && p.InstitutionId == institutionId)
             .ToListAsync(ct);
 
-        var cutoff = DateTime.UtcNow - StaleIntegrationThreshold;
+        var cutoff = DateTime.UtcNow - StaleConsentThreshold;
 
         return candidates.FirstOrDefault(p =>
-            p.Status == "UPDATED" ||
-            ((p.Status is "UPDATING" or "WAITING_USER_INPUT") && p.UpdatedAt > cutoff));
+            p.Status == "AUTHORISED" ||
+            (p.Status == "AWAITING_AUTHORIZATION" && p.UpdatedAt > cutoff));
     }
 
     [HttpPost("integrations")]
     public async Task<IActionResult> Connect([FromBody] PolpConnectDto dto, CancellationToken ct)
     {
-        if (!int.TryParse(dto.ConnectorId, out var institutionId))
+        if (!Guid.TryParse(dto.ConnectorId, out var institutionId))
             return BadRequest(new { message = "connectorId inválido." });
 
         // O aviso da tela de conexão (quais dados, pra quê, quem recebe, como desconectar) tem
@@ -96,8 +101,8 @@ public class PolpController(
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == UserId, ct);
         if (user is null) return Unauthorized();
 
-        // O CPF/CNPJ não fica mais guardado em forma recuperável: a Polp precisa dele pra criar a
-        // integração, então o usuário digita na hora, ele vai direto pra Polp e é descartado.
+        // O CPF/CNPJ não fica mais guardado em forma recuperável: a Polp precisa dele pra criar o
+        // consentimento, então o usuário digita na hora, ele vai direto pra Polp e é descartado.
         // Conferir contra o hash do cadastro impede conectar o banco de outra pessoa nesta conta.
         var document = new string((dto.Document ?? string.Empty).Where(char.IsDigit).ToArray());
         if (!DocumentValidator.IsValid(document) || !encryption.ComputeLookupHashCandidates(document).Contains(user.DocumentHash))
@@ -119,25 +124,40 @@ public class PolpController(
             });
         }
 
-        PolpIntegrationDto created;
+        PolpConsentDto created;
         try
         {
-            created = await polp.CreateIntegrationAsync(institutionId, document, ct);
+            created = await polp.CreateConsentAsync(new CreatePolpConsentRequest(institutionId, document, UserId), ct);
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
         {
             return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível iniciar a conexão com o banco." });
         }
 
-        var localIntegration = new PolpIntegration
-        {
-            UserId = UserId,
-            PolpIntegrationId = created.Id,
-            InstitutionId = institutionId,
-            Status = created.Status
-        };
+        // avoidDuplicates pode devolver um consentimento que já temos (mesmo id): reaproveita a
+        // linha local em vez de violar o índice único.
+        var localIntegration = await db.PolpIntegrations
+            .FirstOrDefaultAsync(p => p.PolpIntegrationId == created.Id, ct);
+        if (localIntegration is not null && localIntegration.UserId != UserId)
+            return Conflict(new { message = "Não foi possível iniciar a conexão com o banco." });
 
-        db.PolpIntegrations.Add(localIntegration);
+        if (localIntegration is null)
+        {
+            localIntegration = new PolpIntegration
+            {
+                UserId = UserId,
+                PolpIntegrationId = created.Id,
+                InstitutionId = institutionId
+            };
+            db.PolpIntegrations.Add(localIntegration);
+        }
+
+        localIntegration.Status = created.Status;
+        localIntegration.ExecutionStatus = created.ExecutionStatus;
+        localIntegration.InstitutionName = created.Institution?.Name ?? localIntegration.InstitutionName
+            ?? await institutionNames.FindAsync(institutionId, ct);
+        localIntegration.UpdatedAt = DateTime.UtcNow;
+
         db.ConsentRecords.Add(new ConsentRecord
         {
             UserId = UserId,
@@ -147,32 +167,49 @@ public class PolpController(
         });
         await db.SaveChangesAsync(ct);
 
+        // Sandbox (e consentimento reaproveitado) já nasce AUTHORISED e a Polp pode não mandar o
+        // webhook "consents": dispara o backfill inicial aqui para não depender dele.
+        if (created.Status == "AUTHORISED" && !localIntegration.SyncedLocally)
+            QueueBackgroundSync(localIntegration.Id, UserId);
+
         return Ok(new
         {
-            integrationId = localIntegration.Id,          // id local (usado pelo frontend para polling)
+            integrationId = localIntegration.Id,          // id local (usado pelo frontend para acompanhar o status)
             polpIntegrationId = created.Id,
             status = created.Status,
             urlToAuthenticate = created.UrlToAuthenticate
         });
     }
 
+    private static readonly TimeSpan BackfillResumeWindow = TimeSpan.FromMinutes(5);
+
     [HttpGet("integrations")]
     public async Task<IActionResult> GetIntegrations(CancellationToken ct)
     {
         // PolpIntegrationId vai junto só pra agrupar visualmente no seletor de contas (ex.: conta
-        // corrente + cartão de crédito do mesmo banco, sincronizados na mesma conexão). Cada
+        // corrente + cartão de crédito do mesmo banco, vindos do mesmo consentimento). Cada
         // conta continua com sua própria visão de dados, nada é somado entre elas.
         var accounts = await db.BankAccounts
             .Where(b => b.UserId == UserId && b.IsActive)
-            .Select(b => new { b.Id, b.Name, b.Balance, b.BankCode, b.PolpIntegrationId, b.PolpAccountType, b.PolpAccountSubtype })
+            .Select(b => new { b.Id, b.Name, b.Balance, b.BankCode, b.PolpIntegrationId, b.PolpAccountId, b.PolpAccountType, b.PolpAccountSubtype })
             .ToListAsync(ct);
 
-        // BankAccount.PolpIntegrationId guarda o id remoto (int) da Polp, mas o botão de
-        // "sincronizar agora" precisa do Guid local (PolpIntegration.Id) pra chamar o endpoint de
-        // sync. Por isso busca esse mapeamento de uma vez em vez de uma query por conta.
+        // BankAccount.PolpIntegrationId guarda o id do consentimento na Polp, mas o frontend
+        // precisa do Guid local (PolpIntegration.Id) pra desconectar. Busca o mapeamento de uma
+        // vez em vez de uma query por conta.
         var localByRemoteId = await db.PolpIntegrations
             .Where(p => p.UserId == UserId)
-            .ToDictionaryAsync(p => p.PolpIntegrationId, p => new { p.Id, p.LastSyncedAt }, ct);
+            .ToDictionaryAsync(p => p.PolpIntegrationId, p => new { p.Id, p.LastSyncedAt, p.ExecutionStatus, p.Status, p.SyncedLocally }, ct);
+
+        // Conexão autorizada que nunca chegou a importar nada (backfill caiu antes de a Polp gerar
+        // as contas, ou a API reiniciou no meio): retoma aqui, no máximo uma vez por janela.
+        foreach (var pending in localByRemoteId.Values.Where(p => p.Status == "AUTHORISED" && !p.SyncedLocally))
+        {
+            var retryKey = $"polp:backfill-retry:{pending.Id}";
+            if (cache.TryGetValue(retryKey, out _)) continue;
+            cache.Set(retryKey, true, BackfillResumeWindow);
+            QueueBackgroundSync(pending.Id, UserId);
+        }
 
         var result = accounts.Select(a =>
         {
@@ -180,29 +217,36 @@ public class PolpController(
                 ? info
                 : null;
 
+            var isCreditCard = CreditCardAccountDetector.LooksLikeCreditCard(a.PolpAccountType, a.PolpAccountSubtype);
+
             return new
             {
                 a.Id,
                 a.Name,
-                a.Balance,
+                Balance = a.PolpAccountId.HasValue && isCreditCard ? (decimal?)null : a.Balance,
                 a.BankCode,
                 a.PolpIntegrationId,
                 localIntegrationId = local?.Id,
                 lastSyncedAt = local?.LastSyncedAt,
+                // PARTIAL_SUCCESS não bloqueia nada: só avisa que categoria/counterparty ainda
+                // estão sendo refinadas pela Polp.
+                enrichmentPending = local?.ExecutionStatus == "PARTIAL_SUCCESS",
+                // Só contas (não cartões) têm saldo que a Polp consegue consultar na hora.
+                canSyncBalance = a.PolpAccountId.HasValue && !isCreditCard,
                 // Tipo cru da Polp + a mesma decisão de "é cartão" que Cartões/Dashboard já usam
                 // (CreditCardAccountDetector), pra o frontend não apresentar um cartão como se fosse
                 // outra conta bancária nem reimplementar essa heurística do lado de lá. O tipo cru
                 // também é o que separa conta corrente de poupança/investimento em Investimentos.
                 accountType = a.PolpAccountType,
                 accountSubtype = a.PolpAccountSubtype,
-                isCreditCard = CreditCardAccountDetector.LooksLikeCreditCard(a.PolpAccountType, a.PolpAccountSubtype)
+                isCreditCard
             };
         });
 
         return Ok(result);
     }
 
-    // {id} aqui é o Guid local salvo em PolpIntegration, não o id da integração na própria Polp.
+    // {id} aqui é o Guid local salvo em PolpIntegration, não o id do consentimento na Polp.
     [HttpGet("integrations/{id:guid}")]
     public async Task<IActionResult> GetIntegrationStatus(Guid id, CancellationToken ct)
     {
@@ -211,104 +255,110 @@ public class PolpController(
 
         if (local is null) return NotFound();
 
-        PolpIntegrationDto remote;
-        try
+        string? urlToAuthenticate = null;
+        string? error = null;
+
+        // O webhook "consents" mantém o status local em dia. Só consulta a Polp enquanto o
+        // consentimento ainda não foi autorizado (é o que a tela de conexão acompanha), e no
+        // máximo uma vez por janela.
+        if (local.Status == "AWAITING_AUTHORIZATION" && DateTime.UtcNow - local.UpdatedAt > StatusRefreshWindow)
         {
-            remote = await polp.GetIntegrationAsync(local.PolpIntegrationId, ct);
-        }
-        catch (HttpRequestException)
-        {
-            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível consultar o status da conexão." });
+            try
+            {
+                var remote = await polp.GetConsentAsync(local.PolpIntegrationId, ct);
+                local.Status = remote.Status;
+                local.ExecutionStatus = remote.ExecutionStatus;
+                local.InstitutionName = remote.Institution?.Name ?? local.InstitutionName
+                    ?? await institutionNames.FindAsync(local.InstitutionId, ct);
+                urlToAuthenticate = remote.UrlToAuthenticate;
+                error = remote.ErrorMessage;
+            }
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
+            {
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível consultar o status da conexão." });
+            }
+
+            // A URL de autenticação vai direto pro navegador e não é gravada: é de uso único.
+            local.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            if (local.Status == "AUTHORISED" && !local.SyncedLocally)
+                QueueBackgroundSync(local.Id, UserId);
         }
 
-        // A URL de autenticação vai direto pro navegador e não é gravada: é de uso único e o
-        // próximo polling já traz a versão atual da Polp.
-        local.Status = remote.Status;
-        local.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
-
-        // Mapeia os status da Polp para os estados que o frontend já conhece
-        var mappedStatus = remote.Status switch
+        // Mapeia os status da Polp para os estados que o frontend já conhece.
+        var mappedStatus = local.Status switch
         {
-            "UPDATING" => "syncing",
-            "WAITING_USER_INPUT" => "waiting_user_input",
-            "UPDATED" => "active",
-            "LOGIN_ERROR" => "login_error",
-            "OUTDATED" => "outdated",
+            "AWAITING_AUTHORIZATION" => "waiting_user_input",
+            // Autorizado, mas a Polp ainda está importando os dados da instituição.
+            "AUTHORISED" when local.ExecutionStatus == "AWAITING_RESOURCES" || !local.SyncedLocally => "syncing",
+            "AUTHORISED" => "active",
+            "REJECTED" => "login_error",
+            "EXPIRED" => "outdated",
             _ => "unknown"
         };
 
         return Ok(new
         {
             status = mappedStatus,
-            rawStatus = remote.Status,
-            error = remote.ErrorMessage,
-            urlToAuthenticate = remote.UrlToAuthenticate
+            rawStatus = local.Status,
+            error,
+            urlToAuthenticate
         });
     }
 
-    // Só deve ser chamado quando o status já é UPDATED (senão a Polp ainda não tem contas prontas
-    // pra buscar). Dispara o sync em background e responde na hora (202): segurar a conexão HTTP
-    // até o sync inteiro terminar estourava o timeout do gateway (Railway/DigitalOcean, ~30-60s)
-    // bem antes da Polp acabar de responder: uma chamada sozinha já levou até 20s nos logs, e o
-    // sync passa por várias contas e páginas de transação.
-    [HttpPost("integrations/{id:guid}/sync")]
-    public async Task<IActionResult> Sync(Guid id, CancellationToken ct)
+    // Atualização de saldo a pedido do usuário. É a única consulta "na hora" que sobrou: o resto
+    // chega por webhook, no ritmo da agenda da Polp. A Polp limita essa rota (30 req/min para
+    // todos os usuários juntos) e o saldo consome a mesma cota mensal da sincronização
+    // automática, por isso a janela de 1 minuto por conta.
+    private static readonly TimeSpan BalanceSyncWindow = TimeSpan.FromMinutes(1);
+    private static readonly object BalanceSyncLock = new();
+
+    [HttpPost("accounts/{id:guid}/balance-sync")]
+    public async Task<IActionResult> SyncBalance(Guid id, CancellationToken ct)
     {
-        var local = await db.PolpIntegrations
-            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus, ct);
+        var account = await db.BankAccounts
+            .FirstOrDefaultAsync(b => b.Id == id && b.UserId == UserId && b.IsActive, ct);
 
-        if (local is null) return NotFound();
+        if (account?.PolpAccountId is not Guid remoteId || CreditCardAccountDetector.LooksLikeCreditCard(account))
+            return NotFound();
 
-        if (IsSyncThrottled(local))
+        lock (BalanceSyncLock)
         {
-            return StatusCode(StatusCodes.Status429TooManyRequests, new
+            var cacheKey = $"polp:balance-sync:{account.Id}";
+            if (cache.TryGetValue(cacheKey, out DateTime last) && DateTime.UtcNow - last < BalanceSyncWindow)
             {
-                message = "Essa conexão já foi sincronizada há pouco. Tente novamente em instantes.",
-                retryAfterSeconds = SyncThrottleRemainingSeconds(local)
-            });
+                return StatusCode(StatusCodes.Status429TooManyRequests, new
+                {
+                    message = "O saldo foi atualizado há pouco. Tente novamente em instantes.",
+                    retryAfterSeconds = (int)Math.Ceiling((BalanceSyncWindow - (DateTime.UtcNow - last)).TotalSeconds)
+                });
+            }
+            cache.Set(cacheKey, DateTime.UtcNow, BalanceSyncWindow);
         }
 
-        // Reserva a janela de throttle já aqui, antes de disparar em background: sem isso, dois
-        // cliques rápidos (ou o clique cruzando com o sync-all automático do dashboard) passavam
-        // os dois pela checagem acima antes de qualquer um marcar LastSyncedAt, e disparavam dois
-        // syncs da mesma integração em paralelo. O lock em PolpSyncService evita corrupção de
-        // dado nesse caso, mas não evita bater na Polp duas vezes à toa.
-        local.LastSyncedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
+        PolpAccountDto remote;
+        try
+        {
+            remote = await polp.SyncBalanceAsync(remoteId, ct);
+        }
+        catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível atualizar o saldo agora." });
+        }
 
-        QueueBackgroundSync(local.Id, UserId);
+        if (remote.Balance?.AvailableAmount?.Value is { } balance)
+        {
+            account.Balance = balance;
+            await db.SaveChangesAsync(ct);
+        }
 
-        return Accepted(new { status = "syncing" });
+        return Ok(new { balance = account.Balance });
     }
 
-    // Sincroniza todas as integrações do usuário de uma vez, usado pra atualizar saldo e
-    // transações automaticamente ao carregar o dashboard, sem precisar reconectar o banco
-    // nem esperar um job periódico. Uma integração com falha (banco fora do ar, token
-    // expirado etc.) não trava a sincronização das outras. Mesmo motivo do endpoint acima pra
-    // rodar em background: com várias integrações, o total facilmente estoura o timeout do gateway.
-    [HttpPost("integrations/sync-all")]
-    public async Task<IActionResult> SyncAll(CancellationToken ct)
-    {
-        var integrations = await db.PolpIntegrations
-            .Where(p => p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus)
-            .ToListAsync(ct);
-
-        var toSync = integrations.Where(i => !IsSyncThrottled(i)).ToList();
-        foreach (var local in toSync)
-            local.LastSyncedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync(ct);
-
-        foreach (var local in toSync)
-            QueueBackgroundSync(local.Id, UserId);
-
-        return Accepted(new { queuedIntegrations = toSync.Count, totalIntegrations = integrations.Count });
-    }
-
-    // Desconecta uma conexão bancária inteira (conta corrente + cartão do mesmo banco vêm na mesma
-    // integração e não dá pra revogar uma sem a outra). Apaga na hora tudo que veio dessa conexão
-    // e pede a exclusão da integração na Polp. A resposta diz se a Polp aceitou o pedido ou se
+    // Desconecta uma conexão bancária inteira (conta corrente + cartão do mesmo banco vêm no mesmo
+    // consentimento e não dá pra revogar uma sem a outra). Apaga na hora tudo que veio dessa
+    // conexão e revoga o consentimento na Polp. A resposta diz se a Polp aceitou o pedido ou se
     // ele ficou pendente: a tela não pode afirmar que o fornecedor apagou algo que ele não
     // confirmou. Desconectar não exclui a conta do Control Finance (isso é DELETE /api/account).
     [HttpDelete("integrations/{id:guid}")]
@@ -328,11 +378,16 @@ public class PolpController(
         });
     }
 
-    // Roda com seu próprio escopo de DI (próprio DbContext, próprio PolpSyncService): o
-    // DbContext desta requisição é descartado assim que ela responde, e usá-lo depois disso numa
-    // Task solta derrubaria com ObjectDisposedException. CancellationToken.None de propósito: a
-    // requisição que disparou isso já terminou (e cancelaria o token dela), mas o sync em si deve
-    // seguir até o fim mesmo assim.
+    // Backfill inicial em background. Roda com seu próprio escopo de DI (próprio DbContext,
+    // próprio PolpSyncService): o DbContext desta requisição é descartado assim que ela responde,
+    // e usá-lo depois disso numa Task solta derrubaria com ObjectDisposedException.
+    // CancellationToken.None de propósito: a requisição que disparou isso já terminou (e
+    // cancelaria o token dela), mas o sync em si deve seguir até o fim mesmo assim.
+    // Sem webhook garantido (ambiente local, ou o aviso se perde), o backfill não pode depender de
+    // a Polp já ter gerado as contas no primeiro instante: tenta de novo algumas vezes.
+    private static readonly TimeSpan[] BackfillRetryDelays =
+        [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30)];
+
     private void QueueBackgroundSync(Guid integrationId, Guid userId)
     {
         _ = Task.Run(async () =>
@@ -347,9 +402,18 @@ public class PolpController(
                     .FirstOrDefaultAsync(p => p.Id == integrationId && p.UserId == userId);
                 if (local is null) return;
 
-                await PolpSyncService.SyncOneWithLockAsync(
-                    () => syncService.SyncOneAsync(local, userId, CancellationToken.None),
-                    integrationId, CancellationToken.None);
+                for (var attempt = 0; ; attempt++)
+                {
+                    var synced = await PolpSyncService.SyncOneWithLockAsync(async () =>
+                    {
+                        await scopedDb.Entry(local).ReloadAsync();
+                        if (local.SyncedLocally) return 1;
+                        return await syncService.SyncOneAsync(local, userId, CancellationToken.None);
+                    }, integrationId, CancellationToken.None);
+
+                    if (synced != 0 || attempt == BackfillRetryDelays.Length) return;
+                    await Task.Delay(BackfillRetryDelays[attempt]);
+                }
             }
             catch (Exception ex)
             {

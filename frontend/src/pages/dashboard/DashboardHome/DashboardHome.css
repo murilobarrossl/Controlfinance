@@ -51,86 +51,6 @@
   gap: 1rem;
 }
 
-.dashboard-home__explainer-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.dashboard-home__explainer-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
-
-.dashboard-home__explainer-item strong {
-  color: var(--color-text-primary);
-  font-size: 0.9rem;
-}
-
-.dashboard-home__explainer-item p {
-  margin: 0.25rem 0 0;
-  color: var(--color-text-secondary);
-  font-size: 0.84rem;
-  line-height: 1.5;
-}
-
-.dashboard-home__explainer-icon {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-}
-
-.dashboard-home__explainer-icon svg {
-  width: 20px;
-  height: 20px;
-}
-
-.dashboard-home__explainer-icon--account {
-  background-color: color-mix(in srgb, var(--color-income) 18%, transparent);
-  color: var(--color-income);
-}
-
-/* Mesmo roxo usado pra etiqueta de cartão no seletor de contas e em Cartões, pra "cartão" ter
-   uma cor só em todo o dashboard. */
-.dashboard-home__explainer-icon--card {
-  background-color: color-mix(in srgb, #7569d3 20%, transparent);
-  color: #a99ff0;
-}
-
-.dashboard-home__cards-callout {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-top: 1.25rem;
-  padding: 0.85rem 1rem;
-  border: 1px dashed color-mix(in srgb, #7569d3 60%, transparent);
-  border-radius: var(--radius-md);
-  background-color: color-mix(in srgb, #7569d3 8%, transparent);
-}
-
-.dashboard-home__cards-callout p {
-  flex: 1;
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 0.85rem;
-  line-height: 1.45;
-}
-
-.dashboard-home__cards-callout strong {
-  color: var(--color-text-primary);
-}
-
-.dashboard-home__cards-callout-icon {
-  display: inline-flex;
-  flex-shrink: 0;
-  color: #a99ff0;
-}
-
 .dashboard-home__grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -153,13 +73,8 @@
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .dashboard-home__grid,
-  .dashboard-home__explainer-grid {
+  .dashboard-home__grid {
     grid-template-columns: 1fr;
-  }
-
-  .dashboard-home__cards-callout {
-    flex-wrap: wrap;
   }
 }
 
@@ -167,4 +82,14 @@
   .dashboard-home__stats {
     grid-template-columns: 1fr;
   }
+}
+
+.dashboard-home__card-switch {
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  text-decoration: underline;
+}
+
+.dashboard-home__card-switch:hover {
+  color: var(--color-text-primary);
 }

@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000/api";
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5080/api";
 
 // Segredo anti-CSRF da sessão atual (ver backend/Services/CsrfProtection.cs). Só em memória:
 // nunca em localStorage/sessionStorage. Some ao recarregar a página e é recuperado por
@@ -72,3 +72,5 @@ export const apiFetch = async (endpoint, options = {}) => {
     return {};
   }
 };
+
+export const isAbortError = (err) => err?.name === "AbortError";

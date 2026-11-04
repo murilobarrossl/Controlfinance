@@ -7,9 +7,11 @@ namespace ControlFinance.API.Services;
 
 public record AuthResult(User User, IssuedToken Token);
 
+public enum RegisterError { None, Invalid, AlreadyRegistered }
+
 public interface IAuthService
 {
-    Task<(bool Success, string Error, AuthResult? Data)> RegisterAsync(RegisterRequestDto dto, string ipAddress);
+    Task<(bool Success, string Error, RegisterError Code, AuthResult? Data)> RegisterAsync(RegisterRequestDto dto, string ipAddress);
     Task<(bool Success, string Error, AuthResult? Data)> LoginAsync(LoginRequestDto dto, string ipAddress);
 }
 
@@ -39,15 +41,15 @@ public class AuthService : IAuthService
         _logger = logger;
     }
 
-    public async Task<(bool Success, string Error, AuthResult? Data)> RegisterAsync(RegisterRequestDto dto, string ipAddress)
+    public async Task<(bool Success, string Error, RegisterError Code, AuthResult? Data)> RegisterAsync(RegisterRequestDto dto, string ipAddress)
     {
         // O cadastro só vale contra o texto vigente: assim o registro de aceite aponta pra versão
         // que a pessoa realmente viu na tela.
         if (dto.AcceptedTermsVersion != LegalDocuments.TermsVersion || dto.AcceptedPrivacyVersion != LegalDocuments.PrivacyVersion)
-            return (false, "Os Termos de Uso ou a Política de Privacidade foram atualizados. Recarregue a página e confirme novamente.", null);
+            return (false, "Os Termos de Uso ou a Política de Privacidade foram atualizados. Recarregue a página e confirme novamente.", RegisterError.Invalid, null);
 
         if (!dto.ConfirmsAdult)
-            return (false, "O Control Finance é destinado a maiores de 18 anos.", null);
+            return (false, "O Control Finance é destinado a maiores de 18 anos.", RegisterError.Invalid, null);
 
         var normalizedEmail = dto.Email.Trim().ToLower();
 
@@ -57,13 +59,13 @@ public class AuthService : IAuthService
         var registerIdentifier = $"register:{normalizedEmail}";
         var registerIp = $"register:{ipAddress}";
         if (_rateLimit.IsBlocked(registerIdentifier, registerIp))
-            return (false, "Não foi possível concluir o cadastro. Tente novamente mais tarde.", null);
+            return (false, "Não foi possível concluir o cadastro. Tente novamente mais tarde.", RegisterError.Invalid, null);
 
         var emailExists = await _db.Users.AnyAsync(u => u.Email == normalizedEmail);
         if (emailExists)
         {
             _rateLimit.RegisterFailure(registerIdentifier, registerIp);
-            return (false, "E-mail já cadastrado.", null);
+            return (false, "E-mail já cadastrado.", RegisterError.AlreadyRegistered, null);
         }
 
         var cleanDocument = CleanDocument(dto.Document);
@@ -75,7 +77,7 @@ public class AuthService : IAuthService
         if (!DocumentValidator.IsValid(cleanDocument))
         {
             _rateLimit.RegisterFailure(registerIdentifier, registerIp);
-            return (false, "CPF/CNPJ inválido.", null);
+            return (false, "CPF/CNPJ inválido.", RegisterError.Invalid, null);
         }
 
         // Unicidade conferida contra todas as versões da chave de busca: um CPF cadastrado com a
@@ -86,7 +88,7 @@ public class AuthService : IAuthService
         if (docExists)
         {
             _rateLimit.RegisterFailure(registerIdentifier, registerIp);
-            return (false, "CPF/CNPJ já cadastrado.", null);
+            return (false, "CPF/CNPJ já cadastrado.", RegisterError.AlreadyRegistered, null);
         }
 
         // Do documento, só ficam o hash (login por CPF/CNPJ, unicidade, conferência na conexão
@@ -98,6 +100,7 @@ public class AuthService : IAuthService
             DocumentHash = documentHash,
             DocumentType = DocumentTypes.FromDigits(cleanDocument),
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+            TimeZone = UserClock.Normalize(dto.TimeZone),
         };
 
         _db.Users.Add(user);
@@ -115,7 +118,7 @@ public class AuthService : IAuthService
         // provedor de e-mail, que repete o destinatário.
         try { await _emailService.SendWelcomeEmailAsync(user.Email); }
         catch (Exception ex) { _logger.LogWarning("Falha ao enviar e-mail de boas-vindas para o usuário {UserId} ({ErrorType})", user.Id, ex.GetType().Name); }
-        return (true, string.Empty, new AuthResult(user, token));
+        return (true, string.Empty, RegisterError.None, new AuthResult(user, token));
     }
 
     public async Task<(bool Success, string Error, AuthResult? Data)> LoginAsync(LoginRequestDto dto, string ipAddress)
@@ -154,10 +157,15 @@ public class AuthService : IAuthService
         // aproveita pra regravar o hash com a chave de busca ativa (rotação gradual, já que o
         // documento não é guardado e não dá pra recalcular em lote).
         if (identifierHashCandidates.Contains(user.DocumentHash) && !_encryption.IsActiveLookupHash(user.DocumentHash))
-        {
             user.DocumentHash = _encryption.ComputeLookupHash(cleanIdentifierDocument);
+
+        // Login sem fuso (Swagger, cliente de API) ou com fuso inválido não derruba o que já
+        // estava gravado para o padrão.
+        if (UserClock.IsValid(dto.TimeZone) && dto.TimeZone != user.TimeZone)
+            user.TimeZone = dto.TimeZone!;
+
+        if (_db.ChangeTracker.HasChanges())
             await _db.SaveChangesAsync();
-        }
 
         var token = _tokenService.GenerateToken(user);
         return (true, string.Empty, new AuthResult(user, token));

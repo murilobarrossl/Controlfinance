@@ -4,9 +4,19 @@ import { TERMS_VERSION } from "../../legal/versions.js";
 // Descreve o serviço como ele existe hoje. Itens [PENDENTE] dependem de informação que ainda não
 // existe (dados da empresa, condições comerciais). Mudou o texto, muda a versão em legal/versions.js e em
 // backend/Services/LegalDocuments.cs.
+export const TERMS_UPDATED_AT = `31 de outubro de 2026 (versão ${TERMS_VERSION})`;
+
 export default function TermosDeUso() {
   return (
-    <LegalPageLayout kicker="Legal" title="Termos de uso" updatedAt={`31 de outubro de 2026 (versão ${TERMS_VERSION})`}>
+    <LegalPageLayout kicker="Legal" title="Termos de uso" updatedAt={TERMS_UPDATED_AT}>
+      <TermosDeUsoTexto />
+    </LegalPageLayout>
+  );
+}
+
+export function TermosDeUsoTexto() {
+  return (
+    <>
       <p>
         Estes Termos regem o uso da plataforma Control Finance, oferecida por <strong>[PENDENTE: razão social]</strong>, CNPJ{" "}
         <strong>[PENDENTE]</strong>, endereço <strong>[PENDENTE]</strong> ("Control Finance" ou "nós"). Contato:
@@ -86,6 +96,6 @@ export default function TermosDeUso() {
         Aplica-se a lei brasileira. Se você for consumidor, pode propor ação no foro do seu domicílio (Código de Defesa
         do Consumidor, art. 101, I).
       </p>
-    </LegalPageLayout>
+    </>
   );
 }

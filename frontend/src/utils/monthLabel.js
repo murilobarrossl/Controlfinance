@@ -5,6 +5,10 @@ export function monthKey(date) {
   return `${date.getUTCFullYear()}-${date.getUTCMonth()}`;
 }
 
+export function toIsoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
 export function formatMonthShort(date) {
   const label = MONTH_SHORT_LABEL.format(date).replace(".", "");
   const capitalized = label.charAt(0).toUpperCase() + label.slice(1);

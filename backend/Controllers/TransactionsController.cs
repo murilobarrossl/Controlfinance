@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
 using ControlFinance.API.Models;
@@ -16,20 +18,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? status, [FromQuery] string? type, [FromQuery] Guid? bankAccountId)
     {
-        var query = db.Transactions
-            .Where(t => t.UserId == UserId)
-            // Sem isso, transações de uma conta desativada (ex.: duplicada por uma reconexão
-            // com a Polp, ou removida manualmente em BankAccountsController) continuavam entrando
-            // nas somas de receitas/despesas mesmo depois de "desconectada".
-            .Where(t => t.BankAccount == null || t.BankAccount.IsActive);
-
-        if (bankAccountId.HasValue)
-            query = query.Where(t => t.BankAccountId == bankAccountId);
-
-        query = ApplyStatusFilter(query, status);
-
-        if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, true, out var tp))
-            query = query.Where(t => t.Type == tp);
+        var today = await UserTodayAsync(db);
+        var query = FilteredQuery(bankAccountId, status, type, today);
 
         // Cap de segurança: Categorias/ReceitasDespesas hoje esperam a lista completa pra
         // agregar no cliente, então isso não pagina de verdade, só limita o pior caso (uma
@@ -40,30 +30,52 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         var result = await ProjectToDto(query.OrderByDescending(t => t.DueDate).Take(MaxResults)).ToListAsync();
 
         var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
-        result = result
+        result = WithComputedFields(result, ownerName, today);
+
+        return Ok(result);
+    }
+
+    private IQueryable<Transaction> FilteredQuery(Guid? bankAccountId, string? status, string? type, DateTime today)
+    {
+        var query = db.Transactions
+            .Where(t => t.UserId == UserId)
+            // Sem isso, transações de uma conta desativada (ex.: duplicada por uma reconexão
+            // com a Polp, ou removida manualmente em BankAccountsController) continuavam entrando
+            // nas somas de receitas/despesas mesmo depois de "desconectada".
+            .Where(t => t.BankAccount == null || t.BankAccount.IsActive);
+
+        if (bankAccountId.HasValue)
+            query = query.Where(t => t.BankAccountId == bankAccountId);
+
+        query = ApplyStatusFilter(query, status, today);
+
+        if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, true, out var tp))
+            query = query.Where(t => t.Type == tp);
+
+        return query;
+    }
+
+    private static List<TransactionDto> WithComputedFields(List<TransactionDto> items, string? ownerName, DateTime today) =>
+        items
             .Select(t => t with
             {
                 IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName),
-                Status = t.Status == nameof(TransactionStatus.Pending) && t.DueDate.Date < DateTime.UtcNow.Date
+                Status = t.Status == nameof(TransactionStatus.Pending) && t.DueDate.Date < today
                     ? nameof(TransactionStatus.Overdue)
                     : t.Status,
             })
             .ToList();
 
-        return Ok(result);
-    }
-
     // Pending "vencido" é calculado na leitura (TransactionDto.EffectiveStatus), não gravado no
     // banco, então o filtro por status precisa enxergar a mesma coisa, senão status=Overdue não
     // acha nada (nenhuma linha guarda literalmente Overdue a não ser quando o usuário seta à mão)
     // e status=Pending mostra até pendências que a tela já rotula como Atrasado.
-    private static IQueryable<Transaction> ApplyStatusFilter(IQueryable<Transaction> query, string? status)
+    private static IQueryable<Transaction> ApplyStatusFilter(IQueryable<Transaction> query, string? status, DateTime today)
     {
         if (string.IsNullOrEmpty(status) || !Enum.TryParse<TransactionStatus>(status, true, out var s))
             return query;
 
         // Por dia, não pelo instante exato: uma conta que vence hoje ainda é Pending, não Overdue.
-        var today = DateTime.UtcNow.Date;
         return s switch
         {
             TransactionStatus.Overdue => query.Where(t =>
@@ -93,17 +105,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         pageSize = Math.Clamp(pageSize, 1, 100);
         var desc = !string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
 
-        var query = db.Transactions
-            .Where(t => t.UserId == UserId)
-            .Where(t => t.BankAccount == null || t.BankAccount.IsActive);
-
-        if (bankAccountId.HasValue)
-            query = query.Where(t => t.BankAccountId == bankAccountId);
-
-        query = ApplyStatusFilter(query, status);
-
-        if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, true, out var tp))
-            query = query.Where(t => t.Type == tp);
+        var today = await UserTodayAsync(db);
+        var query = FilteredQuery(bankAccountId, status, type, today);
 
         // year/month chegam como inteiros (não como DateTime cru na query string) de propósito:
         // o model binder de DateTime da ASP.NET não garante Kind=Utc a partir de string, e essa
@@ -111,6 +114,9 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         // intervalo aqui, igual o DashboardController faz, evita a mesma armadilha.
         if (year.HasValue && month.HasValue)
         {
+            if (year is < 1 or > 9998 || month is < 1 or > 12)
+                return BadRequest(new { message = "Ano ou mês inválido." });
+
             var startOfMonth = new DateTime(year.Value, month.Value, 1, 0, 0, 0, DateTimeKind.Utc);
             var endOfMonth = startOfMonth.AddMonths(1);
             query = query.Where(t => t.DueDate >= startOfMonth && t.DueDate < endOfMonth);
@@ -121,9 +127,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         // Amount é criptografado (guardado como texto): "ORDER BY"/"SUM" direto na coluna
         // cifrada ou dá erro de SQL, ou (no caso do ORDER BY) roda sem erro nenhum e devolve uma
         // ordem sem sentido, porque estaria ordenando o texto cifrado, não o valor real. Por
-        // isso, quando a ordenação pedida é por valor, materializa (descriptografando) até um
-        // teto de segurança, ordena e soma em memória, e só então corta a página pedida.
-        const int MaxRows = 2000;
+        // isso, quando a ordenação pedida é por valor, materializa (descriptografando) todo o
+        // filtro, ordena, conta e soma em memória, e só então corta a página pedida.
 
         List<TransactionDto> items;
         decimal totalIncome;
@@ -139,55 +144,122 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         if (needsInMemory)
         {
-            var all = await ProjectToDto(query.OrderByDescending(t => t.DueDate).Take(MaxRows)).ToListAsync();
+            var all = await ProjectToDto(query.OrderByDescending(t => t.DueDate)).ToListAsync();
             if (!string.IsNullOrWhiteSpace(search))
                 all = all.Where(t => MatchesSearch(t.Name, search)).ToList();
             totalCount = all.Count;
-            all = all
-                .Select(t => t with
-                {
-                    IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName),
-                    Status = t.Status == nameof(TransactionStatus.Pending) && t.DueDate.Date < DateTime.UtcNow.Date
-                        ? nameof(TransactionStatus.Overdue)
-                        : t.Status,
-                })
-                .ToList();
+            all = WithComputedFields(all, ownerName, today);
             items = SortInMemory(all, sortBy, desc).Skip((page - 1) * pageSize).Take(pageSize).ToList();
-            // Transferências pra si mesmo continuam nos itens (extrato), só saem dos totais.
-            totalIncome = all.Where(t => t.Type == "Income" && !t.IsTransfer).Sum(t => t.Amount);
-            totalExpense = all.Where(t => t.Type == "Expense" && !t.IsTransfer).Sum(t => t.Amount);
         }
         else
         {
             totalCount = await query.CountAsync();
             var ordered = ApplySort(query, sortBy, desc);
             items = await ProjectToDto(ordered.Skip((page - 1) * pageSize).Take(pageSize)).ToListAsync();
-            items = items
-                .Select(t => t with
-                {
-                    IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName),
-                    Status = t.Status == nameof(TransactionStatus.Pending) && t.DueDate.Date < DateTime.UtcNow.Date
-                        ? nameof(TransactionStatus.Overdue)
-                        : t.Status,
-                })
-                .ToList();
-
-            // Totais do filtro inteiro, não só da página atual: mesma limitação do Amount
-            // criptografado, então soma em memória depois de trazer só Type+Amount+Name+Categoria
-            // (mais barato que montar o TransactionDto inteiro com os joins de conta).
-            var forTotals = await query
-                .Take(MaxRows)
-                .Select(t => new { t.Type, t.Amount, t.Name, CategoryName = t.Category != null ? t.Category.Name : null })
-                .ToListAsync();
-            totalIncome = forTotals
-                .Where(t => t.Type == TransactionType.Income && !TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName))
-                .Sum(t => t.Amount);
-            totalExpense = forTotals
-                .Where(t => t.Type == TransactionType.Expense && !TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName))
-                .Sum(t => t.Amount);
+            items = WithComputedFields(items, ownerName, today);
         }
 
+        (totalIncome, totalExpense) = await SumTotalsAsync(query, search, ownerName);
+
         return Ok(new TransactionReportDto(items, totalCount, totalIncome, totalExpense));
+    }
+
+    private static readonly Regex InstallmentSuffix = new(@"([0-9]{2}/[0-9]{2})\z", RegexOptions.Compiled);
+    private static readonly char[] JsTrimChars =
+        [' ', '\t', '\n', '\v', '\f', '\r', '\u00A0', '\u1680', '\u2000', '\u2001', '\u2002', '\u2003', '\u2004', '\u2005',
+         '\u2006', '\u2007', '\u2008', '\u2009', '\u200A', '\u2028', '\u2029', '\u202F', '\u205F', '\u3000', '\uFEFF'];
+
+    private static string EstablishmentKey(string name) =>
+        InstallmentSuffix.IsMatch(name) ? InstallmentSuffix.Replace(name, "").Trim(JsTrimChars) : name;
+
+    [HttpGet("aggregates")]
+    public async Task<IActionResult> GetAggregates(
+        [FromQuery] Guid? bankAccountId,
+        [FromQuery] string? from,
+        [FromQuery] string? to,
+        CancellationToken ct)
+    {
+        var (start, end, rangeError) = ParseRange(from, to);
+        if (rangeError is not null)
+            return BadRequest(new { message = rangeError });
+
+        var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync(ct);
+
+        var today = await UserTodayAsync(db, ct);
+        var rows = FilteredQuery(bankAccountId, null, null, today)
+            .Where(t => t.DueDate >= start && t.DueDate < end)
+            .OrderByDescending(t => t.DueDate)
+            .ThenBy(t => t.Id)
+            .Select(t => new { t.Type, t.Amount, t.Name, t.DueDate, CategoryName = t.Category != null ? t.Category.Name : null })
+            .AsNoTracking()
+            .AsAsyncEnumerable();
+
+        var months = new Dictionary<(int Year, int Month), (decimal Income, decimal Expense, int Count)>();
+        var categories = new Dictionary<(string? Name, TransactionType Type), (decimal Amount, int Count)>();
+        var establishments = new Dictionary<(string? Category, TransactionType Type, string Key), (decimal Amount, int Count, bool IsInstallment)>();
+        decimal totalIncome = 0, totalExpense = 0;
+        var count = 0;
+
+        await foreach (var t in rows.WithCancellation(ct))
+        {
+            if (TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName)) continue;
+
+            var categoryName = string.IsNullOrEmpty(t.CategoryName) ? null : t.CategoryName;
+            var monthKey = (t.DueDate.Year, t.DueDate.Month);
+            months.TryGetValue(monthKey, out var m);
+            var isIncome = t.Type == TransactionType.Income;
+            months[monthKey] = (m.Income + (isIncome ? t.Amount : 0), m.Expense + (isIncome ? 0 : t.Amount), m.Count + 1);
+
+            if (isIncome) totalIncome += t.Amount; else totalExpense += t.Amount;
+            count++;
+
+            var categoryKey = (categoryName, t.Type);
+            categories.TryGetValue(categoryKey, out var c);
+            categories[categoryKey] = (c.Amount + t.Amount, c.Count + 1);
+
+            var key = EstablishmentKey(t.Name);
+            var establishmentKey = (categoryName, t.Type, key);
+            establishments.TryGetValue(establishmentKey, out var e);
+            establishments[establishmentKey] = (e.Amount + t.Amount, e.Count + 1, e.IsInstallment || InstallmentSuffix.IsMatch(t.Name));
+        }
+
+        var monthList = new List<AggregateMonthDto>();
+        for (var cursor = new DateTime(start.Year, start.Month, 1, 0, 0, 0, DateTimeKind.Utc); cursor < end; cursor = cursor.AddMonths(1))
+        {
+            months.TryGetValue((cursor.Year, cursor.Month), out var m);
+            monthList.Add(new AggregateMonthDto(cursor.Year, cursor.Month, m.Income, m.Expense, m.Count));
+        }
+
+        var categoryList = categories
+            .Select(kv => new AggregateCategoryDto(kv.Key.Name, kv.Key.Type.ToString(), kv.Value.Amount, kv.Value.Count))
+            .OrderByDescending(c => c.Amount)
+            .ToList();
+
+        var establishmentList = establishments
+            .Select(kv => new AggregateEstablishmentDto(kv.Key.Key, kv.Key.Key, kv.Key.Category, kv.Key.Type.ToString(), kv.Value.Amount, kv.Value.Count, kv.Value.IsInstallment))
+            .OrderByDescending(e => e.Amount)
+            .ToList();
+
+        return Ok(new TransactionAggregatesDto(totalIncome, totalExpense, count, monthList, categoryList, establishmentList));
+    }
+
+    private static async Task<(decimal Income, decimal Expense)> SumTotalsAsync(
+        IQueryable<Transaction> query, string? search, string? ownerName)
+    {
+        decimal income = 0, expense = 0;
+        var rows = query
+            .Select(t => new { t.Type, t.Amount, t.Name, CategoryName = t.Category != null ? t.Category.Name : null })
+            .AsAsyncEnumerable();
+
+        await foreach (var t in rows)
+        {
+            if (!string.IsNullOrWhiteSpace(search) && !MatchesSearch(t.Name, search)) continue;
+            if (TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName)) continue;
+            if (t.Type == TransactionType.Income) income += t.Amount;
+            else if (t.Type == TransactionType.Expense) expense += t.Amount;
+        }
+
+        return (income, expense);
     }
 
     // Busca sem diferenciar maiúsculas nem acentos ("pao" acha "Pão"), como o ILIKE fazia para
@@ -214,6 +286,57 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             : Comparer<object?>.Default.Compare(a, b));
         var ordered = desc ? items.OrderByDescending(key, comparer) : items.OrderBy(key, comparer);
         return ordered.ThenBy(t => t.Id);
+    }
+
+    [HttpGet("details")]
+    public async Task<IActionResult> GetDetails(
+        [FromQuery] Guid? bankAccountId,
+        [FromQuery] string? from,
+        [FromQuery] string? to,
+        [FromQuery] string? type,
+        [FromQuery] string? category,
+        [FromQuery] string? establishment,
+        CancellationToken ct)
+    {
+        var (start, end, rangeError) = ParseRange(from, to);
+        if (rangeError is not null)
+            return BadRequest(new { message = rangeError });
+
+        var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync(ct);
+
+        var today = await UserTodayAsync(db, ct);
+        var rows = ProjectToDto(FilteredQuery(bankAccountId, null, type, today)
+                .Where(t => t.DueDate >= start && t.DueDate < end)
+                .OrderByDescending(t => t.DueDate)
+                .ThenBy(t => t.Id)
+                .AsNoTracking())
+            .AsAsyncEnumerable();
+
+        var items = new List<TransactionDto>();
+        await foreach (var t in rows.WithCancellation(ct))
+        {
+            if (TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName)) continue;
+            if (category is not null && (string.IsNullOrEmpty(t.CategoryName) ? "Sem categoria" : t.CategoryName) != category) continue;
+            if (establishment is not null && EstablishmentKey(t.Name) != establishment) continue;
+            items.Add(t);
+        }
+
+        return Ok(WithComputedFields(items, ownerName, today));
+    }
+
+    private static (DateTime Start, DateTime End, string? Error) ParseRange(string? from, string? to)
+    {
+        if (!DateOnly.TryParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromDate)
+            || !DateOnly.TryParseExact(to, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var toDate)
+            || toDate <= fromDate)
+            return (default, default, "Intervalo de datas inválido.");
+
+        if (toDate.DayNumber - fromDate.DayNumber > 366 * 50)
+            return (default, default, "Intervalo de datas grande demais.");
+
+        return (new DateTime(fromDate.Year, fromDate.Month, fromDate.Day, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(toDate.Year, toDate.Month, toDate.Day, 0, 0, 0, DateTimeKind.Utc),
+            null);
     }
 
     private static IQueryable<TransactionDto> ProjectToDto(IQueryable<Transaction> query) =>
@@ -253,10 +376,10 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateTransactionDto dto)
     {
-        if (!Enum.TryParse<TransactionType>(dto.Type, true, out var type))
+        if (!Enum.TryParse<TransactionType>(dto.Type, true, out var type) || !Enum.IsDefined(type))
             return BadRequest(new { message = "Tipo inválido. Use 'Income' ou 'Expense'." });
 
-        if (!Enum.TryParse<TransactionStatus>(dto.Status, true, out var status))
+        if (!Enum.TryParse<TransactionStatus>(dto.Status, true, out var status) || !Enum.IsDefined(status))
             return BadRequest(new { message = "Status inválido. Use 'Pending', 'Paid' ou 'Overdue'." });
 
         if (!await OwnsReferencesAsync(dto.BankAccountId, dto.CategoryId))
@@ -282,7 +405,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         db.Transactions.Add(transaction);
         await db.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetAll), new { id = transaction.Id }, TransactionDto.FromEntity(transaction));
+        return CreatedAtAction(nameof(GetAll), new { id = transaction.Id }, TransactionDto.FromEntity(transaction, await UserTodayAsync(db)));
     }
 
     [HttpPut("{id}")]
@@ -291,10 +414,10 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         var transaction = await db.Transactions.FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId);
         if (transaction is null) return NotFound();
 
-        if (!Enum.TryParse<TransactionType>(dto.Type, true, out var type))
+        if (!Enum.TryParse<TransactionType>(dto.Type, true, out var type) || !Enum.IsDefined(type))
             return BadRequest(new { message = "Tipo inválido." });
 
-        if (!Enum.TryParse<TransactionStatus>(dto.Status, true, out var status))
+        if (!Enum.TryParse<TransactionStatus>(dto.Status, true, out var status) || !Enum.IsDefined(status))
             return BadRequest(new { message = "Status inválido." });
 
         if (!await OwnsReferencesAsync(dto.BankAccountId, dto.CategoryId))
@@ -305,11 +428,13 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         transaction.Type = type;
         transaction.Status = status;
         transaction.Amount = dto.Amount;
-        transaction.DueDate = DateTime.SpecifyKind(dto.DueDate, DateTimeKind.Utc);
+        var newDueDate = DateTime.SpecifyKind(dto.DueDate, DateTimeKind.Utc);
+        if (newDueDate != transaction.DueDate) transaction.ReminderSentAt = null;
+        transaction.DueDate = newDueDate;
         transaction.BankAccountId = dto.BankAccountId;
         transaction.CategoryId = dto.CategoryId;
         transaction.IsFixed = dto.IsFixed;
-        transaction.PaidAt = status == TransactionStatus.Paid ? DateTime.UtcNow : null;
+        transaction.PaidAt = status == TransactionStatus.Paid ? transaction.PaidAt ?? DateTime.UtcNow : null;
 
         await db.SaveChangesAsync();
         return Ok();
@@ -329,7 +454,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         transaction.IsFixed = dto.IsFixed;
         await db.SaveChangesAsync();
-        return Ok(TransactionDto.FromEntity(transaction));
+        return Ok(TransactionDto.FromEntity(transaction, await UserTodayAsync(db)));
     }
 
     // Endpoint dedicado só pra corrigir nome/categoria (ex.: categorização errada vinda da Polp).
@@ -354,7 +479,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         // Recarrega a categoria pro DTO de resposta refletir a mudança (o Include acima ainda
         // aponta pra categoria antiga depois de só trocar o CategoryId na entidade).
         await db.Entry(transaction).Reference(t => t.Category).LoadAsync();
-        return Ok(TransactionDto.FromEntity(transaction));
+        return Ok(TransactionDto.FromEntity(transaction, await UserTodayAsync(db)));
     }
 
     [HttpDelete("{id}")]

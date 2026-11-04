@@ -37,14 +37,14 @@ public class AccountController(
     [HttpGet("export")]
     public async Task<IActionResult> Export(CancellationToken ct)
     {
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == UserId, ct);
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == UserId, ct);
         if (user is null) return NotFound();
 
-        var accounts = await db.BankAccounts.Where(b => b.UserId == UserId).ToListAsync(ct);
+        var accounts = await db.BankAccounts.AsNoTracking().Where(b => b.UserId == UserId).ToListAsync(ct);
         var accountNames = accounts.ToDictionary(a => a.Id, a => a.Name);
-        var categories = await db.Categories.Where(c => c.UserId == UserId).ToListAsync(ct);
+        var categories = await db.Categories.AsNoTracking().Where(c => c.UserId == UserId).ToListAsync(ct);
         var categoryNames = categories.ToDictionary(c => c.Id, c => c.Name);
-        var transactions = await db.Transactions.Where(t => t.UserId == UserId).OrderBy(t => t.DueDate).ToListAsync(ct);
+        var transactions = await db.Transactions.AsNoTracking().Where(t => t.UserId == UserId).OrderBy(t => t.DueDate).ToListAsync(ct);
 
         var export = new
         {
@@ -58,13 +58,16 @@ public class AccountController(
                 criadoEm = user.CreatedAt,
                 lembretesDeVencimento = user.DueRemindersEnabled,
                 avisoMensal = user.MonthlySummaryEnabled,
+                cartaoPrincipalId = user.PrimaryCardId,
             },
             aceites = await db.ConsentRecords
+                .AsNoTracking()
                 .Where(c => c.UserId == UserId)
                 .OrderBy(c => c.AcceptedAt)
                 .Select(c => new { tipo = c.Kind, versao = c.Version, referencia = c.Reference, aceitoEm = c.AcceptedAt })
                 .ToListAsync(ct),
             conexoesBancarias = await db.PolpIntegrations
+                .AsNoTracking()
                 .Where(p => p.UserId == UserId)
                 .Select(p => new { instituicaoId = p.InstitutionId, status = p.Status, criadaEm = p.CreatedAt, ultimaSincronizacao = p.LastSyncedAt })
                 .ToListAsync(ct),
@@ -79,6 +82,7 @@ public class AccountController(
                 subtipo = a.PolpAccountSubtype,
                 numero = a.Number,
                 bandeira = a.Brand,
+                categoriaCartao = a.ProductType,
                 limite = a.CreditLimit,
                 limiteUsado = a.UsedLimit,
                 diaFechamento = a.ClosingDay,
@@ -101,17 +105,20 @@ public class AccountController(
                 fixa = t.IsFixed,
             }),
             cartoesManuais = await db.CreditCards
+                .AsNoTracking()
                 .Where(c => c.UserId == UserId)
                 .Select(c => new { c.Name, bandeira = c.Brand, limite = c.CreditLimit, limiteUsado = c.UsedLimit, diaFechamento = c.ClosingDay, diaVencimento = c.DueDay })
                 .ToListAsync(ct),
             // Registros de acesso só existem se AccessLog:Mode estiver ligado. São dados do
             // titular, então entram na cópia (LGPD art. 18, II).
             registrosDeAcesso = (await db.AccessLogs
+                .AsNoTracking()
                     .Where(a => a.UserId == UserId)
                     .OrderBy(a => a.OccurredAt)
                     .ToListAsync(ct))
                 .Select(a => new { evento = a.Event, em = a.OccurredAt, ip = a.IpAddress }),
             parcelamentos = (await db.Installments
+                .AsNoTracking()
                 .Where(i => i.UserId == UserId)
                 .ToListAsync(ct))
                 .Select(i => new { descricao = i.Description, valorTotal = i.TotalAmount, parcelas = i.TotalInstallments, parcelaAtual = i.CurrentInstallment, valorParcela = i.InstallmentAmount, proximoVencimento = i.NextDueDate }),

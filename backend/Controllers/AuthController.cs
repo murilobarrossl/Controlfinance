@@ -42,11 +42,11 @@ public class AuthController : ApiControllerBase
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto dto)
     {
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var (success, error, data) = await _authService.RegisterAsync(dto, ipAddress);
+        var (success, error, code, data) = await _authService.RegisterAsync(dto, ipAddress);
 
         if (!success)
         {
-            var statusCode = error.Contains("já cadastrado")
+            var statusCode = code == RegisterError.AlreadyRegistered
                 ? StatusCodes.Status409Conflict
                 : StatusCodes.Status400BadRequest;
 
@@ -86,7 +86,7 @@ public class AuthController : ApiControllerBase
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Me(CancellationToken ct)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == UserId, ct);
+        var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == UserId, ct);
         if (user is null) return NotFound();
 
         return Ok(new AuthResponseDto

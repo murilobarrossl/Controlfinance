@@ -26,6 +26,9 @@ public class CategoriesController(AppDbContext db) : ApiControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCategoryDto dto)
     {
+        if (await db.Categories.AnyAsync(c => c.UserId == UserId && c.Name == dto.Name))
+            return Conflict(new { message = "Já existe uma categoria com esse nome." });
+
         var category = new Category
         {
             UserId = UserId,
@@ -36,7 +39,7 @@ public class CategoriesController(AppDbContext db) : ApiControllerBase
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetAll), new CategoryDto(category.Id, category.Name, category.Color));
+        return CreatedAtAction(nameof(GetAll), CategoryDto.FromEntity(category));
     }
 
     [HttpPut("{id}")]
@@ -45,11 +48,14 @@ public class CategoriesController(AppDbContext db) : ApiControllerBase
         var category = await db.Categories.FirstOrDefaultAsync(c => c.Id == id && c.UserId == UserId);
         if (category is null) return NotFound();
 
+        if (await db.Categories.AnyAsync(c => c.UserId == UserId && c.Name == dto.Name && c.Id != id))
+            return Conflict(new { message = "Já existe uma categoria com esse nome." });
+
         category.Name = dto.Name;
         category.Color = dto.Color;
 
         await db.SaveChangesAsync();
-        return Ok(new CategoryDto(category.Id, category.Name, category.Color));
+        return Ok(CategoryDto.FromEntity(category));
     }
 
     [HttpDelete("{id}")]

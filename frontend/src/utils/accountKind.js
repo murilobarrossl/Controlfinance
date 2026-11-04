@@ -24,26 +24,26 @@ export const INVESTMENT_MODALITIES = {
     label: "Caixinha",
     color: "#4ECDC4",
     description:
-      "Um espaço separado dentro da sua conta pra guardar dinheiro com um objetivo. Rendimento, prazo de resgate e regras variam de banco para banco: confira no app do seu banco.",
+      "Um espaço separado dentro da sua conta pra guardar dinheiro com um objetivo (no Nubank, é a Caixinha). Quase sempre é um CDB por trás, que rende um percentual do CDI. Rendimento, prazo de resgate e regras variam de banco para banco: confira no app do seu banco.",
   },
   porquinho: {
     key: "porquinho",
     label: "Porquinho / Cofrinho",
-    color: "#CD517E",
+    color: "#B04A5E",
     description:
-      "Recurso de bancos digitais pra separar uma parte do saldo. Funciona como uma caixinha, com outro nome; as regras são definidas por cada banco.",
+      "Recurso de bancos digitais pra separar uma parte do saldo, com nomes diferentes: Cofrinho (Mercado Pago, PicPay, PagBank), Porquinho (Inter) ou Cofre. Funciona como uma caixinha e também rende um percentual do CDI; as regras são definidas por cada banco.",
   },
   poupanca: {
     key: "poupanca",
     label: "Poupança",
-    color: "#BF8A22",
+    color: "#C9923E",
     description:
       "Conta de reserva tradicional, com rendimento definido por regra legal. Conta com a garantia do FGC dentro dos limites e regras do próprio FGC (consulte fgc.org.br).",
   },
   investimento: {
     key: "investimento",
     label: "Investimento",
-    color: "#7569D3",
+    color: "#8573A8",
     description:
       "Aplicações como CDB, LCI/LCA, Tesouro Direto ou fundos. Prazo de resgate, rendimento, riscos e garantias dependem de cada produto.",
   },

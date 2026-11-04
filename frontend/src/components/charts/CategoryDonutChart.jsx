@@ -1,10 +1,7 @@
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
-import { TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE, FALLBACK_COLORS } from "./chartTheme.js";
+import { TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE } from "./chartTheme.js";
+import { donutSliceColors } from "../../utils/categoryColors.js";
 import "./CategoryDonutChart.css";
-
-function sliceColor(entry, index) {
-  return entry.color || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
-}
 
 export default function CategoryDonutChart({
   data,
@@ -17,6 +14,7 @@ export default function CategoryDonutChart({
 }) {
   const format = (value) => (formatValue ? formatValue(value) : value);
   const total = data.reduce((sum, entry) => sum + entry.value, 0);
+  const colors = donutSliceColors(data);
 
   return (
     <div className={`category-donut ${showLegend ? "category-donut--with-legend" : ""}`}>
@@ -39,7 +37,7 @@ export default function CategoryDonutChart({
               cursor={onSliceClick ? "pointer" : "default"}
             >
               {data.map((entry, index) => (
-                <Cell key={entry.name ?? index} fill={sliceColor(entry, index)} />
+                <Cell key={entry.name ?? index} fill={colors[index]} />
               ))}
             </Pie>
             <Tooltip
@@ -65,7 +63,7 @@ export default function CategoryDonutChart({
         <ul className="category-donut__legend">
           {data.map((entry, index) => {
             const percent = total > 0 ? (entry.value / total) * 100 : 0;
-            const color = sliceColor(entry, index);
+            const color = colors[index];
             return (
               <li key={entry.name ?? index} className="category-donut__legend-item">
                 <div className="category-donut__legend-row">

@@ -1,7 +1,6 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { getCurrentUser } from "../api/auth.js";
 import { setCsrfToken } from "../api/client.js";
-import { clearTransactionsCache } from "../api/transactions.js";
 import { setCurrentUserId } from "../utils/authToken.js";
 
 const AuthContext = createContext(null);
@@ -12,6 +11,13 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState("loading"); // "loading" | "authenticated" | "anonymous"
+
+  const applySession = useCallback((data) => {
+    setCsrfToken(data?.csrfToken);
+    setUser(data?.user ?? null);
+    setCurrentUserId(data?.user?.id ?? null);
+    setStatus(data?.user ? "authenticated" : "anonymous");
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,46 +35,28 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  function applySession(data) {
-    setCsrfToken(data?.csrfToken);
-    setUser(data?.user ?? null);
-    setCurrentUserId(data?.user?.id ?? null);
-    setStatus(data?.user ? "authenticated" : "anonymous");
-  }
+  }, [applySession]);
 
   // Chamado com a resposta de /auth/login ou /auth/register ({ user, csrfToken }); o cookie
   // de sessão já foi gravado pelo próprio navegador.
-  function login(data) {
-    applySession(data);
-  }
+  const login = applySession;
 
-  function updateUser(nextUser) {
+  const updateUser = useCallback((nextUser) => {
     setUser(nextUser);
-  }
+  }, []);
 
-  function logout() {
+  const logout = useCallback(() => {
     setCsrfToken(null);
-    clearTransactionsCache();
     setUser(null);
     setStatus("anonymous");
-  }
+  }, []);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        status,
-        isAuthenticated: status === "authenticated",
-        login,
-        logout,
-        updateUser,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({ user, status, isAuthenticated: status === "authenticated", login, logout, updateUser }),
+    [user, status, login, logout, updateUser],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

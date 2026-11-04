@@ -13,18 +13,20 @@ public class BankAccount
     public User User { get; set; } = null!;
     public string Name { get; set; } = string.Empty;
     public string? BankCode { get; set; }
-    public decimal Balance { get; set; }
+    public decimal? Balance { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    /// <summary>ID da conta (account) na Polp, usado para buscar transações reais.</summary>
-    public int? PolpAccountId { get; set; }
+    /// <summary>ID da conta (account) ou do cartão (credit-card) na Polp, usado para buscar
+    /// transações reais. Na v2 conta e cartão são recursos separados; o cartão continua sendo uma
+    /// BankAccount aqui (PolpAccountType = CreditCardAccountDetector.CardType).</summary>
+    public Guid? PolpAccountId { get; set; }
 
-    /// <summary>ID da integração na Polp à qual esta conta pertence. Contas com o mesmo valor
+    /// <summary>ID do consentimento na Polp ao qual esta conta pertence. Contas com o mesmo valor
     /// aqui vieram da mesma conexão bancária (ex.: conta corrente + cartão de crédito do mesmo
     /// banco). Usado só pra agrupar elas visualmente no seletor de contas, cada uma continua
     /// com sua própria visão de dados (nada é somado entre elas).</summary>
-    public int? PolpIntegrationId { get; set; }
+    public Guid? PolpIntegrationId { get; set; }
 
     public AccountOwnership Ownership { get; set; }
 
@@ -45,6 +47,7 @@ public class BankAccount
     /// Polp expõe esses dados pra esse banco; nulos até lá (a UI de Cartões pede pra completar só
     /// o que faltar). Nenhuma tabela separada representa o cartão — é esta mesma BankAccount.</summary>
     public string? Brand { get; set; }
+    public string? ProductType { get; set; }
     public decimal? CreditLimit { get; set; }
     public decimal? UsedLimit { get; set; }
     public int? ClosingDay { get; set; }

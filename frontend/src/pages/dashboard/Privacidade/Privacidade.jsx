@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuth } from "../../../context/AuthContext.jsx";
+import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import { logoutAllSessions } from "../../../api/auth.js";
 import { downloadMyData, updateNotificationPreferences, deleteMyAccount, getDataPolicy } from "../../../api/account.js";
@@ -10,6 +11,7 @@ import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
+import DeleteAccountDialog from "./DeleteAccountDialog.jsx";
 import "./Privacidade.css";
 
 // Tudo que o titular pode fazer sobre os próprios dados, num lugar só e funcionando de verdade
@@ -17,7 +19,7 @@ import "./Privacidade.css";
 export default function Privacidade() {
   const navigate = useNavigate();
   const { user, logout, updateUser } = useAuth();
-  const { accounts, connectors, disconnectConnection } = useAccount();
+  const { accounts, connectors, accountsStatus, disconnectConnection } = useAccount();
 
   const [prefs, setPrefs] = useState({
     dueRemindersEnabled: user?.dueRemindersEnabled ?? true,
@@ -28,15 +30,17 @@ export default function Privacidade() {
   const [pendingDisconnect, setPendingDisconnect] = useState(null);
   const [confirmClearLocal, setConfirmClearLocal] = useState(false);
   const [localCleared, setLocalCleared] = useState(false);
-  const [deletePassword, setDeletePassword] = useState("");
-  const [deleteConfirmed, setDeleteConfirmed] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
-  const [deletionResult, setDeletionResult] = useState(null);
   const [dataPolicy, setDataPolicy] = useState(null);
 
   useEffect(() => {
-    getDataPolicy().then(setDataPolicy).catch(() => {});
+    const controller = new AbortController();
+    getDataPolicy({ signal: controller.signal })
+      .then(setDataPolicy)
+      .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   const connections = useMemo(() => {
@@ -89,54 +93,25 @@ export default function Privacidade() {
     setLocalCleared(true);
   }
 
-  async function handleDeleteAccount(e) {
-    e.preventDefault();
+  const closeDelete = useCallback(() => {
+    if (deleting) return;
+    setDeleteOpen(false);
+    setDeleteError("");
+  }, [deleting]);
+
+  async function handleDeleteAccount(password) {
     setDeleteError("");
     setDeleting(true);
     try {
-      const result = await deleteMyAccount(deletePassword);
+      await deleteMyAccount(password);
       if (user?.id) clearLocalDataFor(user.id);
       setCurrentUserId(null);
-      setDeletePassword("");
-      setDeletionResult(result);
+      logout();
+      navigate("/", { replace: true });
     } catch (err) {
       setDeleteError(err.message || "Não foi possível excluir a conta.");
-    } finally {
       setDeleting(false);
     }
-  }
-
-  if (deletionResult) {
-    return (
-      <div className="privacidade">
-        <Card title="Conta excluída">
-          <p className="privacidade__text">
-            Sua conta e todos os dados dela foram apagados do banco de dados do Control Finance.
-          </p>
-          <p className="privacidade__text">
-            {deletionResult.providerDeletion === "requested"
-              ? "Também pedimos à Polp que exclua suas conexões bancárias, e ela aceitou o pedido (a exclusão do lado dela é concluída em seguida)."
-              : "Não conseguimos falar com a Polp agora. O pedido de exclusão das suas conexões bancárias ficou registrado, sem nenhum dado seu, e será reenviado automaticamente. Se quiser, revogue também a autorização no aplicativo do seu banco, na área de Open Finance."}
-          </p>
-          <p className="privacidade__text">
-            Cópias de segurança da hospedagem não são alteradas na hora: o dado sai delas quando a cópia
-            expira, como explicado na Política de Privacidade.
-          </p>
-          <Button
-            as="button"
-            type="button"
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              logout();
-              navigate("/", { replace: true });
-            }}
-          >
-            Ir para o início
-          </Button>
-        </Card>
-      </div>
-    );
   }
 
   return (
@@ -151,7 +126,9 @@ export default function Privacidade() {
           <li><strong>Aceites:</strong> qual versão dos Termos e da Política você aceitou e quando, e cada autorização de conexão bancária.</li>
           <li>
             <strong>Prazo do histórico bancário:</strong>{" "}
-            {dataPolicy?.syncedHistoryMonths
+            {dataPolicy === null
+              ? <Skeleton width="60%" />
+              : dataPolicy.syncedHistoryMonths
               ? `transações importadas dos bancos com mais de ${dataPolicy.syncedHistoryMonths} meses não são importadas e são apagadas automaticamente (lançamentos manuais não são afetados).`
               : "sem prazo máximo definido: o histórico importado fica guardado enquanto o banco estiver conectado."}
           </li>
@@ -170,7 +147,11 @@ export default function Privacidade() {
       </Card>
 
       <Card title="Bancos conectados">
-        {connections.length === 0 ? (
+        {accountsStatus === "loading" ? (
+          <Skeleton width="100%" height="4rem" />
+        ) : accountsStatus === "error" ? (
+          <p className="privacidade__text">Não foi possível carregar as contas.</p>
+        ) : connections.length === 0 ? (
           <p className="privacidade__text">Nenhum banco conectado.</p>
         ) : (
           <ul className="privacidade__connections">
@@ -277,27 +258,21 @@ export default function Privacidade() {
           Cópias de segurança da hospedagem só deixam de conter seus dados quando expiram (o prazo está na Política
           de Privacidade). Se quiser uma cópia dos seus dados, baixe antes de excluir.
         </p>
-        <form className="privacidade__delete" onSubmit={handleDeleteAccount}>
-          <label className="privacidade__field">
-            <span>Sua senha</span>
-            <input
-              type="password"
-              value={deletePassword}
-              onChange={(e) => setDeletePassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </label>
-          <label className="privacidade__confirm">
-            <input type="checkbox" checked={deleteConfirmed} onChange={(e) => setDeleteConfirmed(e.target.checked)} required />
-            <span>Entendo que a exclusão é definitiva.</span>
-          </label>
-          {deleteError && <p className="privacidade__error">{deleteError}</p>}
-          <Button as="button" type="submit" variant="primary" size="sm" disabled={!deleteConfirmed || deleting}>
-            {deleting ? "Excluindo..." : "Excluir minha conta"}
+        <div className="privacidade__actions privacidade__delete-actions">
+          <Button as="button" type="button" variant="primary" size="sm" onClick={() => setDeleteOpen(true)}>
+            Excluir minha conta
           </Button>
-        </form>
+        </div>
       </Card>
+
+      {deleteOpen && (
+        <DeleteAccountDialog
+          deleting={deleting}
+          error={deleteError}
+          onConfirm={handleDeleteAccount}
+          onClose={closeDelete}
+        />
+      )}
 
       <ConfirmDialog
         open={pendingDisconnect !== null}

@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { getDashboardSummary } from "../../../api/dashboard.js";
-import { getTransactions } from "../../../api/transactions.js";
+import { getTransactionAggregates } from "../../../api/transactions.js";
 import { getCategories } from "../../../api/categories.js";
-import { syncAllIntegrations } from "../../../api/polp.js";
+import { isAbortError } from "../../../api/client.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
+import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
 import AreaTrendChart from "../../../components/charts/AreaTrendChart.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
@@ -19,8 +20,13 @@ import { groupAccounts } from "../../../utils/accountGrouping.js";
 import { isCreditCardAccount } from "../../../utils/accountKind.js";
 import { resolveCategoryColor, OTHERS_COLOR } from "../../../utils/categoryColors.js";
 import { WalletIcon, TrendUpIcon, TrendDownIcon, TargetIcon, CardIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
-import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
-import { getMonthsWindow, buildMonthlyTrend, buildPreviousMonthSamePeriod } from "../../../utils/monthlyTrend.js";
+import { formatCurrency, formatPercentage, roundMoney } from "../../../utils/financeMath.js";
+import {
+  getMonthsWindow,
+  buildMonthlyTrend,
+  monthRange,
+  previousMonthSamePeriodRange,
+} from "../../../utils/monthlyTrend.js";
 import { computeTrend } from "../../../utils/trend.js";
 import "./DashboardHome.css";
 
@@ -46,12 +52,57 @@ function buildDonutData(categoryExpenses, categories) {
   return data;
 }
 
+function DashboardHomeSkeleton({ firstName }) {
+  return (
+    <div className="dashboard-home" aria-busy="true">
+      <div className="dashboard-home__header">
+        <SectionHeading
+          kicker="Visão geral"
+          title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"}
+          align="left"
+        />
+        <div className="dashboard-home__account-controls">
+          <Skeleton width="12rem" height="2.5rem" />
+        </div>
+      </div>
+
+      <div className="dashboard-home__stats">
+        <StatCard icon={null} label={<Skeleton width="9rem" />} value={<Skeleton width="7rem" height="1.5rem" />} />
+        <StatCard icon={<TrendUpIcon />} label="Receitas do mês" value={<Skeleton width="7rem" height="1.5rem" />} />
+        <StatCard icon={<TrendDownIcon />} label="Despesas do mês" value={<Skeleton width="7rem" height="1.5rem" />} />
+        <StatCard
+          icon={<TargetIcon />}
+          label="Saldo do mês (receitas - despesas)"
+          value={<Skeleton width="7rem" height="1.5rem" />}
+          secondaryLines={[{ label: "% da receita gasta", value: <Skeleton width="3rem" /> }]}
+        />
+        <StatCard
+          icon={<CardIcon />}
+          label="Tipo de cartão"
+          value={<Skeleton width="7rem" height="1.5rem" />}
+          secondaryLines={[{ label: <Skeleton width="4rem" />, value: <Skeleton width="6rem" /> }]}
+        />
+      </div>
+
+      <div className="dashboard-home__grid">
+        <Card title={`Receitas x despesas (últimos ${TREND_MONTHS} meses)`}>
+          <Skeleton width="100%" height="220px" />
+        </Card>
+        <Card title="Principais categorias (mês atual)">
+          <Skeleton width="100%" height="220px" />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardHome() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const {
     accounts,
     connectors,
+    accountsStatus,
     selectedAccountId,
     setSelectedAccountId,
     dataRefreshKey,
@@ -60,71 +111,83 @@ export default function DashboardHome() {
     removeManualAccount,
   } = useAccount();
   const [categories, setCategories] = useState([]);
-  const [summary, setSummary] = useState(null);
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
+  const requestKey = `${selectedAccountId ?? ""}|${dataRefreshKey}`;
+  const loading = accountsStatus !== "ready" || result?.key !== requestKey;
   const [cardConfirmOpen, setCardConfirmOpen] = useState(false);
 
   useEffect(() => {
-    getCategories().then(setCategories).catch(() => {});
-
-    // Sincroniza com o banco de verdade ao carregar a página (saldo e transações ficavam
-    // congelados no valor de quando a conta foi conectada, sem isso). Não trava o carregamento
-    // inicial esperando a Polp responder: dispara em paralelo e só atualiza o resumo (efeito
-    // abaixo, via dataRefreshKey) quando a sincronização terminar.
-    syncAllIntegrations()
-      .then(() => bumpDataRefresh())
+    const controller = new AbortController();
+    getCategories({ signal: controller.signal })
+      .then(setCategories)
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- só dispara na carga inicial da página
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
-    // Guarda contra resposta fora de ordem: se o usuário trocar de conta de novo antes dessa
-    // requisição voltar, ignora o resultado, senão a tela pode acabar mostrando o resumo da
-    // conta anterior por cima da conta selecionada agora.
-    let cancelled = false;
-    setLoading(true);
+    if (accountsStatus !== "ready") return;
 
-    // Busca as transações só depois do resumo responder: o gráfico de tendência precisa saber
-    // qual conta ficou ativa (selectedAccountId pode vir nulo, aí o backend escolhe a conta
-    // padrão) pra filtrar pela mesma conta dos cards acima. Antes buscava transações de todas
-    // as contas juntas, e a tendência não batia com "Receitas do mês"/"Despesas do mês".
-    getDashboardSummary(selectedAccountId)
-      .then((summaryData) => {
-        if (cancelled) return;
-        setSummary(summaryData);
+    const controller = new AbortController();
+    const { signal } = controller;
+    const key = `${selectedAccountId ?? ""}|${dataRefreshKey}`;
+
+    const months = getMonthsWindow(TREND_MONTHS);
+    const trendRange = monthRange(months[0], months[months.length - 1]);
+    const previousRange = previousMonthSamePeriodRange();
+    const loadAggregates = (bankAccountId) =>
+      Promise.all([
+        getTransactionAggregates({ bankAccountId, ...trendRange }, { signal }),
+        getTransactionAggregates({ bankAccountId, ...previousRange }, { signal }),
+      ]);
+
+    const speculativeAggregates = selectedAccountId ? loadAggregates(selectedAccountId) : null;
+    speculativeAggregates?.catch(() => {});
+
+    getDashboardSummary(selectedAccountId, { signal })
+      .then(async (summaryData) => {
         const accountId = summaryData?.activeAccount?.id;
-        return accountId ? getTransactions({ bankAccountId: accountId }) : [];
-      })
-      .then((transactionsData) => {
-        if (!cancelled) setTransactions(transactionsData ?? []);
+        let aggregatesData = null;
+        if (accountId) {
+          aggregatesData = await (accountId === selectedAccountId ? speculativeAggregates : loadAggregates(accountId));
+        }
+        if (signal.aborted) return;
+        setResult({
+          key,
+          summary: summaryData,
+          trend: aggregatesData?.[0] ?? null,
+          previous: aggregatesData?.[1] ?? null,
+          error: "",
+        });
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message || "Não foi possível carregar o dashboard.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (signal.aborted || isAbortError(err)) return;
+        setResult({ key, summary: null, trend: null, previous: null, error: err.message || "Não foi possível carregar o dashboard." });
       });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedAccountId, dataRefreshKey]);
+    return () => controller.abort();
+  }, [selectedAccountId, dataRefreshKey, accountsStatus]);
+
+  const summary = result?.summary ?? null;
+  const trend = result?.trend ?? null;
+  const previous = result?.previous ?? null;
+  const error =
+    accountsStatus === "error"
+      ? "Não foi possível carregar as contas."
+      : result?.key === requestKey
+        ? result.error
+        : "";
 
   // Tendência mensal (últimos 6 meses) da mesma conta ativa que os cards acima.
-  const monthlyTrend = useMemo(
-    () => buildMonthlyTrend(transactions, getMonthsWindow(TREND_MONTHS)),
-    [transactions]
-  );
+  const monthlyTrend = useMemo(() => buildMonthlyTrend(trend, getMonthsWindow(TREND_MONTHS)), [trend]);
   const currentMonthTrend = monthlyTrend[monthlyTrend.length - 1];
-  // Compara com o mesmo intervalo de dias do mês passado, não o mês passado inteiro: nos
-  // primeiros dias de cada mês, comparar contra um mês inteiro sempre dá uma queda enorme e
-  // artificial (ver buildPreviousMonthSamePeriod).
-  const previousMonthSamePeriod = useMemo(() => buildPreviousMonthSamePeriod(transactions), [transactions]);
+  const previousMonthSamePeriod = useMemo(
+    () => (previous ? { Receitas: previous.totalIncome, Despesas: previous.totalExpense } : null),
+    [previous]
+  );
 
-  if (loading) return <p className="dashboard-home__hint">Carregando dashboard...</p>;
   if (error) return <p className="dashboard-home__error">{error}</p>;
+
+  if (loading) return <DashboardHomeSkeleton firstName={user?.name?.split(" ")[0]} />;
 
   if (!summary?.activeAccount) {
     return (
@@ -138,12 +201,12 @@ export default function DashboardHome() {
   }
 
   const { activeAccount, totalIncome, totalExpense, categoryExpenses, activeCard } = summary;
-  const monthlyBalance = totalIncome - totalExpense;
-  const percentageSpent = totalIncome > 0 ? (totalExpense / totalIncome) * 100 : 0;
+  const monthlyBalance = roundMoney(totalIncome - totalExpense);
+  const percentageSpent = totalIncome > 0 ? (totalExpense / totalIncome) * 100 : null;
   const savingsRate =
     currentMonthTrend?.Receitas > 0
       ? ((currentMonthTrend.Receitas - currentMonthTrend.Despesas) / currentMonthTrend.Receitas) * 100
-      : 0;
+      : null;
   const donutData = buildDonutData(categoryExpenses, categories);
   const firstName = user?.name?.split(" ")[0];
 
@@ -160,7 +223,10 @@ export default function DashboardHome() {
   // do saldo atual menos o que já entrou/saiu neste mês, por isso o rótulo é "início do mês",
   // não "mês anterior" como nos outros cards.
   const startOfMonthBalance = activeAccount.balance - monthlyBalance;
-  const balanceTrend = computeTrend(activeAccount.balance, startOfMonthBalance, { label: "vs início do mês" });
+  const balanceTrend =
+    typeof activeAccount.balance === "number"
+      ? computeTrend(activeAccount.balance, startOfMonthBalance, { label: "vs início do mês" })
+      : null;
 
   // Mesmo agrupamento por conexão bancária do seletor de contas abaixo, aqui só pra decidir se
   // mostra o aviso abaixo do título. Sem isso, quem troca pro cartão de crédito no seletor não
@@ -261,48 +327,6 @@ export default function DashboardHome() {
         />
       </div>
 
-      <Card className="dashboard-home__explainer" title="Conta corrente x cartão de crédito">
-        <div className="dashboard-home__explainer-grid">
-          <div className="dashboard-home__explainer-item">
-            <span className="dashboard-home__explainer-icon dashboard-home__explainer-icon--account">
-              <WalletIcon />
-            </span>
-            <div>
-              <strong>Conta corrente</strong>
-              <p>
-                É o dinheiro que você tem hoje no banco. O saldo sobe com o que entra (salário, Pix recebido) e desce
-                com o que sai (pagamentos, transferências, débito).
-              </p>
-            </div>
-          </div>
-          <div className="dashboard-home__explainer-item">
-            <span className="dashboard-home__explainer-icon dashboard-home__explainer-icon--card">
-              <CardIcon />
-            </span>
-            <div>
-              <strong>Cartão de crédito</strong>
-              <p>
-                São compras feitas com crédito do banco que você paga depois, na fatura. O valor do cartão não é dinheiro
-                disponível e nunca é somado ao saldo da conta corrente.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="dashboard-home__cards-callout">
-          <span className="dashboard-home__cards-callout-icon" aria-hidden="true">
-            <CardIcon />
-          </span>
-          <p>
-            Seus cartões têm uma aba própria: fatura, limite, <strong>próximos vencimentos</strong> e parcelamentos ficam
-            em <strong>Cartões</strong>.
-          </p>
-          <Button as={Link} to="/dashboard/cartoes" variant="outline" size="sm">
-            Abrir aba Cartões
-          </Button>
-        </div>
-      </Card>
-
       <div className="dashboard-home__grid">
         <Card title={`Receitas x despesas (últimos ${TREND_MONTHS} meses)`}>
           <AreaTrendChart
@@ -336,7 +360,14 @@ export default function DashboardHome() {
 
       <div className="dashboard-home__grid">
         {activeCard && (
-          <Card title="Seu cartão">
+          <Card
+            title="Seu cartão"
+            action={
+              <Link to="/dashboard/cartoes" className="dashboard-home__card-switch">
+                Trocar
+              </Link>
+            }
+          >
             <CreditCardVisual
               card={activeCard}
               cardholderName={user?.name}

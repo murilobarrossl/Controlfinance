@@ -256,3 +256,150 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Escolha do período: Mês / Ano / Todo o período, com a navegação (‹ ›) ao lado. */
+.categorias__period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+}
+
+.categorias__period-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.categorias__period-chip {
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background-color: transparent;
+  padding: 0.45rem 0.95rem;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.categorias__period-chip:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.categorias__period-chip--active {
+  background-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.categorias__period-chip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.categorias__period-label {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Qual conta/cartão está sendo mostrado (e como trocar). */
+.categorias__scope {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.categorias__scope-title {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.categorias__scope-title strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.categorias__scope-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.25rem;
+  border-radius: var(--radius-pill);
+  padding: 0.15rem 0.6rem;
+  background-color: color-mix(in srgb, var(--color-text-tertiary) 18%, transparent);
+  color: var(--color-text-secondary);
+  font-size: 0.74rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.categorias__scope-kind--card {
+  background-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: var(--color-accent-soft);
+}
+
+.categorias__scope-kind svg {
+  width: 13px;
+  height: 13px;
+}
+
+.categorias__scope-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.categorias__scope-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--option-color);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-alt);
+  padding: 0.5rem 0.85rem 0.5rem 0.65rem;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.categorias__scope-option:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.categorias__scope-option--active {
+  border-color: var(--option-color);
+  background-color: var(--color-surface-hover);
+}
+
+.categorias__scope-option:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.categorias__scope-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.categorias__scope-option-bank {
+  color: var(--color-text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.categorias__scope-option-name {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-tertiary);
+  font-size: 0.74rem;
+}

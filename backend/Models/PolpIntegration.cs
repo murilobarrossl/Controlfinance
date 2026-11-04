@@ -1,9 +1,10 @@
 namespace ControlFinance.API.Models;
 
 /// <summary>
-/// Rastreia o processo de integração bancária com a Polp, desde a criação
-/// (POST /integrations) até o momento em que os dados ficam disponíveis
-/// (status UPDATED) e as contas locais (BankAccount) são criadas.
+/// Rastreia uma conexão bancária com a Polp (API v2/Celcoin): um consentimento Open Finance,
+/// desde a criação (POST /consents) até ficar AUTHORISED e as contas/cartões locais
+/// (BankAccount) serem criados. O nome da classe e das colunas é anterior à v2 e foi mantido
+/// para não espalhar renomeação; "integração" aqui é sempre "consentimento".
 /// </summary>
 public class PolpIntegration
 {
@@ -11,23 +12,28 @@ public class PolpIntegration
     public Guid UserId { get; set; }
     public User User { get; set; } = null!;
 
-    /// <summary>ID da integração retornado pela Polp (campo "id" da resposta).</summary>
-    public int PolpIntegrationId { get; set; }
+    /// <summary>ID do consentimento na Polp (campo "id" da resposta). É o resource_id dos
+    /// webhooks de recurso (accounts, credit_cards).</summary>
+    public Guid PolpIntegrationId { get; set; }
 
-    public int InstitutionId { get; set; }
+    public Guid InstitutionId { get; set; }
     public string? InstitutionName { get; set; }
 
     /// <summary>
-    /// Último status conhecido: UPDATING, WAITING_USER_INPUT, UPDATED,
-    /// LOGIN_ERROR, OUTDATED, etc.
+    /// Último status conhecido do consentimento: AWAITING_AUTHORIZATION, AUTHORISED, REJECTED
+    /// ou EXPIRED (mais DISCONNECT_PENDING, que é só local).
     /// </summary>
-    public string Status { get; set; } = "UPDATING";
+    public string Status { get; set; } = "AWAITING_AUTHORIZATION";
+
+    /// <summary>AWAITING_RESOURCES, SUCCESS ou PARTIAL_SUCCESS. PARTIAL_SUCCESS não bloqueia
+    /// nada: só indica enriquecimento (categoria/counterparty) ainda pendente na Polp.</summary>
+    public string? ExecutionStatus { get; set; }
 
     /// <summary>Marca se as contas/transações já foram sincronizadas localmente.</summary>
     public bool SyncedLocally { get; set; } = false;
 
-    /// <summary>Timestamp dedicado ao throttle de re-sync: não pode reusar UpdatedAt porque esse
-    /// campo também é sobrescrito pelo polling de status (GetIntegrationStatus), que não conta
+    /// <summary>Quando os dados foram puxados da Polp pela última vez (backfill ou webhook). Não
+    /// reusa UpdatedAt porque esse campo também muda em atualização de status, que não conta
     /// como sincronização de dados.</summary>
     public DateTime? LastSyncedAt { get; set; }
 

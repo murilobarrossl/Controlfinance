@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
@@ -16,11 +17,13 @@ import { useAccount } from "../../../context/AccountContext.jsx";
 import { getGoals, saveGoal, deleteGoal, updateGoalProgress } from "../../../utils/investmentStorage.js";
 import { getReserve, addToReserve, removeFromReserve, clearReserve } from "../../../utils/emergencyReserveStorage.js";
 import { INVESTMENT_MODALITIES, getInvestmentModality } from "../../../utils/accountKind.js";
-import { calculateInstallment, formatCurrency } from "../../../utils/financeMath.js";
+import { formatCurrency } from "../../../utils/financeMath.js";
+import BankYieldCards from "./BankYieldCards.jsx";
+import YieldSimulator from "./YieldSimulator.jsx";
+import FinancingSimulator from "./FinancingSimulator.jsx";
 import "./Investimentos.css";
 
 const EMPTY_GOAL_FORM = { name: "", targetAmount: "", currentAmount: "", deadline: "" };
-const EMPTY_SIMULATION_FORM = { totalValue: "", downPayment: "0", monthlyRate: "1.5", installmentsCount: "12" };
 
 const MODALITY_ICONS = {
   caixinha: BoxIcon,
@@ -35,7 +38,7 @@ const MANUAL_MODALITIES = [
   {
     key: "reserva",
     label: "Reserva de emergência",
-    color: "#30A67D",
+    color: "#3FA9A1",
     Icon: ShieldIcon,
     description:
       "Dinheiro guardado pra imprevistos (saúde, conserto, perda de renda). O ideal é cobrir de 3 a 6 meses de despesas e poder resgatar na hora.",
@@ -43,7 +46,7 @@ const MANUAL_MODALITIES = [
   {
     key: "meta",
     label: "Meta de economia",
-    color: "#4988D4",
+    color: "#5B86B5",
     Icon: TargetIcon,
     description: "Um objetivo com valor e prazo (viagem, entrada de um imóvel). Você acompanha quanto falta pela barra de progresso.",
   },
@@ -86,10 +89,10 @@ function groupInvestmentsByInstitution(accounts, connectors) {
     }
     const institution = institutions.get(key);
     institution.items.push({ account, modality });
-    institution.total += account.balance ?? 0;
+    institution.total = institution.total === null || account.balance == null ? null : institution.total + account.balance;
   }
 
-  return [...institutions.values()].sort((a, b) => b.total - a.total);
+  return [...institutions.values()].sort((a, b) => (b.total ?? 0) - (a.total ?? 0));
 }
 
 function ModalityTag({ modality }) {
@@ -102,8 +105,8 @@ function ModalityTag({ modality }) {
   );
 }
 
-function InstitutionsSection({ institutions }) {
-  const grandTotal = institutions.reduce((sum, i) => sum + i.total, 0);
+function InstitutionsSection({ institutions, status }) {
+  const grandTotal = institutions.some((i) => i.total === null) ? null : institutions.reduce((sum, i) => sum + i.total, 0);
 
   return (
     <Card title="Suas reservas e investimentos por instituição">
@@ -113,7 +116,11 @@ function InstitutionsSection({ institutions }) {
         nome e pelo tipo da conta e pode não ser exata. Nada aqui é recomendação de investimento.
       </p>
 
-      {institutions.length === 0 ? (
+      {status === "loading" ? (
+        <Skeleton width="100%" height="8rem" />
+      ) : status === "error" ? (
+        <p className="investimentos__hint">Não foi possível carregar as contas.</p>
+      ) : institutions.length === 0 ? (
         <p className="investimentos__hint">
           Nenhuma conta de reserva ou investimento foi reconhecida nos seus bancos conectados até agora. Quando a
           sincronização trouxer uma, ela aparece aqui, agrupada pelo banco.
@@ -155,8 +162,10 @@ function InstitutionsSection({ institutions }) {
   );
 }
 
-function ModalitiesGuide() {
-  const fromBank = Object.values(INVESTMENT_MODALITIES).map((m) => ({ ...m, Icon: MODALITY_ICONS[m.key], source: "Vem do banco" }));
+function ModalitiesGuide({ usedKeys }) {
+  const fromBank = Object.values(INVESTMENT_MODALITIES)
+    .filter((m) => usedKeys.has(m.key))
+    .map((m) => ({ ...m, Icon: MODALITY_ICONS[m.key], source: "Vem do banco" }));
   const manual = MANUAL_MODALITIES.map((m) => ({ ...m, source: "Registrado por você" }));
 
   return (
@@ -262,7 +271,7 @@ function GoalsSection() {
 
   function handleCreateGoal(e) {
     e.preventDefault();
-    if (!goalForm.name || !goalForm.targetAmount) return;
+    if (!goalForm.name || !(Number(goalForm.targetAmount) > 0)) return;
 
     saveGoal({
       name: goalForm.name,
@@ -397,104 +406,25 @@ function GoalsSection() {
   );
 }
 
-function FinancingSimulator() {
-  const [simulationForm, setSimulationForm] = useState(EMPTY_SIMULATION_FORM);
-  const [simulation, setSimulation] = useState(null);
-
-  function handleSimulate(e) {
-    e.preventDefault();
-    const totalValue = Math.max(0, Number(simulationForm.totalValue) || 0);
-    const downPayment = Math.max(0, Number(simulationForm.downPayment) || 0);
-    const monthlyRate = Math.max(0, (Number(simulationForm.monthlyRate) || 0) / 100);
-    const installmentsCount = Math.max(0, Number(simulationForm.installmentsCount) || 0);
-
-    const financedAmount = Math.max(totalValue - downPayment, 0);
-    setSimulation(calculateInstallment(financedAmount, monthlyRate, installmentsCount));
-  }
-
-  return (
-    <Card title="Simulador de financiamento e consórcio">
-      <p className="investimentos__section-hint">
-        Preencha os dados da proposta que você recebeu (do banco, loja ou administradora de consórcio) pra ver o valor da
-        parcela e quanto vai pagar de juros no total, antes de fechar. É uma estimativa pela Tabela Price: não inclui
-        IOF, tarifas, seguros nem outros encargos, então o custo efetivo total (CET) informado pela instituição pode ser
-        maior.
-      </p>
-      <form className="investimentos__form" onSubmit={handleSimulate}>
-        <label className="investimentos__field">
-          <span className="investimentos__field-label">Valor total</span>
-          <CurrencyInput
-            placeholder="Ex: 30000"
-            value={simulationForm.totalValue}
-            onChange={(e) => setSimulationForm({ ...simulationForm, totalValue: e.target.value })}
-            required
-          />
-        </label>
-        <label className="investimentos__field">
-          <span className="investimentos__field-label">Entrada (opcional)</span>
-          <CurrencyInput
-            placeholder="Ex: 5000"
-            value={simulationForm.downPayment}
-            onChange={(e) => setSimulationForm({ ...simulationForm, downPayment: e.target.value })}
-          />
-        </label>
-        <label className="investimentos__field">
-          <span className="investimentos__field-label">Juros ao mês (%)</span>
-          <input
-            type="number"
-            placeholder="Ex: 1.5 (=1,5% ao mês)"
-            min="0"
-            step="0.01"
-            value={simulationForm.monthlyRate}
-            onChange={(e) => setSimulationForm({ ...simulationForm, monthlyRate: e.target.value })}
-          />
-        </label>
-        <label className="investimentos__field">
-          <span className="investimentos__field-label">Número de parcelas</span>
-          <input
-            type="number"
-            placeholder="Ex: 12"
-            min="1"
-            step="1"
-            value={simulationForm.installmentsCount}
-            onChange={(e) => setSimulationForm({ ...simulationForm, installmentsCount: e.target.value })}
-            required
-          />
-        </label>
-        <Button as="button" type="submit" variant="primary" size="md">
-          Simular
-        </Button>
-      </form>
-
-      {simulation && (
-        <div className="investimentos__simulation">
-          <p>
-            Parcela mensal: <strong>{formatCurrency(simulation.installmentAmount)}</strong>
-          </p>
-          <p>
-            Total pago: <strong>{formatCurrency(simulation.totalPaid)}</strong>
-          </p>
-          <p>
-            Total de juros: <strong>{formatCurrency(simulation.totalInterest)}</strong>
-          </p>
-        </div>
-      )}
-    </Card>
-  );
-}
-
 // Cada seção guarda o próprio estado: digitar no simulador ou numa meta não re-renderiza a lista
 // de instituições (nem refaz o agrupamento), como acontecia com tudo num componente só.
 export default function Investimentos() {
-  const { accounts, connectors } = useAccount();
+  const { accounts, connectors, accountsStatus } = useAccount();
   const institutions = useMemo(() => groupInvestmentsByInstitution(accounts, connectors), [accounts, connectors]);
+  // O guia só explica as modalidades que o usuário de fato tem, pra não virar um glossário genérico.
+  const usedModalityKeys = useMemo(
+    () => new Set(institutions.flatMap((institution) => institution.items.map((item) => item.modality.key))),
+    [institutions],
+  );
 
   return (
     <div className="investimentos">
       <SectionHeading kicker="Planeje o futuro" title="Investimentos" align="left" />
 
-      <InstitutionsSection institutions={institutions} />
-      <ModalitiesGuide />
+      <InstitutionsSection institutions={institutions} status={accountsStatus} />
+      <BankYieldCards accounts={accounts} connectors={connectors} />
+      <YieldSimulator />
+      <ModalitiesGuide usedKeys={usedModalityKeys} />
 
       <div className="investimentos__grid">
         <EmergencyReserveSection />

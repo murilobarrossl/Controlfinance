@@ -4,23 +4,28 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ControlFinance.API.Services;
 
-// Roda uma vez por dia: (1) lembrete de vencimento (um por usuário) quando há transações
-// pendentes na janela de 3 dias antes do vencimento ainda não avisadas, e (2) aviso mensal, todo
-// dia 1º, só pra quem ligou essa opção.
-public class ScheduledEmailService(IServiceScopeFactory scopeFactory, ILogger<ScheduledEmailService> logger) : BackgroundService
+// Roda de hora em hora e decide por usuário, no calendário local dele (UserClock): (1) lembrete
+// de vencimento, no máximo um por dia local, a partir das 8h, com as pendências de hoje até daqui
+// a 3 dias ainda não avisadas, e (2) aviso mensal do mês anterior, a partir das 8h do dia 1, só
+// pra quem ligou essa opção.
+public class ScheduledEmailService(IServiceScopeFactory scopeFactory, IJobLock jobLock, TimeProvider time, ILogger<ScheduledEmailService> logger) : BackgroundService
 {
-    private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(24);
-    private const int ReminderDaysBefore = 3;
+    private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(1);
+    private const int ReminderDaysAhead = 3;
+    private const int SendFromLocalHour = 8;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(CheckInterval);
+        using var timer = new PeriodicTimer(CheckInterval, time);
 
         do
         {
             try
             {
-                await RunChecksAsync(stoppingToken);
+                using var scope = scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var email = scope.ServiceProvider.GetRequiredService<EmailService>();
+                await RunRoundAsync(jobLock, db, email, time.GetUtcNow(), logger, stoppingToken);
             }
             catch (Exception ex)
             {
@@ -29,85 +34,117 @@ public class ScheduledEmailService(IServiceScopeFactory scopeFactory, ILogger<Sc
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    private async Task RunChecksAsync(CancellationToken ct)
+    // Com várias instâncias da API, cada uma roda este laço: sem o lock, duas rodadas simultâneas
+    // liam as mesmas pendências antes de qualquer uma gravar e o usuário recebia o e-mail em dobro.
+    public static Task<bool> RunRoundAsync(IJobLock jobLock, AppDbContext db, EmailService email, DateTimeOffset utcNow, ILogger logger, CancellationToken ct) =>
+        jobLock.RunExclusiveAsync(JobLockKeys.ScheduledEmail, () => RunOnceAsync(db, email, utcNow, logger, ct), ct);
+
+    public static async Task RunOnceAsync(AppDbContext db, EmailService email, DateTimeOffset utcNow, ILogger logger, CancellationToken ct)
     {
-        using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var email = scope.ServiceProvider.GetRequiredService<EmailService>();
-
-        await SendDueReminders(db, email, ct);
-
-        if (DateTime.UtcNow.Day == 1)
-            await SendMonthlySummaries(db, email, ct);
+        await SendDueRemindersAsync(db, email, utcNow, logger, ct);
+        await SendMonthlySummariesAsync(db, email, utcNow, logger, ct);
     }
 
     // Um e-mail por usuário, não um por transação, e sem nome nem valor de nenhuma conta (ver
     // EmailService). Só usuários ativos que não desligaram o lembrete, e só transações de contas
     // ainda conectadas (ou manuais): antes uma conta "desconectada" continuava gerando lembrete.
-    private async Task SendDueReminders(AppDbContext db, EmailService email, CancellationToken ct)
+    private static async Task SendDueRemindersAsync(AppDbContext db, EmailService email, DateTimeOffset utcNow, ILogger logger, CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
-        var horizon = now.AddDays(ReminderDaysBefore);
+        // Nenhum fuso se afasta mais de 14h do UTC: o "hoje" local de qualquer usuário cai no dia
+        // UTC ±1. A busca usa essa janela larga e o recorte exato é feito por usuário.
+        var utcDay = utcNow.UtcDateTime.Date;
+        var from = utcDay.AddDays(-1);
+        var to = utcDay.AddDays(2 + ReminderDaysAhead);
 
-        var dueTransactions = await db.Transactions
+        var candidates = await db.Transactions
             .Include(t => t.User)
             .Where(t => t.Status == TransactionStatus.Pending
                      && t.ReminderSentAt == null
-                     && t.DueDate >= now
-                     && t.DueDate <= horizon
+                     && t.DueDate >= from
+                     && t.DueDate < to
                      && t.User.IsActive
                      && t.User.DueRemindersEnabled
                      && (t.BankAccount == null || t.BankAccount.IsActive))
             .ToListAsync(ct);
 
-        foreach (var group in dueTransactions.GroupBy(t => t.UserId))
+        foreach (var group in candidates.GroupBy(t => t.UserId))
         {
-            var items = group.ToList();
+            var user = group.First().User;
+            var localNow = UserClock.NowIn(user.TimeZone, utcNow);
+            if (localNow.Hour < SendFromLocalHour) continue;
+
+            var localToday = DateOnly.FromDateTime(localNow);
+            if (user.LastDueReminderLocalDate >= localToday) continue;
+
+            var firstDay = localNow.Date;
+            var lastDay = firstDay.AddDays(ReminderDaysAhead);
+            var items = group.Where(t => t.DueDate.Date >= firstDay && t.DueDate.Date <= lastDay).ToList();
+            if (items.Count == 0) continue;
+
             try
             {
-                await email.SendDueReminderAsync(items[0].User.Email, items.Count, items.Min(t => t.DueDate));
+                await email.SendDueReminderAsync(user.Email, items.Count, items.Min(t => t.DueDate));
                 foreach (var transaction in items)
-                    transaction.ReminderSentAt = now;
+                    transaction.ReminderSentAt = utcNow.UtcDateTime;
+                user.LastDueReminderLocalDate = localToday;
+                await db.SaveChangesAsync(ct);
             }
             catch (Exception ex)
             {
-                logger.LogWarning("Falha ao enviar lembrete de vencimento pro usuário {UserId} ({ErrorType})", group.Key, ex.GetType().Name);
+                logger.LogWarning("Falha ao enviar lembrete de vencimento pro usuário {UserId} ({ErrorType})", user.Id, ex.GetType().Name);
             }
         }
-
-        if (dueTransactions.Count > 0)
-            await db.SaveChangesAsync(ct);
     }
 
     // Opt-in (User.MonthlySummaryEnabled, desligado por padrão) e sem números: só avisa que o
-    // resumo do mês está no painel. Antes ia pra todo mundo, com receitas, despesas e saldo.
-    private async Task SendMonthlySummaries(AppDbContext db, EmailService email, CancellationToken ct)
+    // resumo do mês está no painel. Compara pelo mês já tratado, não por "hoje é dia 1": uma hora
+    // ou um dia sem execução atrasa o aviso em vez de perdê-lo.
+    private static async Task SendMonthlySummariesAsync(AppDbContext db, EmailService email, DateTimeOffset utcNow, ILogger logger, CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
-        var currentMonthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-        var previousMonthStart = currentMonthStart.AddMonths(-1);
+        var latestPossibleMonth = FirstOfMonth(DateOnly.FromDateTime(utcNow.UtcDateTime.AddDays(1))).AddMonths(-1);
 
         var users = await db.Users
             .Where(u => u.IsActive
                      && u.MonthlySummaryEnabled
-                     && (u.LastMonthlySummarySentAt == null || u.LastMonthlySummarySentAt < currentMonthStart)
-                     && db.Transactions.Any(t => t.UserId == u.Id && t.DueDate >= previousMonthStart && t.DueDate < currentMonthStart))
+                     && (u.LastMonthlySummaryMonth == null || u.LastMonthlySummaryMonth < latestPossibleMonth))
             .ToListAsync(ct);
 
         foreach (var user in users)
         {
+            var localNow = UserClock.NowIn(user.TimeZone, utcNow);
+            if (localNow.Day == 1 && localNow.Hour < SendFromLocalHour) continue;
+
+            var currentMonth = FirstOfMonth(DateOnly.FromDateTime(localNow));
+            var previousMonth = currentMonth.AddMonths(-1);
+            if (LastSummarizedMonth(user) >= previousMonth) continue;
+
+            var start = previousMonth.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            var end = currentMonth.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+
             try
             {
-                await email.SendMonthlyNoticeAsync(user.Email);
-                user.LastMonthlySummarySentAt = now;
+                // Mês sem nenhuma transação não gera aviso, mas fica marcado como tratado: senão uma
+                // importação atrasada no meio do mês seguinte dispararia "seu mês fechou" fora de hora.
+                if (await db.Transactions.AnyAsync(t => t.UserId == user.Id && t.DueDate >= start && t.DueDate < end, ct))
+                {
+                    await email.SendMonthlyNoticeAsync(user.Email);
+                    user.LastMonthlySummarySentAt = utcNow.UtcDateTime;
+                }
+                user.LastMonthlySummaryMonth = previousMonth;
+                await db.SaveChangesAsync(ct);
             }
             catch (Exception ex)
             {
                 logger.LogWarning("Falha ao enviar aviso mensal pro usuário {UserId} ({ErrorType})", user.Id, ex.GetType().Name);
             }
         }
-
-        if (users.Count > 0)
-            await db.SaveChangesAsync(ct);
     }
+
+    // Quem recebeu o aviso pela versão anterior só tem LastMonthlySummarySentAt, enviado no dia 1
+    // UTC sobre o mês UTC anterior: sem isso, o primeiro ciclo depois do deploy reenviaria.
+    private static DateOnly? LastSummarizedMonth(User user) =>
+        user.LastMonthlySummaryMonth
+        ?? (user.LastMonthlySummarySentAt is DateTime sent ? new DateOnly(sent.Year, sent.Month, 1).AddMonths(-1) : null);
+
+    private static DateOnly FirstOfMonth(DateOnly date) => new(date.Year, date.Month, 1);
 }

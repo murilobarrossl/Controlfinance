@@ -7,7 +7,8 @@
 /* Proporção real de um cartão físico (ISO/IEC 7810 ID-1, ~85.6mm x 53.98mm). Cantos bem mais
    arredondados que --radius-lg (8px) de propósito: aqui precisa ler como "um cartão", não como
    "mais um painel do app". --shadow-panel é "none" globalmente, então as sombras de profundidade
-   são todas definidas aqui, não reaproveitadas de nenhum token. */
+   são todas definidas aqui, não reaproveitadas de nenhum token. Cores e opacidades das camadas vêm
+   de cardColors.js, que também confere o contraste do texto contra elas. */
 .credit-card-visual__face {
   position: relative;
   width: 100%;
@@ -18,19 +19,29 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, var(--color-border-strong));
-  background:
-    radial-gradient(140% 140% at 100% 0%, color-mix(in srgb, var(--color-accent) 40%, transparent) 0%, transparent 55%),
-    linear-gradient(155deg, var(--color-surface-alt) 0%, var(--color-bg) 55%, #000000 100%);
+  border: 1px solid var(--card-edge);
+  /* Ruído fosco estático (feTurbulence), só no fundo, abaixo do texto. A cor do ruído vem de
+     cardColors.js: escurece atrás de texto branco e clareia atrás de texto escuro, então nunca
+     reduz o contraste. */
+  --card-noise-darken: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --card-noise-lighten: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0.05 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* --card-footer é "transparent" a não ser que o texto branco precise da faixa escura no rodapé
+     para caber no limite de sombra (cardColors.js). */
+  background-image:
+    var(--card-noise),
+    linear-gradient(to top, var(--card-footer) 0%, var(--card-footer) 18%, transparent 38%),
+    radial-gradient(120% 110% at 0% 0%, var(--card-gloss) 0%, transparent 60%),
+    linear-gradient(135deg, var(--card-light) 0%, var(--card-base) 50%, var(--card-dark) 100%);
+  background-size: 160px 160px, auto, auto, auto;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -16px 22px -18px var(--card-shade),
     0 18px 36px -14px rgba(0, 0, 0, 0.75),
-    0 6px 16px -6px color-mix(in srgb, var(--color-accent) 35%, transparent);
+    0 6px 16px -6px var(--card-glow, color-mix(in srgb, var(--card-base) 45%, transparent));
   transform: perspective(1000px) rotateX(4deg) rotateY(-6deg);
   transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.35s ease;
   text-align: left;
   font-family: inherit;
-  color: var(--color-text-primary);
+  color: var(--card-text);
   cursor: default;
   overflow: hidden;
 }
@@ -40,13 +51,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    115deg,
-    transparent 30%,
-    rgba(255, 255, 255, 0.08) 45%,
-    rgba(255, 255, 255, 0.02) 55%,
-    transparent 65%
-  );
+  background: linear-gradient(115deg, transparent 32%, var(--card-sheen) 46%, transparent 62%);
   pointer-events: none;
 }
 
@@ -58,9 +63,9 @@
 .credit-card-visual__face--interactive:focus-visible {
   transform: perspective(1000px) rotateX(0deg) rotateY(0deg) translateY(-4px) scale(1.015);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -16px 22px -18px var(--card-shade),
     0 26px 44px -14px rgba(0, 0, 0, 0.8),
-    0 8px 20px -6px color-mix(in srgb, var(--color-accent) 45%, transparent);
+    0 8px 20px -6px var(--card-glow-hover, color-mix(in srgb, var(--card-base) 55%, transparent));
 }
 
 .credit-card-visual__face--interactive:focus-visible {
@@ -75,22 +80,87 @@
   gap: 0.75rem;
 }
 
-/* Chip decorativo: só um retângulo com gradiente dourado, sem nenhum vínculo com dado real —
-   nenhum número/dígito aparece em lugar nenhum deste componente. */
+.credit-card-visual__top-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.credit-card-visual__star {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--card-text-muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.credit-card-visual__star svg {
+  width: 20px;
+  height: 20px;
+}
+
+.credit-card-visual__star:hover {
+  background-color: rgba(255, 255, 255, 0.14);
+  color: var(--card-text);
+  transform: scale(1.08);
+}
+
+.credit-card-visual__star:focus-visible {
+  outline: 2px solid var(--card-text);
+  outline-offset: 1px;
+}
+
+.credit-card-visual__star--active {
+  color: #f5c84c;
+  cursor: default;
+}
+
+.credit-card-visual__star--active:hover {
+  background-color: transparent;
+  color: #f5c84c;
+  transform: none;
+}
+
+/* Chip decorativo, sem nenhum vínculo com dado real — nenhum número/dígito aparece em lugar
+   nenhum deste componente. Metal com reflexo diagonal: dourado nos cartões comuns e Gold, prateado
+   nos Platinum, Black e Infinite (cardColors.js). */
 .credit-card-visual__chip {
   width: 38px;
   height: 28px;
   border-radius: 6px;
-  background: linear-gradient(155deg, #e8c877 0%, #b8912f 55%, #8a6a1f 100%);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.credit-card-visual__chip--gold {
+  background: linear-gradient(135deg, #fffbea 0%, #f3d67e 20%, #d9ae45 42%, #fbeab0 58%, #e2b852 76%, #c79a38 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(150, 110, 30, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.credit-card-visual__chip--silver {
+  background: linear-gradient(135deg, #ffffff 0%, #e3e7ec 20%, #b7bfc8 42%, #f4f6f8 58%, #c9d0d7 76%, #9aa4af 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(80, 90, 102, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .credit-card-visual__brand {
   font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--color-text-secondary);
+  color: var(--card-text-muted);
   text-transform: uppercase;
+  text-shadow: var(--card-text-shadow-large);
 }
 
 .credit-card-visual__number {
@@ -98,13 +168,15 @@
   font-weight: 500;
   letter-spacing: 0.12em;
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-primary);
+  color: var(--card-text);
+  text-shadow: var(--card-text-shadow-large);
 }
 
 .credit-card-visual__name {
   font-size: 1.15rem;
   font-weight: 600;
   letter-spacing: 0.01em;
+  text-shadow: var(--card-text-shadow-large);
 }
 
 .credit-card-visual__bottom {
@@ -113,7 +185,8 @@
   justify-content: space-between;
   gap: 0.75rem;
   font-size: 0.78rem;
-  color: var(--color-text-secondary);
+  color: var(--card-text-muted);
+  text-shadow: var(--card-text-shadow-small);
 }
 
 .credit-card-visual__holder {
@@ -137,24 +210,6 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
-}
-
-.credit-card-visual__incomplete {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.85rem;
-  padding: 0.85rem 1rem;
-  background-color: var(--color-surface-hover);
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-md);
-}
-
-.credit-card-visual__incomplete p {
-  color: var(--color-text-secondary);
-  font-size: 0.85rem;
-  line-height: 1.5;
-  margin: 0;
 }
 
 .credit-card-visual__stat {
@@ -224,4 +279,11 @@
   .credit-card-visual__stats {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+/* TESTE: sombra neutra embaixo do cartão, igual para todos, como um cartão físico sobre a mesa,
+   no lugar do brilho na cor do cartão. Para voltar ao brilho colorido, apague só este bloco. */
+.credit-card-visual__face {
+  --card-glow: rgba(0, 0, 0, 0.35);
+  --card-glow-hover: rgba(0, 0, 0, 0.42);
 }
