@@ -15,8 +15,8 @@ export default function AreaTrendChart({ data, xKey = "month", series, height = 
       <ResponsiveContainer width="100%" height={height}>
         <AreaChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 8 }}>
           <defs>
-            {series.map((s) => (
-              <linearGradient key={s.key} id={`area-trend-${s.key}`} x1="0" y1="0" x2="0" y2="1">
+            {series.map((s, index) => (
+              <linearGradient key={s.key} id={`area-trend-${index}`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={s.color} stopOpacity={0.35} />
                 <stop offset="95%" stopColor={s.color} stopOpacity={0} />
               </linearGradient>
@@ -33,14 +33,15 @@ export default function AreaTrendChart({ data, xKey = "month", series, height = 
             cursor={{ stroke: "#3a3a3a", strokeWidth: 1 }}
           />
           <Legend wrapperStyle={{ fontSize: 12, color: "#b8b8b8" }} />
-          {series.map((s) => (
+          {series.map((s, index) => (
             <Area
               key={s.key}
               type="monotone"
               dataKey={s.key}
+              name={s.label ?? s.key}
               stroke={s.color}
               strokeWidth={2}
-              fill={`url(#area-trend-${s.key})`}
+              fill={`url(#area-trend-${index})`}
               dot={false}
               activeDot={{ r: 4 }}
             />
