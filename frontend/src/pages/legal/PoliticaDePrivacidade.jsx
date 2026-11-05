@@ -105,7 +105,7 @@ export default function PoliticaDePrivacidade() {
       <ul>
         <li>
           <strong>Polp Tecnologia LTDA</strong> (CNPJ 63.588.124/0001-50, segundo o site da própria Polp): fornecedora da
-          integração bancária, atua como operadora. Recebe seu CPF/CNPJ ao criar a conexão e devolve os dados do banco.
+          integração bancária, atua como operadora. Recebe seu CPF/CNPJ (e, em conexão de empresa, o CPF de quem opera a conta) ao criar a conexão e devolve os dados do banco.
         </li>
         <li>
           <strong>Instituição participante do Open Finance usada pela Polp</strong> (a Polp lista publicamente a Celcoin

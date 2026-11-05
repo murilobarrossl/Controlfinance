@@ -1,3 +1,4 @@
+using System.Net;
 using ControlFinance.API.Data;
 using ControlFinance.API.Models;
 using ControlFinance.API.Services;
@@ -107,6 +108,17 @@ public class PolpController(
         if (!DocumentValidator.IsValid(document) || !encryption.ComputeLookupHashCandidates(document).Contains(user.DocumentHash))
             return BadRequest(new { message = "O CPF/CNPJ informado não confere com o do seu cadastro." });
 
+        // Conexão de empresa: a Polp exige, além do CNPJ, o CPF de quem opera a conta no banco (sem
+        // ele responde 422). Esse CPF não é conferido com nada nosso (só guardamos o hash do CNPJ do
+        // cadastro): vai direto pra Polp, em memória, e é descartado, como o próprio CNPJ.
+        string? operatorCpf = null;
+        if (document.Length == 14)
+        {
+            operatorCpf = new string((dto.OperatorDocument ?? string.Empty).Where(char.IsDigit).ToArray());
+            if (!DocumentValidator.IsValidCpf(operatorCpf))
+                return BadRequest(new { message = "Informe o CPF de quem opera a conta da empresa no banco." });
+        }
+
         // Mesmo motivo do login por CPF: o documento acabou de ser digitado, então regrava o hash
         // com a chave de busca ativa se ele ainda estiver numa chave antiga.
         if (!encryption.IsActiveLookupHash(user.DocumentHash))
@@ -126,7 +138,19 @@ public class PolpController(
         PolpConsentDto created;
         try
         {
-            created = await polp.CreateConsentAsync(new CreatePolpConsentRequest(institutionId, document, UserId), ct);
+            created = await polp.CreateConsentAsync(new CreatePolpConsentRequest(institutionId, document, UserId, operatorCpf), ct);
+        }
+        // 422 é a Polp recusando os dados (documento que o banco não aceita, banco só de empresa ou só
+        // de pessoa física, CPF do operador ausente...), não uma falha dela: devolver 502 fazia a tela
+        // dizer "serviço instável" e a pessoa tentar de novo sem nunca conseguir.
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.UnprocessableEntity)
+        {
+            return BadRequest(new
+            {
+                message = document.Length == 14
+                    ? "A Polp não aceitou esses dados para esse banco. Confira o CNPJ, o CPF de quem opera a conta e se o banco escolhido atende empresas."
+                    : "A Polp não aceitou esses dados para esse banco. Confira o CPF e se o banco escolhido atende pessoa física."
+            });
         }
         catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
         {
@@ -434,4 +458,5 @@ public class PolpController(
     }
 }
 
-public record PolpConnectDto(string ConnectorId, string? Document, string? ConsentVersion);
+// OperatorDocument: CPF de quem opera a conta, exigido pela Polp só quando Document é um CNPJ.
+public record PolpConnectDto(string ConnectorId, string? Document, string? ConsentVersion, string? OperatorDocument = null);

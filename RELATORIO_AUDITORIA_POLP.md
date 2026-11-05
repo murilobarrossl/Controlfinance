@@ -156,7 +156,7 @@ Contagem (sem duplicatas):
   - No sandbox: 22 instituições BUSINESS, 78 BOTH, 110 PERSONAL, 17 em `MAJOR_OUTAGE` e 1 `DEGRADED`, todas listadas sem filtro (`F/pages/conectar-banco/ConectarBanco.jsx`, `PolpController.cs:46-56`; o frontend ignora `status`).
 - Impacto: um usuário PJ não consegue conectar e recebe "Não foi possível iniciar a conexão". Um usuário PF tenta banco fora do ar.
 - Correção: filtrar por `type` compatível com o documento e por `OPERATIONAL`. Pedir o CPF do operador em PJ.
-- Status: regra CONFIRMADA (documentação e código). A resposta 422 da Polp é NÃO CONFIRMADO, porque exigiria POST.
+- Status: regra CONFIRMADA (documentação e código). O 422 da Polp na conexão PJ foi **observado no log** do ambiente de desenvolvimento (05/11/2026). ✅ CORRIGIDO em parte: a conexão PJ agora pede o CPF do operador e envia `cnpj` + `cpf`; o 422 na criação do consentimento virou 400 com mensagem clara; o aviso de conexão subiu para a versão 2026-11-05. Continua aberto: filtrar o seletor por `status` OPERATIONAL e confirmar com uma conexão PJ real que o formato do corpo é o esperado.
 
 **G-A5. Texto do aviso de consentimento descreve o funcionamento da v1** — ✅ CORRIGIDO. Ver seção 7, item 3.
 - Evidência: `F/pages/conectar-banco/ConectarBanco.jsx:253-254` diz "Os dados são atualizados quando você abre o painel ou pede uma sincronização (no máximo a cada 5 minutos por banco)". Nenhuma das duas coisas existe na v2.

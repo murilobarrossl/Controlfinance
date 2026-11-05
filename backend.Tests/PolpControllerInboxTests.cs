@@ -18,11 +18,18 @@ public class FakePolpProxy : DispatchProxy
     public ConcurrentQueue<string> Calls { get; } = new();
     public PolpConsentDto? Consent { get; set; }
     public Action? DuringGetConsent { get; set; }
+    public Exception? CreateConsentError { get; set; }
+    public CreatePolpConsentRequest? LastCreateRequest { get; set; }
 
     protected override object? Invoke(MethodInfo? method, object?[]? args)
     {
         Calls.Enqueue(method!.Name);
         if (method.Name == nameof(IPolpService.GetConsentAsync)) DuringGetConsent?.Invoke();
+        if (method.Name == nameof(IPolpService.CreateConsentAsync))
+        {
+            LastCreateRequest = (CreatePolpConsentRequest)args![0]!;
+            if (CreateConsentError is not null) throw CreateConsentError;
+        }
         return method.Name switch
         {
             nameof(IPolpService.CreateConsentAsync) or nameof(IPolpService.GetConsentAsync) => Task.FromResult(Consent!),
@@ -40,6 +47,8 @@ public class FakePolpProxy : DispatchProxy
 public class PolpControllerInboxTests
 {
     private const string Cpf = "52998224725";
+    private const string Cnpj = "11222333000181";
+    private const string OperatorCpf = "52998224725";
 
     private static (PolpController Controller, FakePolpProxy Polp) Build(InboxHarness h)
     {
@@ -109,6 +118,82 @@ public class PolpControllerInboxTests
 
         await Task.Delay(50);
         Assert.Equal([nameof(IPolpService.CreateConsentAsync)], polp.Calls.ToArray());
+    }
+
+    [Fact]
+    public async Task Connect_de_empresa_sem_cpf_do_operador_recusa_sem_chamar_a_Polp()
+    {
+        using var h = new InboxHarness();
+        h.T.User.DocumentHash = h.T.Encryption.ComputeLookupHash(Cnpj);
+        h.T.Db.SaveChanges();
+        var (controller, polp) = Build(h);
+
+        var result = await controller.Connect(
+            new PolpConnectDto(Guid.NewGuid().ToString(), Cnpj, LegalDocuments.BankConnectionNoticeVersion), default);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(polp.Calls);
+    }
+
+    [Fact]
+    public async Task Connect_de_empresa_manda_cnpj_e_cpf_do_operador_a_Polp()
+    {
+        using var h = new InboxHarness();
+        h.T.User.DocumentHash = h.T.Encryption.ComputeLookupHash(Cnpj);
+        h.T.Db.SaveChanges();
+        var (controller, polp) = Build(h);
+        polp.Consent = Consent(Guid.NewGuid(), "AWAITING_AUTHORIZATION");
+
+        Json(await controller.Connect(
+            new PolpConnectDto(Guid.NewGuid().ToString(), Cnpj, LegalDocuments.BankConnectionNoticeVersion, OperatorCpf), default));
+
+        Assert.Equal(Cnpj, polp.LastCreateRequest!.Document);
+        Assert.Equal(OperatorCpf, polp.LastCreateRequest.OperatorCpf);
+    }
+
+    [Fact]
+    public async Task Connect_pessoa_fisica_nao_manda_cpf_de_operador()
+    {
+        using var h = new InboxHarness();
+        h.T.User.DocumentHash = h.T.Encryption.ComputeLookupHash(Cpf);
+        h.T.Db.SaveChanges();
+        var (controller, polp) = Build(h);
+        polp.Consent = Consent(Guid.NewGuid(), "AWAITING_AUTHORIZATION");
+
+        Json(await controller.Connect(
+            new PolpConnectDto(Guid.NewGuid().ToString(), Cpf, LegalDocuments.BankConnectionNoticeVersion, OperatorCpf), default));
+
+        Assert.Null(polp.LastCreateRequest!.OperatorCpf);
+    }
+
+    [Fact]
+    public async Task Connect_com_422_da_Polp_vira_400_com_mensagem_clara_e_nao_502()
+    {
+        using var h = new InboxHarness();
+        h.T.User.DocumentHash = h.T.Encryption.ComputeLookupHash(Cpf);
+        h.T.Db.SaveChanges();
+        var (controller, polp) = Build(h);
+        polp.CreateConsentError = new HttpRequestException("Falha ao criar consentimento na Polp (HTTP 422).", null, System.Net.HttpStatusCode.UnprocessableEntity);
+
+        var result = await controller.Connect(
+            new PolpConnectDto(Guid.NewGuid().ToString(), Cpf, LegalDocuments.BankConnectionNoticeVersion), default);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Connect_com_falha_real_da_Polp_continua_502()
+    {
+        using var h = new InboxHarness();
+        h.T.User.DocumentHash = h.T.Encryption.ComputeLookupHash(Cpf);
+        h.T.Db.SaveChanges();
+        var (controller, polp) = Build(h);
+        polp.CreateConsentError = new HttpRequestException("Falha ao criar consentimento na Polp (HTTP 503).", null, System.Net.HttpStatusCode.ServiceUnavailable);
+
+        var result = await controller.Connect(
+            new PolpConnectDto(Guid.NewGuid().ToString(), Cpf, LegalDocuments.BankConnectionNoticeVersion), default);
+
+        Assert.Equal(502, Assert.IsType<ObjectResult>(result).StatusCode);
     }
 
     [Fact]

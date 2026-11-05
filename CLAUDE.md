@@ -87,7 +87,7 @@ Auth is **cookie-based**, not bearer-token-in-JS, despite still using JWTs inter
 - The CPF/CNPJ number is **not stored**: only `DocumentHash` (HMAC-SHA256, used for CPF login,
   uniqueness and to check the document typed on the bank-connection screen) and `DocumentType`.
   `User.Document` is a legacy column being emptied by `PrivacyBackfill`; Polp gets the document
-  typed by the user at connection time, in memory only.
+  typed by the user at connection time, in memory only (for a CNPJ connection also the operator CPF, which Polp requires; same rule).
 - Because `Transaction.Name` is encrypted, report search and sort-by-name run in memory
   (`TransactionsController.GetReport`), capped like sort-by-amount.
 - Data minimization rules (see `RELATORIO_ADEQUACAO_PRIVACIDADE_CONTROL_FINANCE.md`): no Polp

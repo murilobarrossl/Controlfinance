@@ -193,7 +193,8 @@ public class PolpCardTransactionDto
     [JsonPropertyName("category_ref")] public string? CategoryRef { get; set; }
 }
 
-public record CreatePolpConsentRequest(Guid InstitutionId, string Document, Guid ClientUserId);
+// OperatorCpf: só em conexão de empresa (Document = CNPJ); a Polp exige o CPF de quem opera a conta.
+public record CreatePolpConsentRequest(Guid InstitutionId, string Document, Guid ClientUserId, string? OperatorCpf = null);
 
 /// <summary>
 /// Janela de sincronização que a Polp manda no webhook (query_parameters). O texto vem de uma
@@ -324,13 +325,13 @@ public class PolpService : IPolpService
 
     public async Task<PolpConsentDto> CreateConsentAsync(CreatePolpConsentRequest request, CancellationToken ct = default)
     {
-        // A Polp espera cpf OU cnpj dependendo do tamanho do documento.
+        // Pessoa física: só "cpf". Empresa (regra BUSINESS da v2): "cnpj" junto do "cpf" de quem
+        // opera a conta; sem os dois a Polp responde 422.
         var isCnpj = request.Document.Length > 11;
 
         var body = new Dictionary<string, object?>
         {
             ["institution_id"] = request.InstitutionId,
-            [isCnpj ? "cnpj" : "cpf"] = request.Document,
             // Id interno e opaco do usuário, nunca e-mail: a Polp é um terceiro e o campo é livre.
             ["cliente_user_id"] = request.ClientUserId.ToString(),
             ["products"] = DefaultProducts,
@@ -338,6 +339,15 @@ public class PolpService : IPolpService
             // um consentimento ativo da mesma instituição em vez de criar outro.
             ["avoidDuplicates"] = true
         };
+        if (isCnpj)
+        {
+            body["cnpj"] = request.Document;
+            if (!string.IsNullOrWhiteSpace(request.OperatorCpf)) body["cpf"] = request.OperatorCpf;
+        }
+        else
+        {
+            body["cpf"] = request.Document;
+        }
         if (!string.IsNullOrWhiteSpace(_redirectUrl)) body["redirectUrl"] = _redirectUrl;
 
         var resp = await _http.PostAsJsonAsync("consents", body, ct);

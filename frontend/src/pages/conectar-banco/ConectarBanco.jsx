@@ -45,6 +45,9 @@ export default function ConnectBankPage() {
   // CPF/CNPJ só vive neste estado, durante a conexão: vai pra Polp na criação da integração e some
   // quando a tela é desmontada. Não é guardado no navegador nem no backend.
   const [document, setDocument] = useState("");
+  // Só pra empresa (CNPJ): a Polp exige o CPF de quem opera a conta, além do CNPJ. Mesmo ciclo de
+  // vida do documento acima: só em memória, nunca guardado.
+  const [operatorDocument, setOperatorDocument] = useState("");
   const [noticeAccepted, setNoticeAccepted] = useState(false);
 
   const { personal, business } = useMemo(
@@ -57,6 +60,13 @@ export default function ConnectBankPage() {
     [personType, personal, business, search]
   );
 
+  const isBusinessDocument = document.replace(/\D/g, "").length === 14;
+
+  function handleOperatorDocumentChange(e) {
+    const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
+    setOperatorDocument(applyMask(digits, getCpfCnpjMask(digits), operatorDocument.replace(/\D/g, "")));
+  }
+
   function handleDocumentChange(e) {
     const digits = e.target.value.replace(/\D/g, "").slice(0, 14);
     setDocument(applyMask(digits, getCpfCnpjMask(digits), document.replace(/\D/g, "")));
@@ -68,6 +78,10 @@ export default function ConnectBankPage() {
     const digits = document.replace(/\D/g, "");
     if (digits.length !== 11 && digits.length !== 14) {
       setError("Informe o CPF ou CNPJ do titular da conta.");
+      return;
+    }
+    if (digits.length === 14 && operatorDocument.replace(/\D/g, "").length !== 11) {
+      setError("Informe o CPF de quem opera a conta da empresa no banco.");
       return;
     }
     setLoadingConnectors(true);
@@ -122,7 +136,12 @@ export default function ConnectBankPage() {
     authWindow.document.close();
 
     try {
-      const data = await createIntegration(connectorId, document.replace(/\D/g, ""), BANK_CONNECTION_NOTICE_VERSION);
+      const data = await createIntegration(
+        connectorId,
+        document.replace(/\D/g, ""),
+        BANK_CONNECTION_NOTICE_VERSION,
+        isBusinessDocument ? operatorDocument.replace(/\D/g, "") : undefined,
+      );
       if (data?.urlToAuthenticate) {
         await openAuthAndWait(data.integrationId, data.urlToAuthenticate, authWindow);
       } else {
@@ -241,7 +260,8 @@ export default function ConnectBankPage() {
                 Você faz login direto no seu banco, pelo Open Finance. A conexão é intermediada pela Polp
                 Tecnologia, nossa fornecedora, que recebe os dados por uma instituição participante do Open
                 Finance e repassa ao Control Finance. Não recebemos a senha do seu banco. Para criar a
-                conexão, a Polp precisa do seu CPF/CNPJ.
+                conexão, a Polp precisa do seu CPF/CNPJ e, no caso de empresa, também do CPF de quem opera a
+                conta no banco. Esses números são enviados só para criar a conexão e não ficam guardados.
               </dd>
 
               <dt>O que guardamos</dt>
@@ -280,6 +300,24 @@ export default function ConnectBankPage() {
                 required
               />
             </label>
+
+            {isBusinessDocument && (
+              <label className="connect-bank__field">
+                <span className="connect-bank__field-label">CPF de quem opera a conta da empresa</span>
+                <input
+                  id="connect-bank-operator-document"
+                  name="operatorDocument"
+                  type="text"
+                  value={operatorDocument}
+                  onChange={handleOperatorDocumentChange}
+                  inputMode="numeric"
+                  maxLength={14}
+                  autoComplete="off"
+                  placeholder="CPF de quem acessa o banco"
+                  required
+                />
+              </label>
+            )}
 
             <label className="connect-bank__checkbox">
               <input
