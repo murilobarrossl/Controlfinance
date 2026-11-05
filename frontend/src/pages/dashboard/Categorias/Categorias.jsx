@@ -7,8 +7,7 @@ import { useAccount } from "../../../context/AccountContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
-import BankLogo from "../../../components/ui/BankLogo/BankLogo.jsx";
-import { CardIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
+import CardPicker from "../../../components/dashboard/CardPicker/CardPicker.jsx";
 import { getAccountKindLabel, isCreditCardAccount } from "../../../utils/accountKind.js";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
@@ -305,24 +304,35 @@ export default function Categorias() {
     drilldownRef.current.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
   }, [selectedCategory]);
 
-  // Esta aba mostra UMA conta por vez (a do seletor de contas): sem deixar isso explícito, parecia
-  // somar tudo. Cada opção traz banco, nome e tipo (conta corrente, cartão...) pra não haver dúvida.
   const connectorsById = useMemo(() => new Map(connectors.map((c) => [c.id, c])), [connectors]);
   const accountOptions = useMemo(
     () =>
       [...accounts]
-        .sort((a, b) => Number(isCreditCardAccount(a)) - Number(isCreditCardAccount(b)))
         .map((account) => {
           const connector = connectorsById.get(account.bankCode);
+          const bankName = connector?.name ?? "Conta cadastrada manualmente";
+          const kind = getAccountKindLabel(account);
+          const seen = new Set([bankName.toLowerCase(), "banco"]);
+          const detail = [...String(account.name ?? "").split(" · "), kind].filter((part) => {
+            const key = part.trim().toLowerCase();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
           return {
             account,
-            bankName: connector?.name ?? "Conta cadastrada manualmente",
+            bankName,
+            detail: detail.join(" · ") || kind,
             logoUrl: connector?.logoUrl,
             color: connector?.color ? (connector.color.startsWith("#") ? connector.color : `#${connector.color}`) : undefined,
-            kind: getAccountKindLabel(account),
+            kind,
             isCard: isCreditCardAccount(account),
           };
-        }),
+        })
+        .sort(
+          (a, b) =>
+            Number(a.isCard) - Number(b.isCard) || a.bankName.localeCompare(b.bankName, "pt-BR"),
+        ),
     [accounts, connectorsById],
   );
   const activeOption = accountOptions.find((o) => o.account.id === effectiveAccountId) ?? null;
@@ -345,7 +355,7 @@ export default function Categorias() {
 
   return (
     <div className="categorias">
-      <SectionHeading title="Categorias">Onde seu dinheiro vai</SectionHeading>
+      <SectionHeading title="Categorias" level={1}>Onde seu dinheiro vai</SectionHeading>
 
       <div className="categorias__period">
         <div className="categorias__period-modes" role="radiogroup" aria-label="Período">
@@ -374,50 +384,38 @@ export default function Categorias() {
         )}
       </div>
 
-      {activeOption && (
-        <div className="categorias__scope">
+      {activeOption &&
+        (accountOptions.length > 1 ? (
+          <div className="categorias__scope">
+            <span className="categorias__scope-title" id="categorias-conta-rotulo">
+              Mostrando as despesas de
+            </span>
+            <CardPicker
+              id="categorias-conta"
+              labelId="categorias-conta-rotulo"
+              options={accountOptions.map((option) => ({
+                value: option.account.id,
+                title: option.bankName,
+                subtitle: option.detail,
+                color: option.color,
+                logo: { name: option.bankName, logoUrl: option.logoUrl, color: option.color },
+              }))}
+              value={effectiveAccountId}
+              onChange={(id) => {
+                setSelectedAccountId(id);
+                setSelectedCategory(null);
+                setCategoryPage(1);
+              }}
+            />
+          </div>
+        ) : (
           <p className="categorias__scope-title">
             Mostrando as despesas de:{" "}
             <strong>
-              {activeOption.bankName} · {activeOption.account.name}
-            </strong>{" "}
-            <span className={`categorias__scope-kind ${activeOption.isCard ? "categorias__scope-kind--card" : ""}`}>
-              {activeOption.isCard && <CardIcon />}
-              {activeOption.kind}
-            </span>
+              {activeOption.bankName} · {activeOption.detail}
+            </strong>
           </p>
-          {accountOptions.length > 1 && (
-            <div className="categorias__scope-options" role="radiogroup" aria-label="Escolha a conta ou cartão">
-              {accountOptions.map((option) => {
-                const active = option.account.id === effectiveAccountId;
-                return (
-                  <button
-                    key={option.account.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    className={`categorias__scope-option ${active ? "categorias__scope-option--active" : ""}`}
-                    style={{ "--option-color": option.color ?? "var(--color-border-strong)" }}
-                    onClick={() => {
-                      setSelectedAccountId(option.account.id);
-                      setSelectedCategory(null);
-                      setCategoryPage(1);
-                    }}
-                  >
-                    <BankLogo name={option.bankName} logoUrl={option.logoUrl} color={option.color} size={26} />
-                    <span className="categorias__scope-option-text">
-                      <span className="categorias__scope-option-bank">{option.bankName}</span>
-                      <span className="categorias__scope-option-name">
-                        {option.account.name} · {option.kind}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+        ))}
 
       <p className="categorias__section-hint">Só despesas. Receitas ficam em Receitas e despesas.</p>
 

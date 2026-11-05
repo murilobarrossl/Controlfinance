@@ -24,6 +24,6 @@
 }
 
 .area-trend-chart__badge-label {
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
   font-size: 0.72rem;
 }

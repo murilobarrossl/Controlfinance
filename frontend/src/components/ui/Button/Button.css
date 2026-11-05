@@ -9,7 +9,9 @@
   text-transform: uppercase;
   cursor: pointer;
   text-decoration: none;
-  white-space: nowrap;
+  min-width: fit-content;
+  text-align: center;
+  text-wrap: balance;
   transition: filter 0.15s ease, background-color 0.15s ease, opacity 0.15s ease;
 }
 

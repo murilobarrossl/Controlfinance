@@ -118,7 +118,7 @@ export default function Privacidade() {
 
   return (
     <div className="privacidade">
-      <SectionHeading title="Privacidade e dados">Seus dados, suas escolhas</SectionHeading>
+      <SectionHeading title="Privacidade e dados" level={1}>Seus dados, suas escolhas</SectionHeading>
 
       <Card title="O que guardamos sobre você">
         <ul className="privacidade__list">

@@ -1,8 +1,11 @@
+import { useMemo } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE } from "./chartTheme.js";
+import { readCssVar } from "../../utils/cssVar.js";
 import "./AreaTrendChart.css";
 
 export default function AreaTrendChart({ data, xKey = "month", series, height = 260, formatValue, badge }) {
+  const axisColor = useMemo(() => readCssVar("--color-text-tertiary", "#8b8b8b"), []);
   return (
     <div className="area-trend-chart">
       {badge && (
@@ -23,8 +26,8 @@ export default function AreaTrendChart({ data, xKey = "month", series, height = 
             ))}
           </defs>
           <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey={xKey} stroke="#808080" tick={{ fontSize: 12 }} padding={{ right: 12 }} />
-          <YAxis stroke="#808080" tick={{ fontSize: 12 }} tickFormatter={formatValue} width={76} />
+          <XAxis dataKey={xKey} stroke={axisColor} tick={{ fontSize: 12 }} padding={{ right: 12 }} />
+          <YAxis stroke={axisColor} tick={{ fontSize: 12 }} tickFormatter={formatValue} width={76} />
           <Tooltip
             formatter={(value) => (formatValue ? formatValue(value) : value)}
             contentStyle={TOOLTIP_STYLE}

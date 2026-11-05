@@ -235,7 +235,7 @@ export default function Relatorios() {
 
   return (
     <div className="relatorios">
-      <SectionHeading title="Relatórios">Histórico completo</SectionHeading>
+      <SectionHeading title="Relatórios" level={1}>Histórico completo</SectionHeading>
 
       {saveError && <p className="relatorios__error">{saveError}</p>}
 

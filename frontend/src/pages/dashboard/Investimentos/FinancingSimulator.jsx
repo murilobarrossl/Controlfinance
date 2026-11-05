@@ -6,6 +6,7 @@ import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.js
 import { TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE } from "../../../components/charts/chartTheme.js";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import { buildPriceSchedule, compareTerms } from "../../../utils/investmentMath.js";
+import { readCssVar } from "../../../utils/cssVar.js";
 
 const EMPTY_FORM = { totalValue: "", downPayment: "0", monthlyRate: "1.5", installmentsCount: "36" };
 const EXAMPLE_FORM = { totalValue: "40000", downPayment: "8000", monthlyRate: "1.5", installmentsCount: "36" };
@@ -16,6 +17,7 @@ const COMPARE_TERMS = [12, 24, 36, 48, 60];
 // custo, que é o que costuma faltar numa proposta de banco: só a parcela aparece em destaque.
 export default function FinancingSimulator() {
   const [form, setForm] = useState(EMPTY_FORM);
+  const axisColor = useMemo(() => readCssVar("--color-text-tertiary", "#8b8b8b"), []);
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
   const totalValue = Math.max(0, Number(form.totalValue) || 0);
@@ -94,7 +96,6 @@ export default function FinancingSimulator() {
         <label className="investimentos__field">
           <span className="investimentos__field-label">Número de parcelas</span>
           <input type="number" placeholder="Ex: 36" min="1" max="480" step="1" value={form.installmentsCount} onChange={set("installmentsCount")} />
-          <span className="investimentos__field-help">Quantos meses vai pagar.</span>
         </label>
       </div>
 
@@ -149,17 +150,12 @@ export default function FinancingSimulator() {
           </div>
 
           <h4 className="investimentos__subtitle">Pra onde vai cada parcela</h4>
-          <p className="investimentos__section-hint investimentos__section-hint--tight">
-            Cada ponto do gráfico é uma parcela (1ª, 2ª, 3ª...), e a altura total dela é sempre a mesma, porque a parcela é
-            fixa. O que muda é a divisão: uma parte vai pro banco como <strong>juros</strong> e a outra realmente{" "}
-            <strong>abate a dívida</strong>. Passe o mouse pra ver os valores de cada parcela.
-          </p>
           <div role="img" aria-label="Gráfico da composição de cada parcela entre juros e dívida abatida">
             <ResponsiveContainer width="100%" height={240}>
               <AreaChart data={analysis.chartData} margin={{ top: 8, right: 16, left: 4, bottom: 8 }}>
                 <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" stroke="#808080" tick={{ fontSize: 12 }} />
-                <YAxis stroke="#808080" tick={{ fontSize: 12 }} tickFormatter={(v) => formatCurrency(v)} width={76} />
+                <XAxis dataKey="month" stroke={axisColor} tick={{ fontSize: 12 }} />
+                <YAxis stroke={axisColor} tick={{ fontSize: 12 }} tickFormatter={(v) => formatCurrency(v)} width={76} />
                 <Tooltip
                   formatter={(value) => formatCurrency(value)}
                   contentStyle={TOOLTIP_STYLE}

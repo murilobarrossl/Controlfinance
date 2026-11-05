@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import Card from "../../../components/ui/Card/Card.jsx";
 import BankLogo from "../../../components/ui/BankLogo/BankLogo.jsx";
-import InfoTip from "../../../components/ui/InfoTip/InfoTip.jsx";
 import { PiggyBankIcon, BoxIcon, CoinsIcon, ChartIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { getInvestmentModality } from "../../../utils/accountKind.js";
-import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
+import { formatCurrency } from "../../../utils/financeMath.js";
 import { poupancaAnnualPct, simulateGrowth } from "../../../utils/investmentMath.js";
 import {
   REFERENCE_CDI_PCT,
@@ -34,7 +33,7 @@ function monthlyNetYield(amount, annualPct, taxed) {
   return simulateGrowth({ initial: amount, monthly: 0, months: 12, annualPct, taxed }).summary.incomeNet / 12;
 }
 
-function ProductRow({ product, cdiPct, amount, usingOwnBalance }) {
+function ProductRow({ product, cdiPct, amount, usingOwnBalance, showBasis }) {
   const base = monthlyNetYield(amount, (cdiPct * product.pctCdi) / 100, true);
   const max = product.pctCdiMax ? monthlyNetYield(amount, (cdiPct * product.pctCdiMax) / 100, true) : null;
 
@@ -45,52 +44,28 @@ function ProductRow({ product, cdiPct, amount, usingOwnBalance }) {
           <ProductIcon name={product.name} />
         </span>
         <span className="yield-card__product-name">{product.name}</span>
-        <InfoTip label={`O que é ${product.name}?`} align="left">
-          Por trás, costuma ser um CDB: um empréstimo que você faz ao banco e que ele devolve com juros. Tem garantia
-          do FGC até R$ 250 mil por CPF e por instituição.
-        </InfoTip>
       </div>
 
       <div className="yield-card__chips">
-        <span className="yield-card__chip">
-          {product.pctCdi}% do CDI
-          <InfoTip label="O que é % do CDI?" align="left">
-            O CDI é a taxa de referência da renda fixa, hoje cerca de {formatPercentage(cdiPct)} ao ano. “{product.pctCdi}%
-            do CDI” quer dizer que seu dinheiro rende {product.pctCdi === 100 ? "exatamente isso" : `${product.pctCdi}% disso`}.
-            Acima de 100% rende mais que o CDI; abaixo, menos.
-          </InfoTip>
-        </span>
+        <span className="yield-card__chip">{product.pctCdi}% do CDI</span>
         {product.liquidity === "Imediata" && (
-          <span className="yield-card__chip">
-            Resgate imediato
-            <InfoTip label="O que é resgate imediato?" align="left">
-              Você pode tirar o dinheiro quando quiser, sem perder o que já rendeu.
-            </InfoTip>
-          </span>
+          <span className="yield-card__chip">Resgate imediato</span>
         )}
       </div>
 
       <div className="yield-card__estimate">
         <span className="yield-card__estimate-value">≈ {formatCurrency(base)}</span>
-        <span className="yield-card__estimate-label">
-          por mês, líquido
-          <InfoTip label="Como esse valor é calculado?" align="right">
-            Média mensal de um ano de rendimento, já com o imposto de renda descontado (22,5% até 180 dias, 20% até 360,
-            17,5% até 720 e 15% acima; o banco desconta sozinho no resgate). É uma estimativa: o CDI muda.
-          </InfoTip>
-        </span>
+        <span className="yield-card__estimate-label">por mês, líquido</span>
       </div>
-      <p className="yield-card__basis">
-        {usingOwnBalance ? `Sobre o seu saldo de ${formatCurrency(amount)} aqui.` : `A cada ${formatCurrency(amount)} guardados.`}
-      </p>
+      {showBasis && (
+        <p className="yield-card__basis">
+          {usingOwnBalance ? `Sobre o seu saldo de ${formatCurrency(amount)} aqui.` : `A cada ${formatCurrency(amount)} guardados.`}
+        </p>
+      )}
 
       {max != null && (
         <p className="yield-card__upgrade">
           Com as condições do banco, até {product.pctCdiMax}% do CDI: ≈ {formatCurrency(max)} por mês
-          <InfoTip label="Que condições são essas?" align="left">
-            Percentuais mais altos costumam exigir plano pago, movimentar a conta ou ter um limite de valor. Confirme no
-            app do banco se você se enquadra.
-          </InfoTip>
         </p>
       )}
       <p className="yield-card__note">{product.note}</p>
@@ -98,9 +73,6 @@ function ProductRow({ product, cdiPct, amount, usingOwnBalance }) {
   );
 }
 
-// Uma caixa por banco que o usuário realmente usa, com as caixinhas/cofrinhos/porquinhos dele
-// dentro. Nada é mostrado de bancos que o usuário não conectou: os termos técnicos aparecem só aqui,
-// no contexto, explicados no "!" (ver InfoTip), em vez de um glossário genérico.
 export default function BankYieldCards({ accounts, connectors }) {
   const [cdi, setCdi] = useState(String(REFERENCE_CDI_PCT));
   const cdiPct = Math.max(0, Number(cdi) || 0);
@@ -154,13 +126,7 @@ export default function BankYieldCards({ accounts, connectors }) {
           </p>
         </div>
         <label className="yield-section__cdi">
-          <span>
-            CDI considerado
-            <InfoTip label="O que é o CDI?" align="right">
-              Taxa de referência da renda fixa, sempre perto da Selic (referência: {formatPercentage(REFERENCE_SELIC_PCT)} ao
-              ano). Se mudou, ajuste aqui e todos os valores abaixo são recalculados.
-            </InfoTip>
-          </span>
+          <span>CDI considerado</span>
           <span className="yield-section__cdi-input">
             <input type="number" min="0" step="0.01" value={cdi} onChange={(e) => setCdi(e.target.value)} />% ao ano
           </span>
@@ -188,13 +154,14 @@ export default function BankYieldCards({ accounts, connectors }) {
                 )}
               </header>
               <ul className="yield-card__products">
-                {bank.products.map((product) => (
+                {bank.products.map((product, index) => (
                   <ProductRow
                     key={product.id}
                     product={product}
                     cdiPct={cdiPct}
                     amount={hasSaved && saved > 0 ? saved : EXAMPLE_AMOUNT}
                     usingOwnBalance={hasSaved && saved > 0}
+                    showBasis={index === 0}
                   />
                 ))}
               </ul>
@@ -223,10 +190,6 @@ export default function BankYieldCards({ accounts, connectors }) {
                   <div className="yield-card__chips">
                     <span className="yield-card__chip">
                       0,5% ao mês
-                      <InfoTip label="Como a poupança rende?" align="left">
-                        Com a Selic acima de 8,5% ao ano, a poupança rende 0,5% ao mês (cerca de 6,2% ao ano), bem abaixo
-                        do CDI. Não tem imposto de renda.
-                      </InfoTip>
                     </span>
                     <span className="yield-card__chip">Sem imposto</span>
                   </div>

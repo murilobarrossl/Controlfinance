@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { getDashboardSummary } from "../../../api/dashboard.js";
 import { getTransactionAggregates } from "../../../api/transactions.js";
 import { getCategories } from "../../../api/categories.js";
+import { getCreditCardsSummary, setPrimaryCard } from "../../../api/creditCards.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
@@ -16,6 +17,9 @@ import AreaTrendChart from "../../../components/charts/AreaTrendChart.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
 import AccountSwitcher from "../../../components/dashboard/AccountSwitcher/AccountSwitcher.jsx";
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
+import CardPicker from "../../../components/dashboard/CardPicker/CardPicker.jsx";
+import { cardBrand, cardPickerOption, connectorsByName } from "../../../utils/cardBrand.js";
+import { groupCards } from "../../../utils/cardGroups.js";
 import { groupAccounts } from "../../../utils/accountGrouping.js";
 import { isCreditCardAccount } from "../../../utils/accountKind.js";
 import { resolveCategoryColor, OTHERS_COLOR } from "../../../utils/categoryColors.js";
@@ -57,7 +61,7 @@ function DashboardHomeSkeleton({ firstName }) {
   return (
     <div className="dashboard-home" aria-busy="true">
       <div className="dashboard-home__header">
-        <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"}>
+        <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"} level={1}>
           Visão geral
         </SectionHeading>
         <div className="dashboard-home__account-controls">
@@ -111,6 +115,26 @@ export default function DashboardHome() {
     removeManualAccount,
   } = useAccount();
   const [categories, setCategories] = useState([]);
+  const [allCards, setAllCards] = useState([]);
+  const [cardSwitchError, setCardSwitchError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getCreditCardsSummary({ signal: controller.signal })
+      .then(setAllCards)
+      .catch(() => setAllCards([]));
+    return () => controller.abort();
+  }, [dataRefreshKey]);
+
+  async function handlePrimaryChange(cardId) {
+    setCardSwitchError("");
+    try {
+      await setPrimaryCard(cardId);
+      bumpDataRefresh();
+    } catch (err) {
+      setCardSwitchError(err.message || "Não foi possível trocar o cartão.");
+    }
+  }
   const [result, setResult] = useState(null);
   const requestKey = `${selectedAccountId ?? ""}|${dataRefreshKey}`;
   const loading = accountsStatus !== "ready" || result?.key !== requestKey;
@@ -245,13 +269,18 @@ export default function DashboardHome() {
   // O seletor também sabe (pelo tipo que a Polp manda) quando a conta ativa é um cartão, mesmo que
   // não seja o cartão mostrado em "Seu cartão". Nesse caso o "saldo" que o banco manda é do cartão,
   // não dinheiro disponível em conta, e o card de saldo precisa dizer isso.
+  const connectorsMap = connectorsByName(connectors);
+  const cardOptions = groupCards(allCards)
+    .groups.flatMap((group) => group.cards)
+    .map((card) => cardPickerOption(card, cardBrand(card, connectorsMap)));
+
   const isActiveAccountCard =
     isActiveAccountLinkedCard || isCreditCardAccount(accounts.find((a) => a.id === activeAccount.id));
 
   return (
     <div className="dashboard-home">
       <div className="dashboard-home__header">
-        <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"}>
+        <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"} level={1}>
           Visão geral
         </SectionHeading>
 
@@ -361,9 +390,20 @@ export default function DashboardHome() {
           <Card
             title="Seu cartão"
             action={
-              <Link to="/dashboard/cartoes" className="dashboard-home__card-switch">
-                Trocar
-              </Link>
+              allCards.length > 1 ? (
+                <CardPicker
+                  id="dashboard-trocar-cartao"
+                  options={cardOptions}
+                  value={activeCard.id}
+                  onChange={(id) => id !== activeCard.id && handlePrimaryChange(id)}
+                  triggerLabel="Trocar"
+                  ariaLabel="Trocar o cartão mostrado aqui"
+                />
+              ) : (
+                <Link to="/dashboard/cartoes" className="dashboard-home__card-switch">
+                  Trocar
+                </Link>
+              )
             }
           >
             <CreditCardVisual
@@ -371,6 +411,11 @@ export default function DashboardHome() {
               cardholderName={user?.name}
               onClick={() => setCardConfirmOpen(true)}
             />
+            {cardSwitchError && (
+              <p className="dashboard-home__error" role="alert">
+                {cardSwitchError}
+              </p>
+            )}
           </Card>
         )}
       </div>

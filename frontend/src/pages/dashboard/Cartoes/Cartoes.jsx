@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getCreditCardsSummary, createCreditCard, updateCreditCard, setPrimaryCard } from "../../../api/creditCards.js";
 import { getInstallments, createInstallment, deleteInstallment } from "../../../api/installments.js";
 import { getTransactions } from "../../../api/transactions.js";
@@ -13,13 +13,19 @@ import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
 import BankLogo from "../../../components/ui/BankLogo/BankLogo.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
-import { CardIcon, WalletIcon, BellIcon, HistoryIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
+import { CardIcon, WalletIcon, BellIcon, HistoryIcon, StarIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import { formatCurrency, formatDate } from "../../../utils/financeMath.js";
 import { summarizeCards, groupCards } from "../../../utils/cardGroups.js";
 import { buildUpcoming } from "../../../utils/upcomingDues.js";
+import { isPastDue, formatDueDay, formatDataAge } from "../../../utils/invoiceDue.js";
+import { cardLimits } from "../../../utils/cardLimits.js";
+import { getCardBase, cardTextColor } from "../../../utils/cardColors.js";
 import CardStatement from "./CardStatement.jsx";
+import CardPicker from "../../../components/dashboard/CardPicker/CardPicker.jsx";
+import { cardBrand, cardPickerOption, connectorsByName as buildConnectorsMap } from "../../../utils/cardBrand.js";
 import "./Cartoes.css";
 import usePageTitle from "../../../hooks/usePageTitle.js";
 
@@ -53,18 +59,7 @@ function todayIso() {
 const EMPTY_LIST = [];
 const TRANSACTIONS_CAP = 2000;
 
-function normalizeName(value) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
 
-function normalizeColor(raw) {
-  if (!raw) return undefined;
-  return raw.startsWith("#") ? raw : `#${raw}`;
-}
 
 // Esta página não depende da conta selecionada no seletor lateral (useAccount()): cartões
 // reconhecidos (card.isSynced) já vêm prontos de getCreditCardsSummary(), independente de qual
@@ -79,14 +74,18 @@ export default function Cartoes() {
   const [reloadKey, setReloadKey] = useState(0);
   const [loadedKey, setLoadedKey] = useState(null);
   const loading = loadedKey !== reloadKey;
-  const [error, setError] = useState("");
+  const [error, setError] = useState(null);
   const [detailForm, setDetailForm] = useState(EMPTY_DETAIL_FORM);
   const [manualForm, setManualForm] = useState(EMPTY_MANUAL_FORM);
   const [saving, setSaving] = useState(false);
   const [showInstallmentForm, setShowInstallmentForm] = useState(false);
+  const [showManualForm, setShowManualForm] = useState(false);
   const [installmentForm, setInstallmentForm] = useState(EMPTY_INSTALLMENT_FORM);
   // Os quatro números do topo podem somar todos os cartões ("all") ou mostrar só um deles (id).
   const [summaryScope, setSummaryScope] = useState("all");
+  const [pendingInstallment, setPendingInstallment] = useState(null);
+  const focusAfterDelete = useRef(null);
+  const installmentsRef = useRef(null);
 
   const cards = data?.cards ?? EMPTY_LIST;
   const installments = data?.installments ?? EMPTY_LIST;
@@ -140,13 +139,14 @@ export default function Cartoes() {
       dueDay: Math.min(31, Math.max(1, Number(detailForm.dueDay) || 1)),
     };
 
+    setError(null);
     setSaving(true);
     try {
       await updateCreditCard(detailForm.id, { ...payload, brand: detailForm.brand || null });
       setDetailForm(EMPTY_DETAIL_FORM);
       reload();
     } catch (err) {
-      setError(err.message || "Não foi possível salvar os dados desse cartão.");
+      setError({ where: "detail", message: err.message || "Não foi possível salvar os dados desse cartão." });
     } finally {
       setSaving(false);
     }
@@ -156,6 +156,7 @@ export default function Cartoes() {
     e.preventDefault();
     if (!manualForm.name || !manualForm.creditLimit) return;
 
+    setError(null);
     setSaving(true);
     try {
       await createCreditCard({
@@ -166,9 +167,10 @@ export default function Cartoes() {
         dueDay: Math.min(31, Math.max(1, Number(manualForm.dueDay) || 1)),
       });
       setManualForm(EMPTY_MANUAL_FORM);
+      setShowManualForm(false);
       reload();
     } catch (err) {
-      setError(err.message || "Não foi possível cadastrar esse cartão.");
+      setError({ where: "manual", message: err.message || "Não foi possível cadastrar esse cartão." });
     } finally {
       setSaving(false);
     }
@@ -182,6 +184,7 @@ export default function Cartoes() {
 
     const [cardType, cardId] = cardKey ? cardKey.split(":") : [null, null];
 
+    setError(null);
     setSaving(true);
     try {
       await createInstallment({
@@ -198,7 +201,7 @@ export default function Cartoes() {
       setShowInstallmentForm(false);
       reload();
     } catch (err) {
-      setError(err.message || "Não foi possível criar esse parcelamento.");
+      setError({ where: "installment", message: err.message || "Não foi possível criar esse parcelamento." });
     } finally {
       setSaving(false);
     }
@@ -217,23 +220,37 @@ export default function Cartoes() {
       );
 
     markPrimary(id);
-    setError("");
+    setError(null);
     try {
       await setPrimaryCard(id);
     } catch (err) {
       markPrimary(previousPrimaryId);
-      setError(err.message || "Não foi possível definir o cartão principal.");
+      setError({ where: "page", message: err.message || "Não foi possível definir o cartão principal." });
     }
   }
 
   async function handleDeleteInstallment(id) {
+    setError(null);
+    focusAfterDelete.current = installments.findIndex((i) => i.id === id);
     try {
       await deleteInstallment(id);
       reload();
     } catch (err) {
-      setError(err.message || "Não foi possível remover esse parcelamento.");
+      focusAfterDelete.current = null;
+      setError({ where: "installments", message: err.message || "Não foi possível remover esse parcelamento." });
     }
   }
+
+  useEffect(() => {
+    if (loading || focusAfterDelete.current == null) return;
+    const container = installmentsRef.current;
+    const index = focusAfterDelete.current;
+    focusAfterDelete.current = null;
+    const buttons = container?.querySelectorAll(".cartoes__remove");
+    const target = buttons?.length ? buttons[Math.min(index, buttons.length - 1)] : container?.querySelector("h3");
+    if (target && !target.matches("button")) target.setAttribute("tabindex", "-1");
+    target?.focus();
+  }, [loading, installments]);
 
   const upcoming = useMemo(
     () => buildUpcoming(cards, installments, pendingTransactions),
@@ -245,24 +262,101 @@ export default function Cartoes() {
   const summary = useMemo(() => summarizeCards(scopeCard ? [scopeCard] : cards), [scopeCard, cards]);
   const { groups } = useMemo(() => groupCards(cards), [cards]);
 
-  // O cartão traz só o nome do banco (e a cor); a logo vem do conector da Polp com o mesmo nome.
-  // Sem correspondência, BankLogo cai nas iniciais do banco na cor dele.
-  const connectorsByName = useMemo(
-    () => new Map(connectors.map((c) => [normalizeName(c.name), c])),
-    [connectors],
-  );
-  function brandOf(source) {
-    const name = source.bankName || "Banco conectado";
-    const connector = connectorsByName.get(normalizeName(name));
-    return {
-      name,
-      logoUrl: connector?.logoUrl,
-      color: normalizeColor(connector?.color ?? source.color ?? source.institutionColor),
-    };
-  }
+  const connectorsMap = useMemo(() => buildConnectorsMap(connectors), [connectors]);
+  const brandOf = (source) => cardBrand(source, connectorsMap);
 
   const scopeLabel = scopeCard ? `${brandOf(scopeCard).name} · ${scopeCard.name}` : `Todos os cartões (${cards.length})`;
-  const scopeLines = [{ label: scopeLabel, value: "" }];
+  const noCards = !loading && cards.length === 0;
+  const orderedCards = groups.flatMap((group) => group.cards);
+  const pickerOptions = [
+    { value: "all", title: "Todos os cartões", subtitle: `Soma de ${cards.length} cartões` },
+    ...orderedCards.map((card) => cardPickerOption(card, brandOf(card))),
+  ];
+  const oldestSync = (scopeCard ? [scopeCard] : cards)
+    .filter((c) => c.isSynced && c.connectionLastSyncedAt)
+    .map((c) => c.connectionLastSyncedAt)
+    .sort((a, b) => new Date(a) - new Date(b))[0];
+  const dataAge = formatDataAge(oldestSync);
+  const scopeLines = noCards
+    ? [{ label: "Nenhum cartão para somar", value: "" }]
+    : [{ label: [scopeLabel, dataAge].filter(Boolean).join(" · "), value: "" }];
+  const summaryValue = (value) => (loading ? valueSkeleton : noCards ? "—" : formatCurrency(value));
+
+  const valueSkeleton = <Skeleton width="7rem" height="1.5rem" />;
+
+  function renderCardTile(card) {
+    const selected = scopeCard?.id === card.id;
+    const brand = brandOf(card);
+    const { available, usagePercent, overLimit } = cardLimits(card);
+    const pastDue = isPastDue(card.invoiceDueDate);
+    const base = getCardBase({ name: card.name, productType: card.productType, institutionColor: card.institutionColor });
+    const group = groups.find((g) => g.cards.includes(card));
+    return [
+      <li key={card.id} className={`cartoes__tile${selected ? " cartoes__tile--selected" : ""}`}>
+        <button
+          type="button"
+          className="cartoes__tile-button"
+          aria-expanded={selected}
+          aria-controls={`cartao-${card.id}`}
+          onClick={() => setSummaryScope(selected ? "all" : card.id)}
+        >
+          <span className="cartoes__tile-face" style={{ "--card-base": base, "--card-text": cardTextColor(base) }}>
+            <span className="cartoes__tile-top">
+              {brand.isManual ? (
+                <span className="cartoes__tile-manual" aria-hidden="true">
+                  <CardIcon />
+                </span>
+              ) : (
+                <BankLogo name={brand.name} logoUrl={brand.logoUrl} color={brand.color} size={24} />
+              )}
+              <span className="cartoes__tile-bank">{brand.name}</span>
+              {card.isPrimary && (
+                <span className="cartoes__tile-primary">
+                  <StarIcon filled />
+                  <span className="visually-hidden">Cartão principal</span>
+                </span>
+              )}
+            </span>
+            <span className="cartoes__tile-name">{card.name}</span>
+          </span>
+          <span className="cartoes__tile-stats">
+            <span className="cartoes__tile-stat">
+              <span>Fatura atual</span>
+              <strong>{card.currentInvoice != null ? formatCurrency(card.currentInvoice) : "—"}</strong>
+            </span>
+            <span className="cartoes__tile-stat">
+              <span>Próximo vencimento</span>
+              <strong>
+                {!card.invoiceDueDate ? "—" : pastDue ? formatDueDay(card.invoiceDueDate) : formatDate(card.invoiceDueDate)}
+              </strong>
+            </span>
+            <span className="cartoes__tile-stat cartoes__tile-stat--wide">
+              <span>Limite disponível</span>
+              <strong>{available != null ? formatCurrency(available) : "—"}</strong>
+              {usagePercent != null && (
+                <span className="cartoes__tile-bar" aria-hidden="true">
+                  <span
+                    className={overLimit ? "cartoes__tile-bar-fill cartoes__tile-bar-fill--over" : "cartoes__tile-bar-fill"}
+                    style={{ width: `${Math.min(100, usagePercent)}%` }}
+                  />
+                </span>
+              )}
+            </span>
+          </span>
+        </button>
+      </li>,
+      selected && (
+        <li key={`${card.id}-detalhe`} id={`cartao-${card.id}`} className="cartoes__tile-detail">
+          {card.isSynced && (
+            <p className="cartoes__tile-updated">
+              Atualizado em {group?.lastSyncedAt ? formatDateTime(group.lastSyncedAt) : "Ainda não"}
+            </p>
+          )}
+          {renderCardBlock(card)}
+        </li>
+      ),
+    ];
+  }
 
   function renderCardBlock(card) {
     return (
@@ -271,6 +365,8 @@ export default function Cartoes() {
           card={card}
           cardholderName={user?.name}
           onSetPrimary={() => handleSetPrimary(card.id)}
+          showKeyStats={false}
+          showFace={false}
         />
 
         {!card.isSynced && detailForm.id !== card.id && (
@@ -327,6 +423,11 @@ export default function Cartoes() {
               />
             </label>
 
+            {error?.where === "detail" && (
+              <p className="cartoes__error cartoes__form-error" role="alert">
+                {error.message}
+              </p>
+            )}
             <div className="cartoes__form-actions">
               <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
                 {saving ? "Salvando..." : "Salvar"}
@@ -347,16 +448,27 @@ export default function Cartoes() {
     );
   }
 
-  if (!loading && loadError) return <p className="cartoes__error">{loadError}</p>;
+  if (!loading && loadError) {
+    return (
+      <div className="cartoes">
+        <SectionHeading title="Cartões" level={1}>Fatura, limite e parcelamentos</SectionHeading>
+        <div className="cartoes__load-error">
+          <p className="cartoes__error" role="alert">{loadError}</p>
+          <Button as="button" type="button" variant="outline" size="sm" onClick={reload}>
+            Tentar de novo
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
-  const valueSkeleton = <Skeleton width="7rem" height="1.5rem" />;
   const listSkeleton = <Skeleton width="100%" height="6rem" />;
 
   return (
     <div className="cartoes">
-      <SectionHeading title="Cartões">Fatura, limite e parcelamentos</SectionHeading>
+      <SectionHeading title="Cartões" level={1}>Fatura, limite e parcelamentos</SectionHeading>
 
-      {error && <p className="cartoes__error">{error}</p>}
+      {error?.where === "page" && <p className="cartoes__error" role="alert">{error.message}</p>}
 
       <p className="cartoes__intro">
         Aqui ficam só os cartões de crédito: o que você gastou no crédito e ainda vai pagar na fatura. O saldo
@@ -364,51 +476,23 @@ export default function Cartoes() {
         cartões.
       </p>
 
-      {!loading && cards.length > 0 && (
+      {!loading && cards.length === 1 && (
+        <p className="cartoes__scope-title">
+          Os números abaixo mostram: <strong>{scopeLabel}</strong>
+        </p>
+      )}
+      {!loading && cards.length > 1 && (
         <div className="cartoes__scope">
-          <p className="cartoes__scope-title">
-            Os números abaixo mostram: <strong>{scopeLabel}</strong>
-          </p>
-          {cards.length > 1 && (
-            <div className="cartoes__scope-options" role="radiogroup" aria-label="Escolha de qual cartão mostrar os números">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={!scopeCard}
-                className={`cartoes__statement-card ${!scopeCard ? "cartoes__statement-card--active" : ""}`}
-                onClick={() => setSummaryScope("all")}
-              >
-                <span className="cartoes__scope-all-icon" aria-hidden="true">
-                  <CardIcon />
-                </span>
-                <span className="cartoes__statement-card-text">
-                  <span className="cartoes__statement-card-bank">Todos os cartões</span>
-                  <span className="cartoes__statement-card-name">Soma de {cards.length} cartões</span>
-                </span>
-              </button>
-              {cards.map((card) => {
-                const brand = brandOf(card);
-                const active = scopeCard?.id === card.id;
-                return (
-                  <button
-                    key={card.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    className={`cartoes__statement-card ${active ? "cartoes__statement-card--active" : ""}`}
-                    style={{ "--group-color": brand.color ?? "var(--color-border-strong)" }}
-                    onClick={() => setSummaryScope(card.id)}
-                  >
-                    <BankLogo name={brand.name} logoUrl={brand.logoUrl} color={brand.color} size={28} />
-                    <span className="cartoes__statement-card-text">
-                      <span className="cartoes__statement-card-bank">{brand.name}</span>
-                      <span className="cartoes__statement-card-name">{card.name}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <span className="cartoes__scope-title" id="cartoes-escopo-rotulo">
+            Os números abaixo mostram
+          </span>
+          <CardPicker
+            id="cartoes-escopo"
+            labelId="cartoes-escopo-rotulo"
+            options={pickerOptions}
+            value={scopeCard?.id ?? "all"}
+            onChange={setSummaryScope}
+          />
         </div>
       )}
 
@@ -416,90 +500,49 @@ export default function Cartoes() {
         <StatCard
           icon={<CardIcon />}
           label="Limite usado"
-          value={loading ? valueSkeleton : formatCurrency(summary.usedLimit)}
+          value={summaryValue(summary.usedLimit)}
           secondaryLines={loading ? [] : scopeLines}
         />
         <StatCard
           icon={<WalletIcon />}
           label="Limite disponível"
-          value={loading ? valueSkeleton : formatCurrency(summary.availableLimit)}
+          value={summaryValue(summary.availableLimit)}
           secondaryLines={loading ? [] : scopeLines}
         />
         <StatCard
           icon={<BellIcon />}
           label="Faturas abertas"
-          value={loading ? valueSkeleton : formatCurrency(summary.openInvoices)}
+          value={summaryValue(summary.openInvoices)}
           secondaryLines={loading ? [] : scopeLines}
         />
         <StatCard
           icon={<HistoryIcon />}
           label="Próximo vencimento"
-          value={loading ? valueSkeleton : summary.nextDue ? formatDate(summary.nextDue.date) : "—"}
-          secondaryLines={!loading && summary.nextDue ? [{ label: summary.nextDue.label, value: "" }] : []}
+          value={
+            loading
+              ? valueSkeleton
+              : !summary.nextDue
+                ? "—"
+                : summary.nextDue.pastDue
+                  ? formatDueDay(summary.nextDue.date)
+                  : formatDate(summary.nextDue.date)
+          }
+          secondaryLines={
+            noCards
+              ? scopeLines
+              : !loading && summary.nextDue
+                ? [
+                    {
+                      label: summary.nextDue.pastDue
+                        ? [formatDataAge(summary.nextDue.syncedAt), summary.nextDue.label].filter(Boolean).join(" · ")
+                        : [summary.nextDue.label, formatDataAge(summary.nextDue.syncedAt)].filter(Boolean).join(" · "),
+                      value: "",
+                    },
+                  ]
+                : []
+          }
         />
       </div>
-
-      <Card title="Seus cartões">
-        {loading ? (
-          listSkeleton
-        ) : cards.length === 0 ? (
-          <p className="cartoes__hint">
-            Nenhum cartão reconhecido ainda. Se você tem um cartão sincronizado por um banco conectado,
-            ele deve aparecer aqui sozinho na próxima sincronização — ou cadastre um manualmente abaixo.
-          </p>
-        ) : (
-          <div className="cartoes__groups">
-            {groups.map((group) => {
-              const brand = brandOf(group);
-              return (
-              <section
-                key={group.key}
-                className="cartoes__group"
-                style={{ "--group-color": group.color ?? "var(--color-border-strong)" }}
-              >
-                <header className="cartoes__group-header">
-                  <div className="cartoes__group-brand">
-                    {group.isOthers ? (
-                      <span className="cartoes__group-icon" aria-hidden="true">
-                        <CardIcon />
-                      </span>
-                    ) : (
-                      <BankLogo name={brand.name} logoUrl={brand.logoUrl} color={brand.color} size={52} />
-                    )}
-                    <div className="cartoes__group-heading">
-                      <h3 className="cartoes__group-name">{group.bankName}</h3>
-                      <span className="cartoes__group-count">
-                        {group.cards.length} {group.cards.length === 1 ? "cartão" : "cartões"}
-                        {group.isOthers && " cadastrados manualmente"}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="cartoes__group-meta">
-                    <div className="cartoes__group-stat">
-                      <span>Fatura aberta</span>
-                      <strong>{formatCurrency(group.openInvoice)}</strong>
-                    </div>
-                    <div className="cartoes__group-stat">
-                      <span>Limite usado</span>
-                      <strong>{formatCurrency(group.usedLimit)}</strong>
-                    </div>
-                    {!group.isOthers && (
-                      <div className="cartoes__group-stat">
-                        <span>Atualizado em</span>
-                        <strong>{group.lastSyncedAt ? formatDateTime(group.lastSyncedAt) : "Ainda não"}</strong>
-                      </div>
-                    )}
-                  </div>
-                </header>
-                <div className="cartoes__grid">{group.cards.map(renderCardBlock)}</div>
-              </section>
-              );
-            })}
-          </div>
-        )}
-      </Card>
-
-      {!loading && <CardStatement cards={cards} getBrand={brandOf} />}
 
       <Card title="Próximos vencimentos">
         {!loading && pendingTransactions.length >= TRANSACTIONS_CAP && (
@@ -519,10 +562,12 @@ export default function Cartoes() {
                 <div className="cartoes__list-info">
                   <span className="cartoes__list-name">{item.name}</span>
                   <span className="cartoes__list-meta">
-                    {item.meta} · {formatDate(item.date)}
+                    {item.meta} · {item.pastDueText ?? formatDate(item.date)}
                   </span>
                 </div>
-                <StatusPill status={item.status}>{STATUS_LABELS[item.status] || item.status}</StatusPill>
+                {!item.pastDueText && (
+                  <StatusPill status={item.status}>{STATUS_LABELS[item.status] || item.status}</StatusPill>
+                )}
                 <span className="cartoes__list-amount">{item.amount != null ? formatCurrency(item.amount) : "—"}</span>
               </li>
             ))}
@@ -530,73 +575,128 @@ export default function Cartoes() {
         )}
       </Card>
 
-      <Card title="Cadastrar cartão não sincronizado">
-        <p className="cartoes__hint">Pra um cartão que não veio de nenhum banco conectado.</p>
-        <form className="cartoes__form" onSubmit={handleCreateManualCard}>
-          <label className="cartoes__field">
-            <span className="cartoes__field-label">Nome</span>
-            <input
-              type="text"
-              placeholder="Ex: Nubank Roxinho"
-              maxLength={80}
-              value={manualForm.name}
-              onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })}
-              required
-            />
-          </label>
-          <label className="cartoes__field">
-            <span className="cartoes__field-label">Bandeira (opcional)</span>
-            <input
-              type="text"
-              placeholder="Ex: Mastercard"
-              maxLength={50}
-              value={manualForm.brand}
-              onChange={(e) => setManualForm({ ...manualForm, brand: e.target.value })}
-            />
-          </label>
-          <label className="cartoes__field">
-            <span className="cartoes__field-label">Limite de crédito</span>
-            <CurrencyInput
-              placeholder="Ex: 5000"
-              value={manualForm.creditLimit}
-              onChange={(e) => setManualForm({ ...manualForm, creditLimit: e.target.value })}
-              required
-            />
-          </label>
-          <label className="cartoes__field">
-            <span className="cartoes__field-label">Dia de fechamento</span>
-            <input
-              type="number"
-              min="1"
-              max="31"
-              step="1"
-              value={manualForm.closingDay}
-              onChange={(e) => setManualForm({ ...manualForm, closingDay: e.target.value })}
-              required
-            />
-          </label>
-          <label className="cartoes__field">
-            <span className="cartoes__field-label">Dia de vencimento</span>
-            <input
-              type="number"
-              min="1"
-              max="31"
-              step="1"
-              value={manualForm.dueDay}
-              onChange={(e) => setManualForm({ ...manualForm, dueDay: e.target.value })}
-              required
-            />
-          </label>
-
-          <div className="cartoes__form-actions">
-            <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
-              {saving ? "Adicionando..." : "Adicionar cartão"}
-            </Button>
-          </div>
-        </form>
+      <Card title="Seus cartões">
+        {loading ? (
+          listSkeleton
+        ) : cards.length === 0 ? (
+          <p className="cartoes__hint">
+            Nenhum cartão reconhecido ainda. Se você tem um cartão sincronizado por um banco conectado,
+            ele deve aparecer aqui sozinho na próxima sincronização — ou cadastre um manualmente abaixo.
+          </p>
+        ) : (
+          <ul className="cartoes__tiles">
+            {orderedCards.map((card) => renderCardTile(card))}
+          </ul>
+        )}
       </Card>
 
+      {!loading && cards.length > 0 &&
+        (scopeCard ? (
+          <CardStatement key={scopeCard.id} card={scopeCard} getBrand={brandOf} />
+        ) : (
+          <Card title="Extrato do cartão">
+            <p className="cartoes__hint">Escolha um cartão no menu acima ou na lista para ver o extrato dele.</p>
+          </Card>
+        ))}
+
+      <Card title="Cadastrar cartão não sincronizado">
+        <p className="cartoes__hint">Pra um cartão que não veio de nenhum banco conectado.</p>
+        {showManualForm ? (
+          <form className="cartoes__form cartoes__form--spaced" onSubmit={handleCreateManualCard}>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Nome</span>
+              <input
+                type="text"
+                placeholder="Ex: Nubank Roxinho"
+                maxLength={80}
+                value={manualForm.name}
+                onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })}
+                required
+              />
+            </label>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Bandeira (opcional)</span>
+              <input
+                type="text"
+                placeholder="Ex: Mastercard"
+                maxLength={50}
+                value={manualForm.brand}
+                onChange={(e) => setManualForm({ ...manualForm, brand: e.target.value })}
+              />
+            </label>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Limite de crédito</span>
+              <CurrencyInput
+                placeholder="Ex: 5000"
+                value={manualForm.creditLimit}
+                onChange={(e) => setManualForm({ ...manualForm, creditLimit: e.target.value })}
+                required
+              />
+            </label>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Dia de fechamento</span>
+              <input
+                type="number"
+                min="1"
+                max="31"
+                step="1"
+                value={manualForm.closingDay}
+                onChange={(e) => setManualForm({ ...manualForm, closingDay: e.target.value })}
+                required
+              />
+            </label>
+            <label className="cartoes__field">
+              <span className="cartoes__field-label">Dia de vencimento</span>
+              <input
+                type="number"
+                min="1"
+                max="31"
+                step="1"
+                value={manualForm.dueDay}
+                onChange={(e) => setManualForm({ ...manualForm, dueDay: e.target.value })}
+                required
+              />
+            </label>
+
+            {error?.where === "manual" && (
+              <p className="cartoes__error cartoes__form-error" role="alert">
+                {error.message}
+              </p>
+            )}
+            <div className="cartoes__form-actions">
+              <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
+                {saving ? "Adicionando..." : "Adicionar cartão"}
+              </Button>
+              <Button
+                as="button"
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowManualForm(false);
+                  setManualForm(EMPTY_MANUAL_FORM);
+                }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <div className="cartoes__form-hint">
+            <Button as="button" type="button" variant="outline" size="sm" onClick={() => setShowManualForm(true)}>
+              Cadastrar cartão
+            </Button>
+          </div>
+        )}
+      </Card>
+
+      <div ref={installmentsRef} className="cartoes__installments">
       <Card title="Parcelamentos">
+        {error?.where === "installments" && (
+          <p className="cartoes__error cartoes__form-error" role="alert">
+            {error.message}
+          </p>
+        )}
         {loading ? (
           listSkeleton
         ) : installments.length === 0 ? (
@@ -617,7 +717,7 @@ export default function Cartoes() {
                 <button
                   type="button"
                   className="cartoes__remove"
-                  onClick={() => handleDeleteInstallment(i.id)}
+                  onClick={() => setPendingInstallment(i)}
                   aria-label="Remover parcelamento"
                   title="Remover parcelamento"
                 >
@@ -704,6 +804,11 @@ export default function Cartoes() {
                 ))}
               </select>
             </label>
+            {error?.where === "installment" && (
+              <p className="cartoes__error cartoes__form-error" role="alert">
+                {error.message}
+              </p>
+            )}
             <div className="cartoes__form-actions">
               <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
                 {saving ? "Adicionando..." : "Adicionar"}
@@ -721,6 +826,21 @@ export default function Cartoes() {
           </div>
         )}
       </Card>
+      </div>
+
+      <ConfirmDialog
+        open={pendingInstallment !== null}
+        title={`Remover ${pendingInstallment?.description ?? "parcelamento"}?`}
+        message="O parcelamento sai desta lista e dos próximos vencimentos. Se ele estiver ligado a um cartão cadastrado manualmente, o limite usado desse cartão diminui. Não é possível desfazer."
+        confirmLabel="Remover"
+        cancelLabel="Cancelar"
+        onConfirm={() => {
+          const id = pendingInstallment.id;
+          setPendingInstallment(null);
+          handleDeleteInstallment(id);
+        }}
+        onClose={() => setPendingInstallment(null)}
+      />
 
       <Card title="Sobre os dados desta página">
         <p className="cartoes__hint">

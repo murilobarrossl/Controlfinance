@@ -30,6 +30,7 @@ export const INVESTMENT_MODALITIES = {
     key: "porquinho",
     label: "Porquinho / Cofrinho",
     color: "#B04A5E",
+    textColor: "#C57988",
     description:
       "Recurso de bancos digitais pra separar uma parte do saldo, com nomes diferentes: Cofrinho (Mercado Pago, PicPay, PagBank), Porquinho (Inter) ou Cofre. Funciona como uma caixinha e também rende um percentual do CDI; as regras são definidas por cada banco.",
   },
@@ -44,6 +45,7 @@ export const INVESTMENT_MODALITIES = {
     key: "investimento",
     label: "Investimento",
     color: "#8573A8",
+    textColor: "#9A8BB7",
     description:
       "Aplicações como CDB, LCI/LCA, Tesouro Direto ou fundos. Prazo de resgate, rendimento, riscos e garantias dependem de cada produto.",
   },

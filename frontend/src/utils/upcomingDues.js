@@ -1,3 +1,5 @@
+import { isPastDue, formatPastDue } from "./invoiceDue.js";
+
 const MAX_UPCOMING = 8;
 
 // "Próximos vencimentos" (antes no Dashboard inteligente) junta as três coisas que vencem e que
@@ -11,10 +13,11 @@ export function buildUpcoming(cards, installments, pendingTransactions) {
       key: `invoice-${c.id}`,
       kind: "Fatura",
       name: `Fatura ${c.name}`,
-      meta: c.brand || "Cartão de crédito",
+      meta: [c.bankName, c.brand].filter(Boolean).join(" · ") || "Cartão de crédito",
       date: c.invoiceDueDate,
       amount: c.currentInvoice,
       status: "Pending",
+      pastDueText: isPastDue(c.invoiceDueDate) ? formatPastDue(c.invoiceDueDate, c.connectionLastSyncedAt) : null,
     }));
   const nextInstallments = installments.map((i) => ({
     key: `installment-${i.id}`,

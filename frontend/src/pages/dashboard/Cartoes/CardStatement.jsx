@@ -27,18 +27,12 @@ function groupByDay(items) {
   return days;
 }
 
-// Extrato de um cartão reconhecido: o cartão sincronizado é uma conta (BankAccount), então o extrato
-// é o mesmo relatório de transações filtrado por ela. Cartões cadastrados à mão não têm lançamentos
-// (só limite e fatura digitados), por isso não entram aqui.
-export default function CardStatement({ cards, getBrand }) {
-  const syncedCards = useMemo(() => cards.filter((c) => c.isSynced), [cards]);
-  const [selectedId, setSelectedId] = useState(null);
+export default function CardStatement({ card, getBrand }) {
   const [monthOffset, setMonthOffset] = useState(0);
   const [page, setPage] = useState(1);
   const [result, setResult] = useState(null);
 
-  // Se o cartão escolhido sumiu (ex.: banco desconectado), volta pro primeiro disponível.
-  const activeCard = syncedCards.find((c) => c.id === selectedId) ?? syncedCards[0] ?? null;
+  const activeCard = card?.isSynced ? card : null;
   const month = useMemo(() => getMonthsWindow(1, monthOffset)[0], [monthOffset]);
   const year = month.getUTCFullYear();
   const monthNumber = month.getUTCMonth() + 1;
@@ -71,7 +65,7 @@ export default function CardStatement({ cards, getBrand }) {
   const days = useMemo(() => groupByDay(report?.items ?? []), [report]);
   const totalPages = report ? Math.max(1, Math.ceil(report.totalCount / PAGE_SIZE)) : 1;
 
-  if (syncedCards.length === 0) {
+  if (!activeCard) {
     return (
       <Card title="Extrato do cartão">
         <p className="cartoes__hint">
@@ -82,38 +76,20 @@ export default function CardStatement({ cards, getBrand }) {
     );
   }
 
+  const brand = getBrand(activeCard);
+
   return (
     <Card title="Extrato do cartão">
       <p className="cartoes__hint cartoes__statement-intro">
         Compras e pagamentos do cartão escolhido, mês a mês, como chegaram do banco na última sincronização.
       </p>
 
-      <div className="cartoes__statement-cards" role="tablist" aria-label="Escolha o cartão">
-        {syncedCards.map((card) => {
-          const brand = getBrand(card);
-          const active = card.id === activeCard.id;
-          return (
-            <button
-              key={card.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={`cartoes__statement-card ${active ? "cartoes__statement-card--active" : ""}`}
-              style={{ "--group-color": brand.color ?? "var(--color-border-strong)" }}
-              onClick={() => {
-                setSelectedId(card.id);
-                setPage(1);
-              }}
-            >
-              <BankLogo name={brand.name} logoUrl={brand.logoUrl} color={brand.color} size={28} />
-              <span className="cartoes__statement-card-text">
-                <span className="cartoes__statement-card-bank">{brand.name}</span>
-                <span className="cartoes__statement-card-name">{card.name}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <p className="cartoes__statement-current">
+        <BankLogo name={brand.name} logoUrl={brand.logoUrl} color={brand.color} size={28} />
+        <span>
+          <strong>{brand.name}</strong> · {activeCard.name}
+        </span>
+      </p>
 
       <div className="cartoes__statement-toolbar">
         <RangePicker
@@ -131,7 +107,7 @@ export default function CardStatement({ cards, getBrand }) {
       </div>
 
       {error ? (
-        <p className="cartoes__error">{error}</p>
+        <p className="cartoes__error" role="alert">{error}</p>
       ) : (
         <>
           <div className="cartoes__statement-totals">

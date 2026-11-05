@@ -8,7 +8,6 @@
     "build": "vite build",
     "lint": "eslint .",
     "verify:card-colors": "node scripts/verify-card-colors.mjs",
-    "generate:card-colors": "node scripts/generate-card-colors.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

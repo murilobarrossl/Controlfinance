@@ -5,14 +5,7 @@ import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
 import BankLogo from "../../../components/ui/BankLogo/BankLogo.jsx";
-import {
-  PiggyBankIcon,
-  BoxIcon,
-  CoinsIcon,
-  ChartIcon,
-  ShieldIcon,
-  TargetIcon,
-} from "../../../components/ui/icons/FeatureIcons.jsx";
+import { PiggyBankIcon, BoxIcon, CoinsIcon, ChartIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import { getGoals, saveGoal, deleteGoal, updateGoalProgress } from "../../../utils/investmentStorage.js";
 import { getReserve, addToReserve, removeFromReserve, clearReserve } from "../../../utils/emergencyReserveStorage.js";
@@ -32,26 +25,6 @@ const MODALITY_ICONS = {
   poupanca: CoinsIcon,
   investimento: ChartIcon,
 };
-
-// Modalidades que o próprio usuário registra aqui (guardadas só neste navegador), explicadas na
-// mesma legenda das que vêm do banco, mas sempre marcadas como "registrado por você".
-const MANUAL_MODALITIES = [
-  {
-    key: "reserva",
-    label: "Reserva de emergência",
-    color: "#3FA9A1",
-    Icon: ShieldIcon,
-    description:
-      "Dinheiro guardado pra imprevistos (saúde, conserto, perda de renda). O ideal é cobrir de 3 a 6 meses de despesas e poder resgatar na hora.",
-  },
-  {
-    key: "meta",
-    label: "Meta de economia",
-    color: "#5B86B5",
-    Icon: TargetIcon,
-    description: "Um objetivo com valor e prazo (viagem, entrada de um imóvel). Você acompanha quanto falta pela barra de progresso.",
-  },
-];
 
 // O <input type="date"> grava "AAAA-MM-DD". new Date() lê isso como meia-noite UTC, o que no
 // fuso do Brasil vira o dia anterior: formata direto da string pra o prazo não "voltar" um dia.
@@ -99,7 +72,10 @@ function groupInvestmentsByInstitution(accounts, connectors) {
 function ModalityTag({ modality }) {
   const Icon = MODALITY_ICONS[modality.key] ?? ChartIcon;
   return (
-    <span className="investimentos__modality" style={{ "--modality-color": modality.color }}>
+    <span
+      className="investimentos__modality"
+      style={{ "--modality-color": modality.color, "--modality-text": modality.textColor ?? modality.color }}
+    >
       <Icon />
       {modality.label}
     </span>
@@ -128,16 +104,14 @@ function InstitutionsSection({ institutions, status }) {
         </p>
       ) : (
         <>
-          <p className="investimentos__grand-total">
-            Total reconhecido: <strong>{formatCurrency(grandTotal)}</strong>
-          </p>
+          {institutions.length > 1 && (
+            <p className="investimentos__grand-total">
+              Total reconhecido: <strong>{formatCurrency(grandTotal)}</strong>
+            </p>
+          )}
           <div className="investimentos__institutions">
             {institutions.map((institution) => (
-              <section
-                key={institution.key}
-                className="investimentos__institution"
-                style={{ "--institution-color": institution.color ?? "var(--color-border-strong)" }}
-              >
+              <section key={institution.key} className="investimentos__institution">
                 <header className="investimentos__institution-header">
                   <BankLogo name={institution.name} logoUrl={institution.logoUrl} color={institution.color} />
                   <span className="investimentos__institution-name">{institution.name}</span>
@@ -164,24 +138,20 @@ function InstitutionsSection({ institutions, status }) {
 }
 
 function ModalitiesGuide({ usedKeys }) {
-  const fromBank = Object.values(INVESTMENT_MODALITIES)
-    .filter((m) => usedKeys.has(m.key))
-    .map((m) => ({ ...m, Icon: MODALITY_ICONS[m.key], source: "Vem do banco" }));
-  const manual = MANUAL_MODALITIES.map((m) => ({ ...m, source: "Registrado por você" }));
+  const modalities = Object.values(INVESTMENT_MODALITIES)
+    .map((m) => ({ ...m, Icon: MODALITY_ICONS[m.key] }))
+    .sort((a, b) => Number(usedKeys.has(b.key)) - Number(usedKeys.has(a.key)));
 
   return (
     <Card title="Entenda cada modalidade">
       <ul className="investimentos__guide">
-        {[...fromBank, ...manual].map(({ key, label, color, Icon, description, source }) => (
+        {modalities.map(({ key, label, color, Icon, description }) => (
           <li key={key} className="investimentos__guide-item" style={{ "--modality-color": color }}>
             <span className="investimentos__guide-icon" aria-hidden="true">
               <Icon />
             </span>
             <div>
-              <span className="investimentos__guide-title">
-                {label}
-                <span className="investimentos__guide-source">{source}</span>
-              </span>
+              <span className="investimentos__guide-title">{label}</span>
               <p>{description}</p>
             </div>
           </li>
@@ -413,7 +383,6 @@ export default function Investimentos() {
   usePageTitle("Investimentos");
   const { accounts, connectors, accountsStatus } = useAccount();
   const institutions = useMemo(() => groupInvestmentsByInstitution(accounts, connectors), [accounts, connectors]);
-  // O guia só explica as modalidades que o usuário de fato tem, pra não virar um glossário genérico.
   const usedModalityKeys = useMemo(
     () => new Set(institutions.flatMap((institution) => institution.items.map((item) => item.modality.key))),
     [institutions],
@@ -421,12 +390,11 @@ export default function Investimentos() {
 
   return (
     <div className="investimentos">
-      <SectionHeading kicker="Planeje o futuro" title="Investimentos" align="left" />
+      <SectionHeading title="Investimentos" level={1} />
 
       <InstitutionsSection institutions={institutions} status={accountsStatus} />
       <BankYieldCards accounts={accounts} connectors={connectors} />
       <YieldSimulator />
-      <ModalitiesGuide usedKeys={usedModalityKeys} />
 
       <div className="investimentos__grid">
         <EmergencyReserveSection />
@@ -434,6 +402,7 @@ export default function Investimentos() {
       </div>
 
       <FinancingSimulator />
+      <ModalitiesGuide usedKeys={usedModalityKeys} />
     </div>
   );
 }

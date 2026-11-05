@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getLogoStyle } from "../../../utils/logoStyles.js";
+import { cardTextColor } from "../../../utils/cardColors.js";
 import "./BankLogo.css";
 
 // Logo pequena da instituição, vinda do próprio conector da Polp (logoUrl), o mesmo usado na tela
@@ -19,9 +20,12 @@ export default function BankLogo({ name = "", logoUrl, color, size = 28 }) {
       .map((w) => w[0])
       .join("")
       .toUpperCase();
-    const background = color ? (color.startsWith("#") ? color : `#${color}`) : "var(--color-border-strong)";
+    const hex = color ? (color.startsWith("#") ? color : `#${color}`) : null;
+    const colors = /^#[0-9a-f]{6}$/i.test(hex ?? "")
+      ? { backgroundColor: hex, color: cardTextColor(hex) }
+      : { backgroundColor: "var(--color-border-strong)" };
     return (
-      <span className="bank-logo bank-logo--fallback" style={{ ...style, backgroundColor: background }} aria-hidden="true">
+      <span className="bank-logo bank-logo--fallback" style={{ ...style, ...colors }} aria-hidden="true">
         {initials || "?"}
       </span>
     );

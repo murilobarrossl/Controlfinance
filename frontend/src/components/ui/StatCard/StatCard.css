@@ -89,7 +89,7 @@
 }
 
 .stat-card__trend--negative {
-  color: var(--color-accent);
+  color: var(--color-accent-soft);
   background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
 
@@ -108,7 +108,7 @@
   gap: 0.75rem;
   font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
 }
 
 .stat-card__secondary-line span:last-child {

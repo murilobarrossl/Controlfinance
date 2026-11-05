@@ -3,6 +3,7 @@ import Card from "../../../components/ui/Card/Card.jsx";
 import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
 import AreaTrendChart from "../../../components/charts/AreaTrendChart.jsx";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
+import { readCssVar } from "../../../utils/cssVar.js";
 import { poupancaAnnualPct, simulateGrowth } from "../../../utils/investmentMath.js";
 import {
   REFERENCE_CDI_PCT,
@@ -14,11 +15,13 @@ const PRODUCTS = flattenProducts();
 const CUSTOM = "custom";
 const POUPANCA = "poupanca";
 
-const SERIES = [
-  { key: "invested", label: "O que você colocou", color: "#808080" },
-  { key: "chosen", label: "Aplicação escolhida (líquido)", color: "#4ECDC4" },
-  { key: "poupanca", label: "Poupança", color: "#C9923E" },
-];
+function buildSeries() {
+  return [
+    { key: "invested", label: "O que você colocou", color: readCssVar("--color-text-tertiary", "#8b8b8b") },
+    { key: "chosen", label: "Aplicação escolhida (líquido)", color: "#4ECDC4" },
+    { key: "poupanca", label: "Poupança", color: "#C9923E" },
+  ];
+}
 
 function monthLabel(month) {
   if (month === 0) return "Hoje";
@@ -39,6 +42,7 @@ export default function YieldSimulator() {
     cdi: String(REFERENCE_CDI_PCT),
   });
 
+  const series = useMemo(() => buildSeries(), []);
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
   const initial = Math.max(0, Number(form.initial) || 0);
@@ -156,34 +160,30 @@ export default function YieldSimulator() {
           </div>
 
           <h4 className="investimentos__subtitle">Como seu dinheiro cresce com o tempo</h4>
-          <p className="investimentos__section-hint investimentos__section-hint--tight">
-            Embaixo, o tempo que passa; do lado, quanto dinheiro você teria naquele momento. Passe o mouse sobre o
-            gráfico pra ver os valores de cada época.
-          </p>
           <AreaTrendChart
             data={result.data}
             xKey="month"
-            series={SERIES}
+            series={series}
             height={280}
             formatValue={(value) => formatCurrency(value)}
           />
           <ul className="investimentos__chart-key">
             <li>
-              <span className="investimentos__legend-dot" style={{ background: SERIES[0].color }} />
+              <span className="investimentos__legend-dot" style={{ background: series[0].color }} />
               <span>
                 <strong>Linha cinza:</strong> o que saiu do seu bolso (valor inicial mais o que você guarda todo mês).
                 Sem rendimento nenhum, seu dinheiro seguiria essa linha.
               </span>
             </li>
             <li>
-              <span className="investimentos__legend-dot" style={{ background: SERIES[1].color }} />
+              <span className="investimentos__legend-dot" style={{ background: series[1].color }} />
               <span>
                 <strong>Linha verde:</strong> quanto você teria em <em>{choice.label}</em>, já descontado o imposto de
                 renda.
               </span>
             </li>
             <li>
-              <span className="investimentos__legend-dot" style={{ background: SERIES[2].color }} />
+              <span className="investimentos__legend-dot" style={{ background: series[2].color }} />
               <span>
                 <strong>Linha amarela:</strong> quanto você teria se deixasse tudo na poupança.
               </span>

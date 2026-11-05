@@ -1,3 +1,5 @@
+import { isPastDue } from "./invoiceDue.js";
+
 const OTHERS_KEY = "outros";
 
 const byInvoiceDesc = (a, b) => (b.currentInvoice ?? 0) - (a.currentInvoice ?? 0);
@@ -18,21 +20,23 @@ export function summarizeCards(cards) {
     c.creditLimit != null && c.usedLimit != null ? c.creditLimit - c.usedLimit : null);
   const openInvoices = sum(cards, (c) => c.currentInvoice);
 
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   const dated = cards
     .filter((c) => c.invoiceDueDate)
     .map((c) => ({ card: c, date: String(c.invoiceDueDate).slice(0, 10) }))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  const next = dated.find((d) => d.date >= today) ?? null;
+  const next = dated[0] ?? null;
 
   return {
     usedLimit,
     availableLimit,
     openInvoices,
     nextDue: next
-      ? { date: next.card.invoiceDueDate, label: [next.card.bankName, next.card.name].filter(Boolean).join(" · ") }
+      ? {
+          date: next.card.invoiceDueDate,
+          label: [next.card.bankName, next.card.name].filter(Boolean).join(" · "),
+          pastDue: isPastDue(next.card.invoiceDueDate),
+          syncedAt: next.card.connectionLastSyncedAt,
+        }
       : null,
   };
 }

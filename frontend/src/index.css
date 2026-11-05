@@ -10,7 +10,7 @@
   --color-accent-strong: #cf3d27;
   --color-text-primary: #ffffff;
   --color-text-secondary: #b8b8b8;
-  --color-text-tertiary: #808080;
+  --color-text-tertiary: #8b8b8b;
   --color-income: #4ecdc4;
   --color-on-image: #ffffff;
   --color-on-image-muted: rgba(255, 255, 255, 0.82);
@@ -83,6 +83,18 @@ html {
   transform: none;
   outline: 2px solid #ffffff;
   outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 main:focus {

@@ -158,7 +158,7 @@ export default function ReceitasDespesas() {
 
   return (
     <div className="receitas-despesas">
-      <SectionHeading title="Receitas e despesas">O mapa do seu dinheiro</SectionHeading>
+      <SectionHeading title="Receitas e despesas" level={1}>O mapa do seu dinheiro</SectionHeading>
 
       <RangePicker
         label={formatMonthLong(currentMonth)}
