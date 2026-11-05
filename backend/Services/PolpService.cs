@@ -186,6 +186,9 @@ public class PolpCardTransactionDto
     [JsonPropertyName("bill_id")] public Guid? BillId { get; set; }
     [JsonPropertyName("charge_identificator")] public int? ChargeIdentificator { get; set; }
     [JsonPropertyName("charge_number")] public int? ChargeNumber { get; set; }
+    // AAAA-MM da fatura em que a transação cai; é a única data útil de uma parcela futura.
+    [JsonPropertyName("bill_forecast_date")] public string? BillForecastDate { get; set; }
+    [JsonPropertyName("identification_number")] public string? IdentificationNumber { get; set; }
     [JsonPropertyName("counterparty")] public PolpCounterpartyDto? Counterparty { get; set; }
     [JsonPropertyName("category_ref")] public string? CategoryRef { get; set; }
 }
@@ -201,6 +204,10 @@ public sealed record PolpQueryWindow(string Query)
 {
     private static readonly string[] AllowedKeys = ["fromCreatedAt", "toCreatedAt", "fromUpdatedAt", "toUpdatedAt"];
 
+    // A Polp lê valor sem sufixo como horário de Brasília e com "Z" como UTC (confirmado no
+    // sandbox). Reemitir um instante UTC sem o "Z" deslocava a janela em 3 h e perdia lançamentos.
+    private static readonly TimeZoneInfo Brasilia = TimeZoneInfo.FindSystemTimeZoneById(UserClock.DefaultTimeZoneId);
+
     public static PolpQueryWindow? TryParse(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw) || raw.Length > 400) return null;
@@ -212,15 +219,30 @@ public sealed record PolpQueryWindow(string Query)
             if (kv.Length != 2 || !AllowedKeys.Contains(kv[0])) continue;
 
             var value = Uri.UnescapeDataString(kv[1]);
-            if (!DateTime.TryParse(value, CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+            if (!DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
                 continue;
 
-            parts.Add($"{kv[0]}={Uri.EscapeDataString(parsed.ToString("yyyy-MM-ddTHH:mm:ss.ffffff", CultureInfo.InvariantCulture))}");
+            var wallClock = parsed.Kind switch
+            {
+                DateTimeKind.Unspecified => parsed,
+                _ => TimeZoneInfo.ConvertTimeFromUtc(parsed.ToUniversalTime(), Brasilia)
+            };
+            parts.Add(Format(kv[0], wallClock));
         }
 
         return parts.Count == 0 ? null : new PolpQueryWindow(string.Join('&', parts));
     }
+
+    /// <summary>Tudo que foi criado OU alterado desde o instante dado (a Polp combina os dois
+    /// filtros com OR).</summary>
+    public static PolpQueryWindow ChangedSince(DateTimeOffset instant)
+    {
+        var wallClock = TimeZoneInfo.ConvertTimeFromUtc(instant.UtcDateTime, Brasilia);
+        return new PolpQueryWindow($"{Format("fromCreatedAt", wallClock)}&{Format("fromUpdatedAt", wallClock)}");
+    }
+
+    private static string Format(string key, DateTime wallClock) =>
+        $"{key}={Uri.EscapeDataString(wallClock.ToString("yyyy-MM-ddTHH:mm:ss.ffffff", CultureInfo.InvariantCulture))}";
 }
 
 // ──────────────────────────────────────────
@@ -251,7 +273,7 @@ public class PolpService : IPolpService
 {
     // Teto de segurança por listagem: 500 itens por página de transação, então 50 páginas cobrem
     // 25 mil lançamentos; evita um laço indefinido se a Polp devolver um cursor que não termina.
-    private const int MaxPages = 50;
+    internal const int MaxPages = 50;
 
     private static readonly string[] DefaultProducts = ["ACCOUNT", "CREDIT_CARD_ACCOUNT"];
 
@@ -382,14 +404,17 @@ public class PolpService : IPolpService
             await EnsureSuccess(resp, action);
 
             var envelope = await resp.Content.ReadFromJsonAsync<PolpListEnvelope<T>>(JsonOptions, ct);
-            if (envelope?.Data is null || envelope.Data.Count == 0) break;
+            if (envelope?.Data is null || envelope.Data.Count == 0) return items;
 
             items.AddRange(envelope.Data);
             cursor = envelope.Meta?.NextCursor;
-            if (string.IsNullOrEmpty(cursor)) break;
+            if (string.IsNullOrEmpty(cursor)) return items;
         }
 
-        return items;
+        // Devolver a lista parcial gravaria um histórico incompleto como se fosse completo. Erro
+        // permanente: a mesma consulta esgotaria o teto de novo, e repetir só gasta o rate limit.
+        _logger.LogError("Polp API: listagem ao {Action} passou de {MaxPages} páginas", action, MaxPages);
+        throw new PolpPermanentException($"Listagem da Polp ao {action} passou de {MaxPages} páginas.");
     }
 
     // Create devolve {"data": {...}}; os "show" documentam o recurso direto na raiz. Aceita os

@@ -278,25 +278,12 @@ public class MonthlySummaryTimeZoneTests
     }
 }
 
+// O "hoje" da fatura atual é o do fuso do dono do cartão. Com a regra nova (R-C2), duas faturas
+// fechadas e não vencidas mostram a de vencimento mais próximo; os dias de fechamento/vencimento
+// vêm sempre da última fatura fechada, não da fatura exibida.
 public class CardBillTimeZoneTests
 {
     public static TheoryData<string, int, int, int, int, int, int, int> DueDates() => UserTimeZoneTests.DueDates();
-
-    private sealed class FakePolp(List<PolpBillDto> bills) : IPolpService
-    {
-        public Task<List<PolpBillDto>> GetBillsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default) =>
-            Task.FromResult(bills);
-
-        public Task<List<PolpInstitutionDto>> GetInstitutionsAsync(CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<PolpConsentDto> CreateConsentAsync(CreatePolpConsentRequest request, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<PolpConsentDto> GetConsentAsync(Guid consentId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<List<PolpAccountDto>> GetAccountsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<List<PolpCreditCardDto>> GetCreditCardsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<List<PolpAccountTransactionDto>> GetAccountTransactionsAsync(Guid accountId, PolpQueryWindow? window = null, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<List<PolpCardTransactionDto>> GetCardTransactionsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<PolpAccountDto> SyncBalanceAsync(Guid accountId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task DeleteConsentAsync(Guid consentId, CancellationToken ct = default) => throw new NotImplementedException();
-    }
 
     private static PolpBillDto Bill(DateTime due, string total) => new()
     {
@@ -314,29 +301,33 @@ public class CardBillTimeZoneTests
         var due = LocalTime.Day(y, m, d);
         var nextDue = LocalTime.Day(ny, nm, nd);
         using var t = LocalTime.NewDb(zone);
-        var card = t.AddAccount(type: CreditCardAccountDetector.CardType, polpAccountId: Guid.NewGuid());
-        var polp = new FakePolp([Bill(nextDue, "200.20"), Bill(due, "100.10")]);
-        var sync = new PolpSyncService(t.Db, polp, new ConfigurationBuilder().Build(),
-            new InstitutionNameResolver(polp, new MemoryCache(new MemoryCacheOptions()), NullLogger<InstitutionNameResolver>.Instance),
-            t.Clock);
+        var integration = SyncHarness.AddIntegration(t, synced: true);
+        var cardId = Guid.NewGuid();
+        SyncHarness.AddLinked(t, integration, cardId, card: true);
+        var polp = new ScriptedPolp();
+        polp.Bills[cardId] = [Bill(nextDue, "200.20"), Bill(due, "100.10")];
+        var processor = SyncHarness.Processor(t, polp);
+
+        BankAccount Saved()
+        {
+            using var db = t.NewContext();
+            return db.BankAccounts.Single(a => a.PolpAccountId == cardId);
+        }
 
         t.Clock.UtcNow = LocalTime.At(due.AddDays(1).AddSeconds(-1), offset);
-        await sync.SyncBillsAsync(card, null, default);
+        await processor.Process("bills", cardId);
+        var card = Saved();
         Assert.Equal(due, card.InvoiceDueDate);
         Assert.Equal(100.10m, card.CurrentInvoiceAmount);
-        Assert.Equal(d, card.DueDay);
-        Assert.Equal(due.AddDays(-7).Day, card.ClosingDay);
+        Assert.Equal(nd, card.DueDay);
+        Assert.Equal(nextDue.AddDays(-7).Day, card.ClosingDay);
 
         t.Clock.UtcNow = LocalTime.At(due.AddDays(1), offset);
-        await sync.SyncBillsAsync(card, null, default);
+        await processor.Process("bills", cardId);
+        card = Saved();
         Assert.Equal(nextDue, card.InvoiceDueDate);
         Assert.Equal(200.20m, card.CurrentInvoiceAmount);
         Assert.Equal(nd, card.DueDay);
         Assert.Equal(nextDue.AddDays(-7).Day, card.ClosingDay);
-
-        await using var other = t.NewContext();
-        var saved = other.BankAccounts.Single(a => a.Id == card.Id);
-        Assert.Equal(nextDue, saved.InvoiceDueDate);
-        Assert.Equal(200.20m, saved.CurrentInvoiceAmount);
     }
 }

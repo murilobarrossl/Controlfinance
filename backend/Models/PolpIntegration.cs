@@ -37,6 +37,10 @@ public class PolpIntegration
     /// como sincronização de dados.</summary>
     public DateTime? LastSyncedAt { get; set; }
 
+    /// <summary>A Polp ainda não terminou de categorizar/identificar contrapartes (flags
+    /// ERROR_PROCESSING_CATEGORIES/COUNTERPARTIES do consentimento).</summary>
+    public bool EnrichmentPending { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

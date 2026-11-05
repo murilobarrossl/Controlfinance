@@ -2,6 +2,7 @@ namespace ControlFinance.API.Models;
 
 public enum TransactionType { Income, Expense }
 public enum TransactionStatus { Pending, Paid, Overdue }
+public enum PolpMovementKind { None, CardBillPayment, OwnTransfer }
 
 public class Transaction
 {
@@ -25,6 +26,8 @@ public class Transaction
     /// <summary>Marca um gasto recorrente (assinatura, mensalidade). Não se propaga sozinho pra
     /// novas transações sincronizadas do banco: precisa ser marcado de novo a cada mês.</summary>
     public bool IsFixed { get; set; }
+
+    public PolpMovementKind PolpMovementKind { get; set; }
 
     /// <summary>Quando o lembrete de vencimento por e-mail foi enviado (null = ainda não enviado).</summary>
     public DateTime? ReminderSentAt { get; set; }

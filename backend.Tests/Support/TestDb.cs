@@ -88,12 +88,13 @@ public sealed class TestDb : IDisposable
     }
 
     public Transaction AddTransaction(BankAccount? account, TransactionType type, decimal amount, DateTime dueDate,
-        string name = "Lancamento", TransactionStatus status = TransactionStatus.Paid, Category? category = null)
+        string name = "Lancamento", TransactionStatus status = TransactionStatus.Paid, Category? category = null,
+        PolpMovementKind movementKind = PolpMovementKind.None)
     {
         var t = new Transaction
         {
             UserId = User.Id, BankAccountId = account?.Id, CategoryId = category?.Id,
-            Name = name, Type = type, Status = status, Amount = amount,
+            Name = name, Type = type, Status = status, Amount = amount, PolpMovementKind = movementKind,
             DueDate = DateTime.SpecifyKind(dueDate, DateTimeKind.Utc)
         };
         Db.Transactions.Add(t);

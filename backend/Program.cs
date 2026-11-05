@@ -20,7 +20,7 @@ builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, relo
 
 // Fora de Development, segredo ausente ou placeholder impede a subida: senão a API sobe usando um
 // valor público do repositório como chave.
-var secretErrors = ConfigSecrets.Validate(builder.Configuration);
+var secretErrors = ConfigSecrets.Validate(builder.Configuration, builder.Environment.IsDevelopment());
 if (secretErrors.Count > 0)
 {
     if (!builder.Environment.IsDevelopment())
@@ -46,6 +46,10 @@ builder.Services.AddScoped<ITokenRevocationService, TokenRevocationService>();
 builder.Services.AddScoped<PolpSyncService>();
 builder.Services.AddScoped<PolpDisconnectService>();
 builder.Services.AddScoped<PolpWebhookProcessor>();
+builder.Services.AddScoped<IPolpEventHandler, PolpWebhookProcessorHandler>();
+builder.Services.AddScoped<IPolpInbox, PolpInbox>();
+builder.Services.AddHostedService<PolpInboxWorker>();
+builder.Services.AddHostedService<PolpInboxCleanupService>();
 builder.Services.AddScoped<InstitutionNameResolver>();
 builder.Services.AddScoped<SessionValidator>();
 builder.Services.AddScoped<AccessLogService>();
@@ -53,6 +57,8 @@ builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 builder.Services.AddSingleton<RateLimitService>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IJobLock, PostgresJobLock>();
+builder.Services.AddSingleton<IIntegrationLock, IntegrationLock>();
+builder.Services.AddHostedService<PolpReconciliationService>();
 builder.Services.AddHttpClient<EmailService>();
 builder.Services.AddHostedService<ScheduledEmailService>();
 builder.Services.AddHostedService<PendingDisconnectRetryService>();
@@ -164,14 +170,11 @@ builder.Services.AddEndpointsApiExplorer();
 // sincronizar) — reversível: voltando a preencher as duas chaves, a integração real volta sozinha.
 if (ConfigSecrets.IsPolpEnabled(builder.Configuration))
 {
-    builder.Services.AddHttpClient<IPolpService, PolpService>();
-
-    // O Sandbox da Polp (/api/v2/sandbox) gera dados fictícios e nunca conecta ao banco de
-    // verdade: em produção, um usuário "conectaria" um banco e veria contas inventadas. Não
-    // bloqueia (a configuração de produção é do operador), mas deixa o alerta explícito no log.
-    var polpBaseUrl = builder.Configuration["Polp:BaseUrl"] ?? string.Empty;
-    if (!builder.Environment.IsDevelopment() && polpBaseUrl.Contains("/sandbox", StringComparison.OrdinalIgnoreCase))
-        Console.Error.WriteLine("ATENÇÃO: Polp:BaseUrl aponta para o Sandbox da Polp fora de Development.");
+    builder.Services.AddTransient<PolpRetryHandler>();
+    // O timeout de cada tentativa fica no PolpRetryHandler; este só não pode cortar antes do pior
+    // caso dele (3 × 15 s + até 2 esperas de Retry-After de 10 s).
+    builder.Services.AddHttpClient<IPolpService, PolpService>(c => c.Timeout = TimeSpan.FromSeconds(90))
+        .AddHttpMessageHandler<PolpRetryHandler>();
 }
 else
 {
@@ -215,6 +218,9 @@ builder.Services.AddSwaggerGen(c =>
 //  PIPELINE
 // ──────────────────────────────────────────
 var app = builder.Build();
+
+if (ConfigSecrets.IsPolpEnabled(app.Configuration) && !ConfigSecrets.IsWebhookSignatureRequired(app.Configuration))
+    app.Logger.LogWarning("Assinatura do webhook da Polp desativada (Polp:WebhookRequireSignature=false): só o token da URL protege o endpoint");
 
 using (var scope = app.Services.CreateScope())
 {

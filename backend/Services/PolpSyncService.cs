@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using ControlFinance.API.Data;
@@ -8,123 +7,233 @@ using Npgsql;
 
 namespace ControlFinance.API.Services;
 
-// Trabalho pesado de puxar contas, cartões, faturas e transações da Polp (API v2) e gravar no
-// banco. Extraído do controller pra poder rodar em background, fora do ciclo de vida da
-// requisição HTTP que disparou o sync: uma chamada à Polp já levou de 800ms a 20s nos logs, e
-// somando várias contas e páginas de transações o total passa fácil dos 30-60s que a maioria dos
-// gateways tolera antes de devolver 504.
-//
-// O fluxo normal é orientado a webhook: a Polp sincroniza por agenda com a instituição e avisa;
-// cada aviso vira uma das operações pontuais abaixo, limitada à janela que ela informou. O sync
-// completo (SyncOneAsync) só roda uma vez, na conexão (backfill inicial).
-public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration config, InstitutionNameResolver institutionNames, TimeProvider time)
+// Puxa contas, cartões, faturas e transações da Polp (API v2) e grava no banco. Toda operação tem
+// duas fases: leitura na Polp fora de qualquer transação (pode levar dezenas de segundos) e
+// gravação curta sob IIntegrationLock, que relê a integração e não grava nada se ela foi
+// desconectada nesse meio-tempo. Falha em qualquer conta, cartão ou fatura sobe como exceção e o
+// evento da inbox é reprocessado: nada parcial é commitado.
+public class PolpSyncService(
+    AppDbContext db, IPolpService polp, IConfiguration config, InstitutionNameResolver institutionNames,
+    IIntegrationLock integrationLock, TimeProvider time)
 {
-    // Serializa syncs concorrentes da mesma integração (ex.: dois webhooks seguidos, ou um webhook
-    // cruzando com o backfill): sem isso, duas execuções liam o mesmo snapshot de "transações já
-    // existentes" antes de qualquer uma salvar, e cada uma inseria a mesma transação de novo.
-    // Estático porque esse serviço é recriado a cada escopo de DI; a chave é o Guid local da
-    // integração (PolpIntegration.Id).
-    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> SyncLocks = new();
+    public const string AuthorisedStatus = "AUTHORISED";
+    public static readonly TimeSpan ReconcileWindow = TimeSpan.FromDays(7);
 
-    public static async Task<int> SyncOneWithLockAsync(Func<Task<int>> syncOne, Guid integrationId, CancellationToken ct)
-    {
-        var syncLock = SyncLocks.GetOrAdd(integrationId, _ => new SemaphoreSlim(1, 1));
-        await syncLock.WaitAsync(ct);
-        try
-        {
-            return await syncOne();
-        }
-        finally
-        {
-            syncLock.Release();
-        }
-    }
+    private const string CardBillPaymentType = "PAGAMENTO_FATURA";
+    private const string FutureSentinel = "0001-01-01";
 
-    /// <summary>Relê o consentimento na Polp e guarda status, execution_status e o nome da
-    /// instituição. PARTIAL_SUCCESS é só enriquecimento pendente: não bloqueia nada. Devolve true
-    /// se o consentimento já está autorizado.</summary>
+    private static readonly TimeZoneInfo Brasilia = TimeZoneInfo.FindSystemTimeZoneById(UserClock.DefaultTimeZoneId);
+
+    public static bool HasEnrichmentPending(IEnumerable<string>? flags) =>
+        flags?.Any(f => f is "ERROR_PROCESSING_CATEGORIES" or "ERROR_PROCESSING_COUNTERPARTIES") ?? false;
+
+    /// <summary>Grava status, execution_status, enriquecimento pendente e nome da instituição.
+    /// Devolve true se o consentimento está autorizado e ainda falta o backfill.</summary>
     public async Task<bool> RefreshConsentAsync(PolpIntegration local, CancellationToken ct)
     {
         var remote = await polp.GetConsentAsync(local.PolpIntegrationId, ct);
+        if (string.IsNullOrWhiteSpace(remote.Status))
+            throw new InvalidOperationException("Consentimento sem status na resposta da Polp.");
 
-        local.Status = remote.Status;
-        local.ExecutionStatus = remote.ExecutionStatus;
-        if (!string.IsNullOrWhiteSpace(remote.Institution?.Name)) local.InstitutionName = remote.Institution.Name;
-        local.InstitutionName ??= await institutionNames.FindAsync(local.InstitutionId, ct);
-        local.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
+        var remoteName = remote.Institution?.Name;
+        var institutionName = !string.IsNullOrWhiteSpace(remoteName)
+            ? remoteName
+            : local.InstitutionName ?? await institutionNames.FindAsync(local.InstitutionId, ct);
+        var enrichmentPending = HasEnrichmentPending(remote.Flags);
+        var now = time.GetUtcNow().UtcDateTime;
 
-        return remote.Status == "AUTHORISED";
-    }
-
-    /// <summary>Backfill inicial: contas, cartões, faturas e todo o histórico de transações.</summary>
-    public async Task<int> SyncOneAsync(PolpIntegration local, Guid userId, CancellationToken ct)
-    {
-        // Relê dentro do lock: o usuário pode ter desconectado esse banco entre o disparo do sync
-        // e agora. Sem essa checagem, um sync que já estava na fila recriava as contas e
-        // transações que a desconexão tinha acabado de apagar.
-        await db.Entry(local).ReloadAsync(ct);
-        if (db.Entry(local).State == EntityState.Detached || local.Status == PolpDisconnectService.PendingStatus)
-            return 0;
-
-        var accounts = await SyncAccountsAndCardsAsync(local, userId, null, ct);
-
-        // O consentimento já chega AUTHORISED/SUCCESS antes de a Polp terminar de gerar as contas
-        // (no sandbox, ~2s depois): lista vazia aqui não é "banco sem contas", é cedo demais.
-        // Marcar como sincronizado travaria a conexão sem nenhuma conta para sempre.
-        if (accounts.Count == 0)
-            return 0;
-
-        foreach (var card in accounts.Where(CreditCardAccountDetector.LooksLikeCreditCard))
-            await SyncBillsAsync(card, null, ct);
-
-        await SyncTransactionsAsync(userId, accounts, null, ct);
-
-        local.SyncedLocally = true;
-        local.UpdatedAt = DateTime.UtcNow;
-        local.LastSyncedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
-
-        return accounts.Count;
-    }
-
-    /// <summary>Webhooks accounts / credit_cards: cria ou atualiza contas e cartões do
-    /// consentimento (dentro da janela informada, se houver).</summary>
-    public async Task<List<BankAccount>> SyncAccountsAndCardsAsync(
-        PolpIntegration local, Guid userId, PolpQueryWindow? window, CancellationToken ct)
-    {
-        await EnsureDefaultCategoriesAsync(userId, ct);
-
-        // Carrega as contas já existentes do usuário de uma vez (por PolpAccountId) em vez de
-        // uma query por recurso remoto: evita N+1 quando a conexão tem várias contas.
-        var existing = await db.BankAccounts
-            .Where(b => b.UserId == userId && b.PolpAccountId != null)
-            .ToDictionaryAsync(b => b.PolpAccountId!.Value, b => b, ct);
-
-        // Chute inicial do Radar de Recorrências pra conta nova (CNPJ = Business, CPF = Personal,
-        // ver AccountOwnershipDefault).
-        var ownerDocumentType = await db.Users.Where(u => u.Id == userId).Select(u => u.DocumentType).FirstAsync(ct);
-        local.InstitutionName ??= await institutionNames.FindAsync(local.InstitutionId, ct);
-        var bankName = local.InstitutionName ?? "Banco";
-
-        var touched = new List<BankAccount>();
-
-        foreach (var remote in await polp.GetAccountsAsync(local.PolpIntegrationId, window, ct))
+        return await integrationLock.RunAsync(db, local.Id, async () =>
         {
-            if (!existing.TryGetValue(remote.Id, out var account))
+            var current = await db.PolpIntegrations.AsNoTracking().FirstOrDefaultAsync(p => p.Id == local.Id, ct);
+            if (current is null || current.Status == PolpDisconnectService.PendingStatus) return false;
+
+            // Condicional mesmo sob o lock: a desconexão marca DISCONNECT_PENDING fora dele.
+            var updated = await db.PolpIntegrations
+                .Where(p => p.Id == local.Id && p.Status != PolpDisconnectService.PendingStatus)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(p => p.Status, remote.Status)
+                    .SetProperty(p => p.ExecutionStatus, remote.ExecutionStatus)
+                    .SetProperty(p => p.EnrichmentPending, enrichmentPending)
+                    .SetProperty(p => p.InstitutionName, institutionName)
+                    .SetProperty(p => p.UpdatedAt, now), ct);
+
+            return updated > 0 && remote.Status == AuthorisedStatus && !current.SyncedLocally;
+        }, ct);
+    }
+
+    /// <summary>Backfill: contas, cartões, faturas e todo o histórico. Só marca SyncedLocally se
+    /// tudo foi lido e gravado.</summary>
+    public async Task BackfillAsync(PolpIntegration local, CancellationToken ct)
+    {
+        if (local.SyncedLocally || local.Status == PolpDisconnectService.PendingStatus) return;
+        if (local.Status != AuthorisedStatus)
+        {
+            if (local.Status is "REJECTED" or "EXPIRED") return;
+            throw new PolpResourceNotReadyException("Consentimento ainda não autorizado localmente.");
+        }
+
+        var plan = new Plan(local) { Backfill = true };
+        plan.Accounts.AddRange(await polp.GetAccountsAsync(local.PolpIntegrationId, null, ct));
+        plan.Cards.AddRange(await polp.GetCreditCardsAsync(local.PolpIntegrationId, null, ct));
+
+        // O consentimento chega AUTHORISED antes de a Polp gerar as contas (no sandbox, ~2 s
+        // depois): lista vazia aqui é "cedo demais", não "banco sem contas".
+        if (plan.Accounts.Count == 0 && plan.Cards.Count == 0)
+            throw new PolpResourceNotReadyException("A Polp ainda não gerou as contas do consentimento.");
+
+        foreach (var account in plan.Accounts) await FetchTransactionsAsync(plan, account.Id, isCard: false, null, ct);
+        foreach (var card in plan.Cards) await FetchTransactionsAsync(plan, card.Id, isCard: true, null, ct);
+
+        await CommitAsync(plan, ct);
+    }
+
+    /// <summary>Eventos accounts / credit_cards. Conta ou cartão que aparece pela primeira vez
+    /// vem com histórico completo (e faturas, se for cartão): nenhum outro evento o traria.</summary>
+    public async Task SyncAccountsAndCardsAsync(PolpIntegration local, PolpQueryWindow? window, CancellationToken ct)
+    {
+        var plan = new Plan(local);
+        plan.Accounts.AddRange(await polp.GetAccountsAsync(local.PolpIntegrationId, window, ct));
+        plan.Cards.AddRange(await polp.GetCreditCardsAsync(local.PolpIntegrationId, window, ct));
+        await FetchNewResourcesAsync(plan, ct);
+        await CommitAsync(plan, ct);
+    }
+
+    /// <summary>Eventos bills / accounts.transactions / credit_cards.transactions de uma conta
+    /// ou cartão já conhecido.</summary>
+    public async Task SyncResourceAsync(
+        PolpIntegration local, BankAccount account, bool transactions, PolpQueryWindow? window, CancellationToken ct)
+    {
+        if (account.PolpAccountId is not Guid remoteId) return;
+        var isCard = CreditCardAccountDetector.LooksLikeCreditCard(account);
+        var plan = new Plan(local);
+
+        if (transactions)
+            await FetchTransactionsAsync(plan, remoteId, isCard, window, ct);
+        else if (isCard)
+            plan.Bills[remoteId] = await polp.GetBillsAsync(remoteId, null, ct);
+        else
+            return;
+
+        await CommitAsync(plan, ct);
+    }
+
+    /// <summary>Rede de segurança para avisos perdidos: tudo que mudou nos últimos 7 dias.</summary>
+    public async Task ReconcileAsync(PolpIntegration local, CancellationToken ct)
+    {
+        if (local.Status == PolpDisconnectService.PendingStatus || local.Status != AuthorisedStatus) return;
+        if (!local.SyncedLocally)
+        {
+            await BackfillAsync(local, ct);
+            return;
+        }
+
+        var window = PolpQueryWindow.ChangedSince(time.GetUtcNow() - ReconcileWindow);
+        var plan = new Plan(local);
+        plan.Accounts.AddRange(await polp.GetAccountsAsync(local.PolpIntegrationId, window, ct));
+        plan.Cards.AddRange(await polp.GetCreditCardsAsync(local.PolpIntegrationId, window, ct));
+        await FetchNewResourcesAsync(plan, ct);
+
+        var known = await db.BankAccounts.AsNoTracking()
+            .Where(b => b.UserId == local.UserId && b.PolpIntegrationId == local.PolpIntegrationId && b.PolpAccountId != null)
+            .ToListAsync(ct);
+        foreach (var account in known)
+        {
+            var remoteId = account.PolpAccountId!.Value;
+            if (plan.Transactions.ContainsKey(remoteId)) continue;
+            await FetchTransactionsAsync(plan, remoteId, CreditCardAccountDetector.LooksLikeCreditCard(account), window, ct);
+        }
+
+        await CommitAsync(plan, ct);
+    }
+
+    // Faturas sempre sem janela: a fatura atual depende da última fechada, que uma janela pode
+    // deixar de fora. São poucas por cartão.
+    private async Task FetchTransactionsAsync(Plan plan, Guid remoteId, bool isCard, PolpQueryWindow? window, CancellationToken ct)
+    {
+        var items = isCard
+            ? (await polp.GetCardTransactionsAsync(remoteId, window, ct)).Select(RemoteTransaction.From).ToList()
+            : (await polp.GetAccountTransactionsAsync(remoteId, window, ct)).Select(RemoteTransaction.From).ToList();
+        plan.Transactions[remoteId] = new TransactionBatch(items, Complete: window is null);
+        if (isCard) plan.Bills[remoteId] = await polp.GetBillsAsync(remoteId, null, ct);
+    }
+
+    private async Task FetchNewResourcesAsync(Plan plan, CancellationToken ct)
+    {
+        var remoteIds = plan.Accounts.Select(a => a.Id).Concat(plan.Cards.Select(c => c.Id)).ToList();
+        var known = (await db.BankAccounts.AsNoTracking()
+                .Where(b => b.UserId == plan.Integration.UserId && b.PolpAccountId != null && remoteIds.Contains(b.PolpAccountId.Value))
+                .Select(b => b.PolpAccountId!.Value)
+                .ToListAsync(ct))
+            .ToHashSet();
+
+        foreach (var account in plan.Accounts.Where(a => !known.Contains(a.Id)))
+            await FetchTransactionsAsync(plan, account.Id, isCard: false, null, ct);
+        foreach (var card in plan.Cards.Where(c => !known.Contains(c.Id)))
+            await FetchTransactionsAsync(plan, card.Id, isCard: true, null, ct);
+    }
+
+    private async Task CommitAsync(Plan plan, CancellationToken ct)
+    {
+        var userId = plan.Integration.UserId;
+        var categoryIds = await PrepareCategoriesAsync(plan, ct);
+        var bankName = plan.Integration.InstitutionName
+            ?? await institutionNames.FindAsync(plan.Integration.InstitutionId, ct)
+            ?? "Banco";
+        var user = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.TimeZone, u.DocumentType })
+            .FirstAsync(ct);
+
+        // Tudo que for lido sob o lock tem de vir do banco, não de uma cópia rastreada antes dele.
+        db.ChangeTracker.Clear();
+
+        try
+        {
+            await integrationLock.RunAsync(db, plan.Integration.Id,
+                () => ApplyAsync(plan, categoryIds, bankName, user.TimeZone, user.DocumentType, ct), ct);
+        }
+        catch (IntegrationGoneException)
+        {
+            // Desconectada durante a gravação: o rollback já descartou tudo.
+        }
+        finally
+        {
+            db.ChangeTracker.Clear();
+        }
+    }
+
+    private async Task<bool> ApplyAsync(
+        Plan plan, Dictionary<string, Guid> categoryIds, string bankName, string? timeZoneId, string? documentType,
+        CancellationToken ct)
+    {
+        var current = await db.PolpIntegrations.AsNoTracking().FirstOrDefaultAsync(p => p.Id == plan.Integration.Id, ct);
+        if (current is null || current.Status == PolpDisconnectService.PendingStatus) return false;
+        if (plan.Backfill && (current.SyncedLocally || current.Status != AuthorisedStatus)) return false;
+
+        var userId = current.UserId;
+        var now = time.GetUtcNow();
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(UserClock.Normalize(timeZoneId));
+        var today = UserClock.TodayIn(timeZoneId, now);
+
+        var remoteIds = plan.Accounts.Select(a => a.Id)
+            .Concat(plan.Cards.Select(c => c.Id))
+            .Concat(plan.Transactions.Keys)
+            .Concat(plan.Bills.Keys)
+            .Distinct()
+            .ToList();
+        var byRemote = (await db.BankAccounts
+                .Where(b => b.UserId == userId && b.PolpAccountId != null && remoteIds.Contains(b.PolpAccountId.Value))
+                .OrderBy(b => b.CreatedAt)
+                .ToListAsync(ct))
+            .GroupBy(b => b.PolpAccountId!.Value)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        foreach (var remote in plan.Accounts)
+        {
+            if (!byRemote.TryGetValue(remote.Id, out var account))
             {
-                account = new BankAccount
-                {
-                    UserId = userId,
-                    // O nome não é tocado nas atualizações seguintes: o usuário pode ter renomeado.
-                    Name = $"{bankName} · {AccountKindLabel(remote.Type)}",
-                    BankCode = local.InstitutionId.ToString(),
-                    PolpAccountId = remote.Id,
-                    PolpIntegrationId = local.PolpIntegrationId,
-                    Ownership = AccountOwnershipDefault.FromDocumentType(ownerDocumentType)
-                };
-                db.BankAccounts.Add(account);
-                existing[remote.Id] = account;
+                account = NewAccount(current, remote.Id, $"{bankName} · {AccountKindLabel(remote.Type)}", documentType);
+                byRemote[remote.Id] = account;
             }
 
             // Saldo null = ainda não sincronizado na Polp: mantém o que já temos em vez de zerar.
@@ -132,24 +241,14 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
             account.PolpAccountType = remote.Type;
             account.PolpAccountSubtype = remote.Subtype;
             account.Number = AccountNumberMask.Mask($"{remote.Number}{remote.CheckDigit}");
-            touched.Add(account);
         }
 
-        foreach (var remote in await polp.GetCreditCardsAsync(local.PolpIntegrationId, window, ct))
+        foreach (var remote in plan.Cards)
         {
-            if (!existing.TryGetValue(remote.Id, out var card))
+            if (!byRemote.TryGetValue(remote.Id, out var card))
             {
-                card = new BankAccount
-                {
-                    UserId = userId,
-                    Name = remote.Name ?? $"{bankName} · Cartão de crédito",
-                    BankCode = local.InstitutionId.ToString(),
-                    PolpAccountId = remote.Id,
-                    PolpIntegrationId = local.PolpIntegrationId,
-                    Ownership = AccountOwnershipDefault.FromDocumentType(ownerDocumentType)
-                };
-                db.BankAccounts.Add(card);
-                existing[remote.Id] = card;
+                card = NewAccount(current, remote.Id, remote.Name ?? $"{bankName} · Cartão de crédito", documentType);
+                byRemote[remote.Id] = card;
             }
 
             // A v2 não separa conta de cartão por "type": o cartão é um recurso próprio, então
@@ -157,7 +256,7 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
             card.PolpAccountType = CreditCardAccountDetector.CardType;
             card.ProductType = remote.ProductType;
             card.Brand = remote.CreditCardNetwork;
-            card.Number = AccountNumberMask.Mask(remote.PaymentMethods.FirstOrDefault()?.IdentificationNumber);
+            card.Number = CardNumber(remote, plan.Transactions.GetValueOrDefault(remote.Id), card.Number);
 
             var limit = remote.Limits.FirstOrDefault(l => l.CreditLineLimitType == "LIMITE_CREDITO_TOTAL")
                 ?? remote.Limits.FirstOrDefault();
@@ -166,165 +265,302 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
                 card.CreditLimit = limit.LimitAmount?.Value ?? card.CreditLimit;
                 card.UsedLimit = limit.UsedAmount?.Value ?? card.UsedLimit;
             }
-            touched.Add(card);
         }
 
+        var hadBills = new Dictionary<Guid, bool>();
+        foreach (var (remoteId, bills) in plan.Bills)
+        {
+            if (!byRemote.TryGetValue(remoteId, out var card)) continue;
+            hadBills[remoteId] = card.ClosingDay.HasValue;
+            ApplyBillDays(card, bills);
+        }
+
+        await UpsertTransactionsAsync(plan, byRemote, categoryIds, zone, ct);
         await db.SaveChangesAsync(ct);
-        return touched;
+        await RemovedPolpResources.ClearAsync(db, byRemote.Keys, ct);
+
+        foreach (var (remoteId, bills) in plan.Bills)
+        {
+            if (!byRemote.TryGetValue(remoteId, out var card)) continue;
+            await ApplyCurrentInvoiceAsync(card, bills, today, hadBills[remoteId], ct);
+        }
+        await db.SaveChangesAsync(ct);
+
+        var syncedAt = now.UtcDateTime;
+        var synced = current.SyncedLocally || plan.Backfill;
+        var updated = await db.PolpIntegrations
+            .Where(p => p.Id == current.Id && p.Status != PolpDisconnectService.PendingStatus)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.SyncedLocally, synced)
+                .SetProperty(p => p.LastSyncedAt, syncedAt)
+                .SetProperty(p => p.UpdatedAt, syncedAt), ct);
+        if (updated == 0) throw new IntegrationGoneException();
+
+        return true;
     }
 
-    /// <summary>Webhook bills: fatura atual, dia de fechamento e de vencimento do cartão. Esses
-    /// dias não existem no recurso do cartão na v2; só as faturas os trazem. Falha pontual na
-    /// Polp não trava o resto: o cartão segue sem fatura e a UI pede pra completar à mão.</summary>
-    public async Task SyncBillsAsync(BankAccount card, PolpQueryWindow? window, CancellationToken ct)
+    private BankAccount NewAccount(PolpIntegration local, Guid remoteId, string name, string? documentType)
     {
-        if (card.PolpAccountId is not Guid cardId) return;
+        var account = new BankAccount
+        {
+            UserId = local.UserId,
+            // O nome não é tocado nas atualizações seguintes: o usuário pode ter renomeado.
+            Name = name,
+            BankCode = local.InstitutionId.ToString(),
+            PolpAccountId = remoteId,
+            PolpIntegrationId = local.PolpIntegrationId,
+            // Chute inicial do Radar de Recorrências (CNPJ = Business, CPF = Personal).
+            Ownership = AccountOwnershipDefault.FromDocumentType(documentType)
+        };
+        db.BankAccounts.Add(account);
+        return account;
+    }
 
-        List<PolpBillDto> bills;
-        try
+    // A doc não diz qual plástico é o do titular. Com o histórico completo, o mais usado nas
+    // transações; senão mantém o que já foi gravado, para um aviso parcial (ex.: uma compra do
+    // adicional) não trocar o número exibido.
+    private static string? CardNumber(PolpCreditCardDto remote, TransactionBatch? batch, string? current)
+    {
+        if (batch is { Complete: true })
         {
-            bills = await polp.GetBillsAsync(cardId, window, ct);
+            var mostUsed = batch.Items
+                .Where(t => !string.IsNullOrWhiteSpace(t.IdentificationNumber))
+                .GroupBy(t => t.IdentificationNumber!)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => g.Key, StringComparer.Ordinal)
+                .Select(g => g.Key)
+                .FirstOrDefault();
+            if (mostUsed is not null) return AccountNumberMask.Mask(mostUsed);
         }
-        catch (HttpRequestException)
+
+        return current ?? AccountNumberMask.Mask(remote.PaymentMethods.FirstOrDefault()?.IdentificationNumber);
+    }
+
+    private static void ApplyBillDays(BankAccount card, List<PolpBillDto> bills)
+    {
+        var last = ClosedBills(bills).OrderByDescending(b => b.Closing).FirstOrDefault();
+        if (last is null) return;
+        card.ClosingDay = last.Closing.Day;
+        card.DueDay = last.Due.Day;
+    }
+
+    // Fatura atual. /bills só traz faturas fechadas, e os payments[] de uma fatura são os pagos
+    // durante o ciclo dela (quitam a anterior): se ela foi paga só aparece como PAGAMENTO_FATURA
+    // nas transações do cartão, depois do fechamento. Fatura paga ou vencida nunca vira "atual".
+    private async Task ApplyCurrentInvoiceAsync(BankAccount card, List<PolpBillDto> bills, DateTime today, bool hadBills, CancellationToken ct)
+    {
+        var closed = ClosedBills(bills).ToList();
+        var transactions = (await db.Transactions
+                .Where(t => t.BankAccountId == card.Id && t.Description != null)
+                .ToListAsync(ct))
+            .Where(t => IsPolpId(t.Description))
+            .ToList();
+
+        foreach (var bill in closed.Where(b => b.Due >= today && b.Total.HasValue).OrderBy(b => b.Due))
         {
+            var paid = transactions
+                .Where(t => t.PolpMovementKind == PolpMovementKind.CardBillPayment && t.DueDate > bill.Closing)
+                .Sum(t => t.Type == TransactionType.Income ? t.Amount : -t.Amount);
+            if (paid >= bill.Total!.Value) continue;
+
+            card.CurrentInvoiceAmount = bill.Total.Value;
+            card.InvoiceDueDate = bill.Due;
             return;
         }
 
-        // Fatura "atual" = a de vencimento mais próximo que ainda não passou; se todas já
-        // venceram (ou não vier nenhuma), cai pra mais recente disponível. "Hoje" é o do dono do
-        // cartão: em UTC, a fatura que vence hoje já contava como vencida a partir das 21h de Brasília.
-        var today = await UserClock.TodayForUserAsync(db, card.UserId, time, ct);
-        var parsed = bills
-            .Select(b => (bill: b, due: ParseDateOrNull(b.DueDate)))
-            .Where(x => x.due.HasValue)
-            .OrderBy(x => x.due)
-            .ToList();
-        if (parsed.Count == 0) return;
+        var lastClosed = closed.OrderByDescending(b => b.Closing).FirstOrDefault();
 
-        var current = parsed.FirstOrDefault(x => x.due!.Value.Date >= today);
-        if (current.bill is null) current = parsed[^1];
+        // O cartão já teve fatura e agora a lista veio sem nenhuma: resposta incoerente; somar o
+        // histórico inteiro como "fatura aberta" seria um valor errado.
+        if (lastClosed is null && hadBills) return;
 
-        card.CurrentInvoiceAmount = current.bill.BillTotalAmount?.Value ?? card.CurrentInvoiceAmount;
-        card.InvoiceDueDate = current.due;
-        card.DueDay = current.due!.Value.Day;
-        if (ParseDateOrNull(current.bill.BillClosingDate) is { } closing) card.ClosingDay = closing.Day;
-
-        await db.SaveChangesAsync(ct);
+        card.CurrentInvoiceAmount = transactions
+            .Where(t => t.Status != TransactionStatus.Pending
+                && t.PolpMovementKind != PolpMovementKind.CardBillPayment
+                && (lastClosed is null || t.DueDate > lastClosed.Closing))
+            .Sum(t => t.Type == TransactionType.Expense ? t.Amount : -t.Amount);
+        card.InvoiceDueDate = lastClosed is null ? null : NextDueOnOrAfter(lastClosed.Due, today);
     }
 
-    /// <summary>Webhooks accounts.transactions / credit_cards.transactions (e backfill): upsert por
-    /// id da Polp, que é estável (o mesmo lançamento mantém o id ao passar de aberto para
-    /// faturado). Counterparty e categoria chegam depois, num novo webhook; por isso o upsert
-    /// também completa nome e categoria, sem sobrescrever o que o usuário já editou.</summary>
-    public async Task SyncTransactionsAsync(
-        Guid userId, IReadOnlyCollection<BankAccount> accounts, PolpQueryWindow? window, CancellationToken ct)
+    private static DateTime NextDueOnOrAfter(DateTime lastDue, DateTime today)
     {
-        if (accounts.Count == 0) return;
+        for (var months = 1; ; months++)
+        {
+            var month = lastDue.AddMonths(months);
+            var day = Math.Min(lastDue.Day, DateTime.DaysInMonth(month.Year, month.Month));
+            var due = new DateTime(month.Year, month.Month, day, 0, 0, 0, DateTimeKind.Utc);
+            if (due >= today) return due;
+        }
+    }
 
-        // Categorias do usuário carregadas uma única vez (entidade completa, não só o id: precisa
-        // pra poder corrigir a cor de categorias antigas presas no cinza legado); novas categorias
-        // entram no mesmo dicionário conforme são criadas, sem round-trip ao banco por transação.
-        //
-        // GroupBy + First em vez de ToDictionaryAsync: duas execuções concorrentes deste método
-        // podiam criar a mesma categoria em paralelo antes de qualquer uma commitar, gerando duas
-        // linhas com o mesmo Name, e ToDictionaryAsync estourava ArgumentException na segunda
-        // ocorrência. Fica com a mais antiga de cada nome.
-        var categoriesByName = (await db.Categories
-                .Where(c => c.UserId == userId)
-                .OrderBy(c => c.CreatedAt)
-                .ToListAsync(ct))
-            .GroupBy(c => c.Name)
-            .ToDictionary(g => g.Key, g => g.First());
+    private sealed record ClosedBill(DateTime Due, DateTime Closing, decimal? Total);
 
-        var accountIds = accounts.Select(a => a.Id).ToList();
+    // Datas de fatura são do calendário do banco (Brasília), não do fuso do usuário.
+    private static IEnumerable<ClosedBill> ClosedBills(List<PolpBillDto> bills) =>
+        bills
+            .Select(b => (due: ToCivilDate(b.DueDate, Brasilia), closing: ToCivilDate(b.BillClosingDate, Brasilia), total: b.BillTotalAmount?.Value))
+            .Where(b => b.due.HasValue && b.closing.HasValue)
+            .Select(b => new ClosedBill(b.due!.Value, b.closing!.Value, b.total));
+
+    private async Task UpsertTransactionsAsync(
+        Plan plan, Dictionary<Guid, BankAccount> byRemote, Dictionary<string, Guid> categoryIds, TimeZoneInfo zone, CancellationToken ct)
+    {
+        var targets = plan.Transactions
+            .Where(kv => byRemote.ContainsKey(kv.Key))
+            .Select(kv => (account: byRemote[kv.Key], batch: kv.Value))
+            .ToList();
+        if (targets.Count == 0) return;
+
+        var accountIds = targets.Select(t => t.account.Id).ToList();
+        var userId = plan.Integration.UserId;
+
+        // Só linhas cujo Description é id da Polp: lançamentos manuais na mesma conta ficam de
+        // fora. GroupBy porque nada impede duas linhas com a mesma chave; atualiza a mais antiga.
         var existingByKey = (await db.Transactions
-                .Where(t => t.UserId == userId && t.BankAccountId != null && accountIds.Contains(t.BankAccountId.Value))
+                .Where(t => t.UserId == userId && t.BankAccountId != null && accountIds.Contains(t.BankAccountId.Value) && t.Description != null)
                 .ToListAsync(ct))
-            .ToDictionary(t => (t.BankAccountId!.Value, t.Description), t => t);
+            .Where(t => IsPolpId(t.Description))
+            .GroupBy(t => (t.BankAccountId!.Value, t.Description!))
+            .ToDictionary(g => g.Key, g => g.OrderBy(t => t.CreatedAt).First());
 
         // Prazo máximo de histórico (opt-in, DataRetention:SyncedHistoryMonths): o que é mais
-        // antigo que isso nem entra no banco (minimização na origem), em vez de ser gravado pra
-        // ser apagado depois pelo DataRetentionService.
-        var historyCutoff = DataRetentionPolicy.SyncedHistoryCutoff(config, DateTime.UtcNow);
-        categoriesByName.TryGetValue(UncategorizedFallbackName, out var fallbackCategory);
+        // antigo nem entra no banco (minimização na origem).
+        var historyCutoff = DataRetentionPolicy.SyncedHistoryCutoff(config, time.GetUtcNow().UtcDateTime);
+        Guid? fallbackCategoryId = categoryIds.TryGetValue(UncategorizedFallbackName, out var fid) ? fid : null;
 
-        foreach (var account in accounts)
+        foreach (var (account, batch) in targets)
         {
-            if (account.PolpAccountId is not Guid remoteId) continue;
-
-            List<RemoteTransaction> remote;
-            try
-            {
-                remote = CreditCardAccountDetector.LooksLikeCreditCard(account)
-                    ? (await polp.GetCardTransactionsAsync(remoteId, window, ct)).Select(RemoteTransaction.From).ToList()
-                    : (await polp.GetAccountTransactionsAsync(remoteId, window, ct)).Select(RemoteTransaction.From).ToList();
-            }
-            catch (HttpRequestException)
-            {
-                continue; // não trava o sync inteiro por causa de uma conta com falha
-            }
-
-            foreach (var rt in remote)
+            foreach (var rt in batch.Items)
             {
                 var polpTransactionId = rt.Id.ToString();
-                var dueDate = ParseDateAsUtc(rt.DateTime);
-                var paidAt = rt.IsPending ? (DateTime?)null : dueDate;
-                var status = rt.IsPending ? TransactionStatus.Pending : TransactionStatus.Paid;
-                var type = rt.IsCredit ? TransactionType.Income : TransactionType.Expense;
-                var categoryName = PolpCategoryMap.ToCategoryName(rt.CategoryRef);
+                existingByKey.TryGetValue((account.Id, polpTransactionId), out var existing);
 
-                if (historyCutoff.HasValue && dueDate < historyCutoff.Value && !rt.IsPending)
+                var dueDate = ResolveDueDate(rt, account, existing, zone);
+                if (historyCutoff.HasValue && dueDate < historyCutoff.Value && !rt.IsFuture)
                     continue;
 
-                if (existingByKey.TryGetValue((account.Id, polpTransactionId), out var existing))
+                var paidAt = rt.IsFuture ? (DateTime?)null : dueDate;
+                var status = rt.IsFuture ? TransactionStatus.Pending : TransactionStatus.Paid;
+                var type = rt.IsCredit ? TransactionType.Income : TransactionType.Expense;
+                var categoryName = rt.CategoryName;
+                Guid? categoryId = categoryIds.TryGetValue(categoryName, out var cid) ? cid : fallbackCategoryId;
+
+                if (existing is not null)
                 {
-                    // Já sincronizada antes, mas a Polp pode corrigir valor/status depois
-                    // (pré-autorização de cartão que confirma com outro valor, ou lançamento
-                    // futuro que entra na fatura). Sem atualizar aqui o valor ficava congelado.
+                    // A Polp corrige valor/status depois (pré-autorização confirmada com outro
+                    // valor, parcela futura que entra na fatura).
                     existing.Amount = rt.Amount;
                     existing.Type = type;
                     existing.Status = status;
                     existing.DueDate = dueDate;
                     existing.PaidAt = paidAt;
+                    existing.PolpMovementKind = rt.MovementKind(existing.PolpMovementKind);
 
-                    // Enriquecimento tardio (counterparty/categoria chegam depois do lançamento).
-                    // Só completa o que ainda é o valor automático: nome igual ao que veio do
-                    // banco e categoria ainda no fallback "Outros" — recategorização ou
-                    // renomeação feita no app nunca é sobrescrita.
+                    // Enriquecimento tardio: só completa o que ainda é automático; renomeação ou
+                    // recategorização feita no app nunca é sobrescrita.
                     if (rt.EnrichedName is not null && existing.Name == rt.RawName)
                         existing.Name = rt.EnrichedName;
-                    if (categoryName != UncategorizedFallbackName
-                        && (existing.CategoryId is null || existing.CategoryId == fallbackCategory?.Id))
-                        existing.CategoryId = await ResolveCategoryIdAsync(categoriesByName, categoryName, null, userId, ct);
+                    if (categoryName != UncategorizedFallbackName && categoryIds.ContainsKey(categoryName)
+                        && (existing.CategoryId is null || existing.CategoryId == fallbackCategoryId))
+                        existing.CategoryId = categoryId;
                     continue;
                 }
 
                 var transaction = new Transaction
                 {
-                    UserId = userId,
+                    UserId = account.UserId,
                     BankAccountId = account.Id,
-                    CategoryId = await ResolveCategoryIdAsync(categoriesByName, categoryName, null, userId, ct),
+                    CategoryId = categoryId,
                     Name = rt.EnrichedName ?? rt.RawName,
-                    Description = polpTransactionId, // guarda o id da Polp para evitar duplicar em re-syncs
+                    Description = polpTransactionId, // id da Polp: chave do upsert
                     Type = type,
                     Status = status,
                     Amount = rt.Amount,
                     DueDate = dueDate,
+                    PolpMovementKind = rt.MovementKind(PolpMovementKind.None),
                     PaidAt = paidAt
                 };
                 db.Transactions.Add(transaction);
                 existingByKey[(account.Id, polpTransactionId)] = transaction;
             }
         }
-
-        await db.SaveChangesAsync(ct);
     }
+
+    // Dia civil do usuário à meia-noite UTC, como o lançamento manual. Nunca "agora": uma data
+    // inventada mudaria a cada sync e jogaria o lançamento no mês errado.
+    private static DateTime ResolveDueDate(RemoteTransaction rt, BankAccount account, Transaction? existing, TimeZoneInfo zone)
+    {
+        if (rt.IsFuture && ParseYearMonth(rt.BillForecastDate) is { } forecast)
+        {
+            var day = Math.Min(account.DueDay ?? 1, DateTime.DaysInMonth(forecast.Year, forecast.Month));
+            return new DateTime(forecast.Year, forecast.Month, day, 0, 0, 0, DateTimeKind.Utc);
+        }
+
+        if (ToCivilDate(rt.DateTime, zone) is { } date) return date;
+        if (ToCivilDate(rt.BillPostDate, zone) is { } posted) return posted;
+        if (existing is not null) return existing.DueDate;
+
+        throw new PolpPermanentException($"Transação {rt.Id} da Polp sem data válida.");
+    }
+
+    /// <summary>Texto com Z/offset é convertido para o fuso dado; sem offset é horário de
+    /// Brasília (como a Polp interpreta); só a data ("AAAA-MM-DD") é usada como está.</summary>
+    internal static DateTime? ToCivilDate(string? text, TimeZoneInfo zone)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        if (DateTime.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateOnly))
+            return dateOnly.Year < 1900 ? null : DateTime.SpecifyKind(dateOnly, DateTimeKind.Utc);
+
+        if (!DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
+            || parsed.Year < 1900)
+            return null;
+
+        var utc = parsed.Kind == DateTimeKind.Unspecified
+            ? TimeZoneInfo.ConvertTimeToUtc(parsed, Brasilia)
+            : parsed.ToUniversalTime();
+        return DateTime.SpecifyKind(TimeZoneInfo.ConvertTimeFromUtc(utc, zone).Date, DateTimeKind.Utc);
+    }
+
+    private static (int Year, int Month)? ParseYearMonth(string? text) =>
+        DateTime.TryParseExact(text, "yyyy-MM", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) && d.Year >= 1900
+            ? (d.Year, d.Month)
+            : null;
+
+    private static bool IsPolpId(string? description) => Guid.TryParse(description, out _);
+
+    private sealed class Plan(PolpIntegration integration)
+    {
+        public PolpIntegration Integration { get; } = integration;
+        public bool Backfill { get; init; }
+        public List<PolpAccountDto> Accounts { get; } = [];
+        public List<PolpCreditCardDto> Cards { get; } = [];
+        public Dictionary<Guid, List<PolpBillDto>> Bills { get; } = [];
+        public Dictionary<Guid, TransactionBatch> Transactions { get; } = [];
+    }
+
+    // Complete = histórico inteiro, sem janela.
+    private sealed record TransactionBatch(List<RemoteTransaction> Items, bool Complete);
+
+    private sealed class IntegrationGoneException : Exception;
 
     // Visão comum de transação de conta e de cartão, só com o que o upsert precisa.
     private sealed record RemoteTransaction(
-        Guid Id, string RawName, string? EnrichedName, decimal Amount, bool IsCredit, bool IsPending,
-        string? DateTime, string? CategoryRef)
+        Guid Id, string RawName, string? EnrichedName, decimal Amount, bool IsCredit, bool IsFuture,
+        string? DateTime, string? CategoryRef, bool IsCardBillPayment,
+        string? BillPostDate = null, string? BillForecastDate = null, string? IdentificationNumber = null)
     {
+        public string CategoryName => IsCardBillPayment
+            ? TransferDetection.CardBillPaymentCategoryName
+            : PolpCategoryMap.ToCategoryName(CategoryRef);
+
+        // PAGAMENTO_FATURA é sinal do próprio lançamento, não do enriquecimento: nunca rebaixado.
+        // Sem category_ref ainda, mantém a marcação existente.
+        public PolpMovementKind MovementKind(PolpMovementKind existing) =>
+            IsCardBillPayment ? PolpMovementKind.CardBillPayment
+            : CategoryRef is null ? existing
+            : TransferDetection.ToMovementKind(CategoryRef);
+
         public static RemoteTransaction From(PolpAccountTransactionDto t) => new(
             t.Id,
             t.TransactionName ?? "Transação",
@@ -333,7 +569,8 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
             string.Equals(t.CreditDebitType, "CREDITO", StringComparison.OrdinalIgnoreCase),
             false,
             t.TransactionDateTime,
-            t.CategoryRef);
+            t.CategoryRef,
+            false);
 
         public static RemoteTransaction From(PolpCardTransactionDto t) => new(
             t.Id,
@@ -342,9 +579,69 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
             Math.Abs(t.BrazilianAmount?.Value ?? 0),
             string.Equals(t.CreditDebitType, "CREDITO", StringComparison.OrdinalIgnoreCase),
             // Sem fatura e com a data-sentinela: lançamento futuro (parcela ou agendado).
-            t.BillId is null && (t.BillPostDate?.StartsWith("0001-01-01", StringComparison.Ordinal) ?? true),
+            t.BillId is null && (t.BillPostDate?.StartsWith(FutureSentinel, StringComparison.Ordinal) ?? true),
             t.TransactionDateTime,
-            t.CategoryRef);
+            t.CategoryRef,
+            string.Equals(t.TransactionType, CardBillPaymentType, StringComparison.OrdinalIgnoreCase),
+            t.BillPostDate,
+            t.BillForecastDate,
+            t.IdentificationNumber);
+    }
+
+    // Categorias são criadas antes do lock, cada uma salva isolada: no Postgres uma violação de
+    // unicidade (corrida com outro sync) abortaria a transação do lock inteira. Só as que o upsert
+    // vai usar, para não criar categorias vazias na lista do usuário.
+    private async Task<Dictionary<string, Guid>> PrepareCategoriesAsync(Plan plan, CancellationToken ct)
+    {
+        var userId = plan.Integration.UserId;
+        await EnsureDefaultCategoriesAsync(userId, ct);
+
+        var categoriesByName = (await db.Categories
+                .Where(c => c.UserId == userId)
+                .OrderBy(c => c.CreatedAt)
+                .ToListAsync(ct))
+            .GroupBy(c => c.Name)
+            .ToDictionary(g => g.Key, g => g.First());
+        if (plan.Transactions.Count == 0) return categoriesByName.ToDictionary(kv => kv.Key, kv => kv.Value.Id);
+
+        var remoteIds = plan.Transactions.Keys.ToList();
+        var localIds = await db.BankAccounts.AsNoTracking()
+            .Where(b => b.UserId == userId && b.PolpAccountId != null && remoteIds.Contains(b.PolpAccountId.Value))
+            .Select(b => new { b.Id, Remote = b.PolpAccountId!.Value })
+            .ToListAsync(ct);
+        var accountIds = localIds.Select(a => a.Id).ToList();
+        var existing = (await db.Transactions.AsNoTracking()
+                .Where(t => t.UserId == userId && t.BankAccountId != null && accountIds.Contains(t.BankAccountId.Value) && t.Description != null)
+                .Select(t => new { AccountId = t.BankAccountId!.Value, t.Description, t.CategoryId })
+                .ToListAsync(ct))
+            .GroupBy(t => (t.AccountId, t.Description!))
+            .ToDictionary(g => g.Key, g => g.First().CategoryId);
+        var fallbackId = categoriesByName.GetValueOrDefault(UncategorizedFallbackName)?.Id;
+
+        var needed = new HashSet<string>();
+        foreach (var (remoteId, batch) in plan.Transactions)
+        {
+            var localId = localIds.FirstOrDefault(a => a.Remote == remoteId)?.Id;
+            foreach (var rt in batch.Items)
+            {
+                var name = rt.CategoryName;
+                if (localId is not Guid id || !existing.TryGetValue((id, rt.Id.ToString()), out var categoryId))
+                {
+                    needed.Add(name);
+                    needed.Add(UncategorizedFallbackName);
+                }
+                else if (name != UncategorizedFallbackName && (categoryId is null || categoryId == fallbackId))
+                {
+                    needed.Add(name);
+                }
+            }
+        }
+
+        foreach (var name in needed)
+            await ResolveCategoryIdAsync(categoriesByName, name, null, userId, ct);
+        await db.SaveChangesAsync(ct);
+
+        return categoriesByName.ToDictionary(kv => kv.Key, kv => kv.Value.Id);
     }
 
     private async Task EnsureDefaultCategoriesAsync(Guid userId, CancellationToken ct)
@@ -369,20 +666,6 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
         _ => "Conta corrente"
     };
 
-    // O Npgsql exige DateTimeKind.Utc para colunas timestamptz; DateTime.TryParse sozinho
-    // devolve Kind=Unspecified (ou Local), o que derruba o SaveChangesAsync com uma exceção
-    // não tratada, e por consequência a resposta perde os headers de CORS.
-    private static DateTime? ParseDateOrNull(string? dateStr) =>
-        DateTime.TryParse(
-            dateStr,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-            out var parsed)
-            ? parsed
-            : null;
-
-    private static DateTime ParseDateAsUtc(string? dateStr) => ParseDateOrNull(dateStr) ?? DateTime.UtcNow;
-
     // Cinza fixo que toda categoria criada automaticamente recebia antes desse ajuste (a Polp
     // quase sempre manda a cor da categoria, mas isso nunca era usado). Serve só pra identificar
     // e corrigir categorias antigas presas nesse cinza. Não é mais atribuído a categoria nova.
@@ -396,10 +679,8 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
     ];
 
     // Categoria de fallback pra quando a própria Polp não manda nenhuma categoria pra uma
-    // transação. Antes ficava CategoryId=null e a tela mostrava o texto "Sem categoria". Só que
-    // isso não é uma categoria de verdade, então não dava pra editar/reatribuir. "Outros" é uma
-    // Category normal (mesmo fluxo de criação/cor das demais), então o usuário pode renomeá-la ou
-    // mover a transação pra outra categoria como qualquer outra.
+    // transação. "Outros" é uma Category normal, então o usuário pode renomeá-la ou mover a
+    // transação pra outra categoria como qualquer outra.
     private const string UncategorizedFallbackName = "Outros";
 
     private async Task<Guid?> ResolveCategoryIdAsync(
@@ -431,18 +712,14 @@ public class PolpSyncService(AppDbContext db, IPolpService polp, IConfiguration 
 
         try
         {
-            // Salva na hora, em vez de deixar acumulada pro SaveChangesAsync em lote do fim do
-            // sync: com a constraint de unicidade (UserId, Name), uma corrida com outro sync
-            // concorrente criando essa mesma categoria só pode ser detectada e tratada aqui,
-            // isolada. Se ficasse no lote do fim, a violação derrubaria a transação inteira e
-            // junto ia todo lançamento já processado nesse sync, não só a categoria.
+            // Salva na hora: com a constraint de unicidade (UserId, Name), a corrida com outro
+            // sync criando essa mesma categoria só pode ser detectada e tratada aqui, isolada.
             await db.SaveChangesAsync(ct);
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            // Perdeu a corrida: a outra requisição commitou essa categoria primeiro. Descarta
-            // nossa tentativa (senão ela fica presa no change tracker e quebra o próximo save)
-            // e usa a que já existe, em vez de propagar o erro.
+            // Perdeu a corrida: descarta a tentativa (senão ela fica presa no change tracker e
+            // quebra o próximo save) e usa a que já existe.
             db.Entry(created).State = EntityState.Detached;
 
             var winner = await db.Categories.FirstOrDefaultAsync(c => c.UserId == userId && c.Name == categoryName, ct);

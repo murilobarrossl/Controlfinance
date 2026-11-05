@@ -90,16 +90,14 @@ public record TransactionDto(
     bool IsTransfer = false
 )
 {
-    // ownerName só é conhecido em quem lista várias transações (GetAll/GetReport/GetSummary), que
-    // já busca o nome do usuário uma vez; nula aqui deixa IsTransfer em false (comportamento atual).
-    public static TransactionDto FromEntity(Transaction t, DateTime today, string? ownerName = null) => new(
+    public static TransactionDto FromEntity(Transaction t, DateTime today) => new(
         t.Id, t.Name, t.Description,
         t.Type.ToString(), EffectiveStatus(t.Status, t.DueDate, today),
         t.Amount, t.DueDate, t.PaidAt,
         t.Category?.Name,
         t.BankAccount?.Name,
         t.IsFixed,
-        TransferDetection.IsSelfTransfer(t.Name, t.Category?.Name, ownerName)
+        TransferDetection.IsSelfTransfer(t.PolpMovementKind)
     );
 
     // Não existe job de fundo que varre pendências vencidas e grava Overdue no banco: calcula na

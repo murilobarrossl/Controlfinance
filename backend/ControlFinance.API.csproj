@@ -45,4 +45,8 @@
     <PackageReference Include="System.Formats.Asn1"                           Version="8.0.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ControlFinance.API.Tests" />
+  </ItemGroup>
+
 </Project>

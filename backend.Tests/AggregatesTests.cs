@@ -34,13 +34,13 @@ public class AggregatesTests
     }
 
     private static void Add(TestDb t, BankAccount? account, int count, TransactionType type, decimal amount, string name,
-        DateTime first, Category? category = null)
+        DateTime first, Category? category = null, PolpMovementKind movementKind = PolpMovementKind.None)
     {
         for (var i = 0; i < count; i++)
             t.Db.Transactions.Add(new Transaction
             {
                 UserId = t.User.Id, BankAccountId = account?.Id, CategoryId = category?.Id, Name = $"{name}{(count > 1 ? " " + i : "")}",
-                Type = type, Status = TransactionStatus.Paid, Amount = amount,
+                Type = type, Status = TransactionStatus.Paid, Amount = amount, PolpMovementKind = movementKind,
                 DueDate = DateTime.SpecifyKind(first.AddMinutes(i), DateTimeKind.Utc)
             });
         t.Db.SaveChanges();
@@ -60,8 +60,10 @@ public class AggregatesTests
         Add(t, account, 1, TransactionType.Income, 250.50m, "Venda", new DateTime(2025, 3, 5));
         Add(t, account, 1, TransactionType.Expense, 900m, "No limite superior", To);
         Add(t, account, 1, TransactionType.Expense, 800m, "Antes do inicio", From.AddSeconds(-1));
-        Add(t, account, 1, TransactionType.Expense, 5000m, "Transferência enviada|IGOR L LIMA", new DateTime(2025, 1, 15));
-        Add(t, account, 1, TransactionType.Income, 5000m, "Transferência recebida|Igor Luis Lima", new DateTime(2025, 1, 15));
+        Add(t, account, 1, TransactionType.Expense, 5000m, "Transferência enviada|IGOR L LIMA", new DateTime(2025, 1, 15),
+            movementKind: PolpMovementKind.OwnTransfer);
+        Add(t, account, 1, TransactionType.Income, 5000m, "Transferência recebida|Igor Luis Lima", new DateTime(2025, 1, 15),
+            movementKind: PolpMovementKind.OwnTransfer);
         Add(t, other, 1, TransactionType.Expense, 77m, "Outra conta", new DateTime(2025, 2, 10));
         var stranger = new User { Name = "Outro", Email = "o@x.com", DocumentHash = "h2", PasswordHash = "x" };
         t.Db.Users.Add(stranger);

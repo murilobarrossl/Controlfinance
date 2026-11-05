@@ -180,6 +180,7 @@ public class AccountController(
 
         await using (var tx = await db.Database.BeginTransactionAsync(ct))
         {
+            await disconnectService.MarkAccountResourcesRemovedAsync(UserId, ct);
             // Installment não tem FK pra Users (só UserId solto), então não sai no cascade.
             await db.Installments.Where(i => i.UserId == UserId).ExecuteDeleteAsync(ct);
             // O resto (contas, transações, categorias, cartões, decisões de recorrência,

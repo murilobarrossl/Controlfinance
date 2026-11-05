@@ -8,5 +8,5 @@ public static class LegalDocuments
 {
     public const string TermsVersion = "2026-10-31";
     public const string PrivacyVersion = "2026-10-31";
-    public const string BankConnectionNoticeVersion = "2026-10-30";
+    public const string BankConnectionNoticeVersion = "2026-11-04";
 }

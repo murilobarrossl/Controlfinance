@@ -27,6 +27,8 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<ConsentRecord> ConsentRecords => Set<ConsentRecord>();
     public DbSet<PendingProviderDeletion> PendingProviderDeletions => Set<PendingProviderDeletion>();
     public DbSet<AccessLogEntry> AccessLogs => Set<AccessLogEntry>();
+    public DbSet<PolpWebhookEvent> PolpWebhookEvents => Set<PolpWebhookEvent>();
+    public DbSet<RemovedPolpResource> RemovedPolpResources => Set<RemovedPolpResource>();
     public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -132,6 +134,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(t => t.Amount).HasConversion(decimalConverter).HasColumnName("AmountEncrypted");
             e.Property(t => t.Type).HasConversion<string>();
             e.Property(t => t.Status).HasConversion<string>();
+            e.Property(t => t.PolpMovementKind).HasConversion<string>().HasMaxLength(20);
             e.HasOne(t => t.User)
              .WithMany()
              .HasForeignKey(t => t.UserId)
@@ -224,6 +227,29 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(a => a.Event).IsRequired().HasMaxLength(30);
             e.Property(a => a.IpAddress).HasConversion(nullableTextConverter).HasColumnName("IpAddressEncrypted");
             e.HasIndex(a => a.OccurredAt);
+        });
+
+        modelBuilder.Entity<PolpWebhookEvent>(e =>
+        {
+            e.HasKey(w => w.Id);
+            e.Property(w => w.Event).IsRequired().HasMaxLength(PolpWebhookEvent.EventMaxLength);
+            e.Property(w => w.Resource).HasMaxLength(PolpWebhookEvent.ResourceMaxLength);
+            e.Property(w => w.ResourceId).HasMaxLength(PolpWebhookEvent.ResourceIdMaxLength);
+            e.Property(w => w.QueryParameters).HasMaxLength(PolpWebhookEvent.QueryParametersMaxLength);
+            e.Property(w => w.DedupKey).IsRequired().HasMaxLength(PolpWebhookEvent.DedupKeyMaxLength);
+            e.Property(w => w.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(w => w.LastError).HasMaxLength(PolpWebhookEvent.LastErrorMaxLength);
+            // Dedupe só entre avisos ainda não processados: um aviso igual depois de Done precisa
+            // virar linha nova, senão uma mudança real na Polp seria ignorada.
+            e.HasIndex(w => w.DedupKey).IsUnique().HasFilter("\"Status\" IN ('Pending', 'Processing')");
+            e.HasIndex(w => new { w.Status, w.NextAttemptAt });
+            e.HasIndex(w => new { w.Status, w.Priority, w.NextAttemptAt });
+        });
+
+        modelBuilder.Entity<RemovedPolpResource>(e =>
+        {
+            e.HasKey(r => r.PolpId);
+            e.Property(r => r.PolpId).ValueGeneratedNever();
         });
 
         modelBuilder.Entity<RevokedToken>(e =>

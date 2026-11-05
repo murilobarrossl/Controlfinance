@@ -18,6 +18,7 @@ import { CardIcon, WalletIcon, BellIcon, HistoryIcon } from "../../../components
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import { formatCurrency, formatDate } from "../../../utils/financeMath.js";
 import { summarizeCards, groupCards } from "../../../utils/cardGroups.js";
+import { buildUpcoming } from "../../../utils/upcomingDues.js";
 import CardStatement from "./CardStatement.jsx";
 import "./Cartoes.css";
 
@@ -35,7 +36,6 @@ const EMPTY_INSTALLMENT_FORM = {
   // só, já que são duas fontes diferentes.
   cardKey: "",
 };
-const MAX_UPCOMING = 8;
 const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
 const KIND_CLASS = { Fatura: "invoice", Parcela: "installment", Conta: "bill" };
 
@@ -47,46 +47,6 @@ function todayIso() {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-
-// "Próximos vencimentos" (antes no Dashboard inteligente) junta as três coisas que vencem e que
-// esta tela já conhece: fatura de cada cartão (só quando o banco mandou a data de verdade, sem
-// estimar a partir do dia de vencimento), a próxima parcela de cada parcelamento e as contas
-// pendentes/atrasadas de todas as contas, já que esta página não depende da conta selecionada.
-function buildUpcoming(cards, installments, pendingTransactions) {
-  const invoices = cards
-    .filter((c) => c.invoiceDueDate)
-    .map((c) => ({
-      key: `invoice-${c.id}`,
-      kind: "Fatura",
-      name: `Fatura ${c.name}`,
-      meta: c.brand || "Cartão de crédito",
-      date: c.invoiceDueDate,
-      amount: c.currentInvoice,
-      status: "Pending",
-    }));
-  const nextInstallments = installments.map((i) => ({
-    key: `installment-${i.id}`,
-    kind: "Parcela",
-    name: i.description,
-    meta: `${i.currentInstallment}/${i.totalInstallments} · ${i.creditCardName || "Sem cartão vinculado"}`,
-    date: i.nextDueDate,
-    amount: i.installmentAmount,
-    status: "Pending",
-  }));
-  const bills = pendingTransactions.map((t) => ({
-    key: `transaction-${t.id}`,
-    kind: "Conta",
-    name: t.name,
-    meta: `${t.categoryName || "Sem categoria"}${t.bankAccountName ? ` · ${t.bankAccountName}` : ""}`,
-    date: t.dueDate,
-    amount: t.amount,
-    status: t.status,
-  }));
-
-  return [...invoices, ...nextInstallments, ...bills]
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-    .slice(0, MAX_UPCOMING);
 }
 
 const EMPTY_LIST = [];

@@ -105,7 +105,8 @@ public class TransactionReportTests
         var account = t.AddAccount();
         var day = new DateTime(2025, 3, 10);
         t.AddTransaction(account, TransactionType.Expense, 40m, day, "Pix enviado mercado");
-        t.AddTransaction(account, TransactionType.Expense, 5000m, day, "Pix enviado Transferência enviada|IGOR L LIMA");
+        t.AddTransaction(account, TransactionType.Expense, 5000m, day, "Pix enviado Transferência enviada|IGOR L LIMA",
+            movementKind: PolpMovementKind.OwnTransfer);
 
         var all = await Report(t);
         var searched = await Report(t, search: "pix");

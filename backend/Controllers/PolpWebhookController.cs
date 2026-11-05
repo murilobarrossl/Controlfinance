@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using ControlFinance.API.Models;
 using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,15 +14,16 @@ namespace ControlFinance.API.Controllers;
 //    se errado, para não confirmar que o endpoint existe;
 //  - assinatura HMAC-SHA256 do corpo bruto em X-Webhook-Signature (Polp:WebhookSigningSecret): 401
 //    se ausente ou inválida. A URL vaza em log de proxy; o signing secret nunca trafega.
-// Sem a configuração completa, nada é aceito. A Polp não assina timestamp, então não há proteção a
-// replay além da deduplicação de PolpWebhookProcessor, que só aceita ids já existentes no banco.
+//    Desligável (Polp:WebhookRequireSignature=false) porque a Polp não documenta assinatura: o
+//    aviso não carrega dado, então um aviso forjado só custa uma consulta a mais à Polp.
+// 200 só depois de o aviso estar gravado na inbox: com 500 a Polp reenvia em vez de ele se perder.
 // Corpo, token e assinatura nunca são logados.
 [ApiController]
 [Route("api/polp/webhook")]
 [AllowAnonymous]
 public class PolpWebhookController(
     IConfiguration config,
-    IServiceScopeFactory scopeFactory,
+    IPolpInbox inbox,
     ILogger<PolpWebhookController> logger) : ControllerBase
 {
     public const string SignatureHeader = "X-Webhook-Signature";
@@ -33,52 +36,73 @@ public class PolpWebhookController(
     {
         if (!IsValidToken(token)) return NotFound();
 
-        var signingSecret = config["Polp:WebhookSigningSecret"];
-        if (!ConfigSecrets.IsStrongSecret(signingSecret) || signingSecret == config["Polp:WebhookToken"])
-        {
-            logger.LogError("Webhook da Polp recusado: Polp:WebhookSigningSecret ausente ou inválido");
-            return StatusCode(StatusCodes.Status503ServiceUnavailable);
-        }
-
         var body = await ReadBodyAsync(ct);
 
-        if (!SignatureMatches(body, signingSecret!))
+        if (ConfigSecrets.IsWebhookSignatureRequired(config))
         {
-            logger.LogWarning("Webhook da Polp recusado: assinatura ausente ou inválida");
-            return Unauthorized();
+            var signingSecret = config["Polp:WebhookSigningSecret"];
+            if (!ConfigSecrets.IsStrongSecret(signingSecret) || signingSecret == config["Polp:WebhookToken"])
+            {
+                logger.LogError("Webhook da Polp recusado: Polp:WebhookSigningSecret ausente ou inválido");
+                return StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
+
+            if (!SignatureMatches(body, signingSecret!))
+            {
+                logger.LogWarning("Webhook da Polp recusado: assinatura ausente ou inválida");
+                return Unauthorized();
+            }
         }
 
-        PolpWebhookPayload? payload;
+        if (!TryParse(body, out var evt)) return BadRequest();
+        if (evt is null) return Ok();
+
         try
         {
-            payload = JsonSerializer.Deserialize<PolpWebhookPayload>(body);
+            await inbox.EnqueueAsync(evt, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogError("Falha ao gravar webhook da Polp na inbox ({ErrorType}, evento {Event})", ex.GetType().Name, evt.Event);
+            return StatusCode(StatusCodes.Status500InternalServerError);
+        }
+
+        return Ok();
+    }
+
+    // evt nulo com retorno true: aviso sem "event", que nunca teve o que processar.
+    internal static bool TryParse(byte[] body, out PolpInboxEvent? evt)
+    {
+        evt = null;
+        WebhookBody? payload;
+        try
+        {
+            payload = JsonSerializer.Deserialize<WebhookBody>(body);
         }
         catch (JsonException)
         {
-            return BadRequest();
+            return false;
         }
-        if (payload is null) return BadRequest();
 
-        if (PolpWebhookProcessor.IsDuplicate(payload)) return Ok();
+        if (payload is null
+            || payload.Event?.Length > PolpWebhookEvent.EventMaxLength
+            || payload.Resource?.Length > PolpWebhookEvent.ResourceMaxLength
+            || payload.QueryParameters?.Length > PolpWebhookEvent.QueryParametersMaxLength)
+            return false;
 
-        // Responde na hora e processa em background, com escopo de DI próprio (o DbContext desta
-        // requisição é descartado quando ela responde). A Polp não precisa esperar o sync.
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                using var scope = scopeFactory.CreateScope();
-                var processor = scope.ServiceProvider.GetRequiredService<PolpWebhookProcessor>();
-                await processor.ProcessAsync(payload, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                // Só o tipo do evento: nunca o payload.
-                logger.LogError(ex, "Falha ao processar webhook da Polp (evento {Event})", payload.Event);
-            }
-        });
+        if (string.IsNullOrWhiteSpace(payload.Event)) return true;
 
-        return Ok();
+        // Guid normalizado: o mesmo recurso em maiúsculas não pode escapar da deduplicação.
+        evt = new PolpInboxEvent(payload.Event, payload.Resource, payload.ResourceId?.ToString("D"), payload.QueryParameters);
+        return true;
+    }
+
+    private sealed class WebhookBody
+    {
+        [JsonPropertyName("event")] public string? Event { get; set; }
+        [JsonPropertyName("resource")] public string? Resource { get; set; }
+        [JsonPropertyName("resource_id")] public Guid? ResourceId { get; set; }
+        [JsonPropertyName("query_parameters")] public string? QueryParameters { get; set; }
     }
 
     private bool IsValidToken(string provided)

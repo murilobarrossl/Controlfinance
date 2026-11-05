@@ -25,8 +25,6 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
         var accountDto = BankAccountDto.FromEntity(account);
 
-        var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
-
         var today = await UserTodayAsync(db, ct);
         var startOfMonth = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var endOfMonth = startOfMonth.AddMonths(1);
@@ -46,7 +44,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
         // Continuam aparecendo no extrato (pendingEntities abaixo não passa por esse filtro), só
         // não entram nas somas/gráfico de categoria.
         var nonTransferMonthly = monthlyTransactions
-            .Where(t => !TransferDetection.IsSelfTransfer(t.Name, t.Category?.Name, ownerName))
+            .Where(t => !TransferDetection.IsSelfTransfer(t.PolpMovementKind))
             .ToList();
 
         var totalIncome = nonTransferMonthly
@@ -70,7 +68,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             .Take(100)
             .ToListAsync();
 
-        var pending = pendingEntities.Select(t => TransactionDto.FromEntity(t, today, ownerName)).ToList();
+        var pending = pendingEntities.Select(t => TransactionDto.FromEntity(t, today)).ToList();
 
         var expensesByCategory = nonTransferMonthly
             .Where(t => t.Type == TransactionType.Expense && t.CategoryId.HasValue)

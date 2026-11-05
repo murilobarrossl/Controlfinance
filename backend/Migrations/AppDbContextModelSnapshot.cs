@@ -331,6 +331,9 @@ namespace ControlFinance.API.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("EnrichmentPending")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ExecutionStatus")
                         .HasColumnType("text");
 
@@ -367,6 +370,74 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("PolpIntegrations");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.PolpWebhookEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DedupKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Event")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("LockedUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("QueryParameters")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Resource")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ResourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DedupKey")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN ('Pending', 'Processing')");
+
+                    b.HasIndex("Status", "NextAttemptAt");
+
+                    b.HasIndex("Status", "Priority", "NextAttemptAt");
+
+                    b.ToTable("PolpWebhookEvents");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.RecurrenceDecision", b =>
@@ -409,6 +480,19 @@ namespace ControlFinance.API.Migrations
                         .IsUnique();
 
                     b.ToTable("RecurrenceDecisions");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.RemovedPolpResource", b =>
+                {
+                    b.Property<Guid>("PolpId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("RemovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("PolpId");
+
+                    b.ToTable("RemovedPolpResources");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.RevokedToken", b =>
@@ -464,6 +548,11 @@ namespace ControlFinance.API.Migrations
 
                     b.Property<DateTime?>("PaidAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PolpMovementKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<DateTime?>("ReminderSentAt")
                         .HasColumnType("timestamp with time zone");

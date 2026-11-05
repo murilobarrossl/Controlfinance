@@ -4,4 +4,4 @@
 // versão nos dois lugares.
 export const TERMS_VERSION = "2026-10-31";
 export const PRIVACY_VERSION = "2026-10-31";
-export const BANK_CONNECTION_NOTICE_VERSION = "2026-10-30";
+export const BANK_CONNECTION_NOTICE_VERSION = "2026-11-04";

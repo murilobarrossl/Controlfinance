@@ -11,7 +11,10 @@ public static class PolpCategoryMap
     [
         ("INCOME_SALARY", "Salário"),
         ("INCOME", "Receitas"),
+        ("TRANSFER_IN_ACCOUNT_TRANSFER", TransferDetection.SelfTransferCategoryName),
+        ("TRANSFER_OUT_ACCOUNT_TRANSFER", TransferDetection.SelfTransferCategoryName),
         ("TRANSFER_", "Transferências"),
+        ("LOAN_PAYMENTS_CREDIT_CARD_PAYMENT", TransferDetection.CardBillPaymentCategoryName),
         ("LOAN_", "Empréstimos"),
         ("BANK_FEES", "Tarifas"),
         ("ENTERTAINMENT", "Lazer"),

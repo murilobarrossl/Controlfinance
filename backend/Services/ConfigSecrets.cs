@@ -23,8 +23,11 @@ public static class ConfigSecrets
     public static bool IsPolpEnabled(IConfiguration config) =>
         IsConfigured(config["Polp:ClientId"]) && IsConfigured(config["Polp:ClientSecret"]);
 
+    public static bool IsWebhookSignatureRequired(IConfiguration config) =>
+        config.GetValue("Polp:WebhookRequireSignature", true);
+
     // Só nomes de chave nas mensagens, nunca valores.
-    public static List<string> Validate(IConfiguration config)
+    public static List<string> Validate(IConfiguration config, bool isDevelopment)
     {
         var errors = new List<string>();
 
@@ -37,7 +40,8 @@ public static class ConfigSecrets
         if (IsPolpEnabled(config))
         {
             RequireStrong(config, "Polp:WebhookToken", errors);
-            RequireStrong(config, "Polp:WebhookSigningSecret", errors);
+            if (IsWebhookSignatureRequired(config))
+                RequireStrong(config, "Polp:WebhookSigningSecret", errors);
 
             var previous = config["Polp:WebhookTokenPrevious"];
             if (!string.IsNullOrWhiteSpace(previous) && !IsStrongSecret(previous))
@@ -46,6 +50,10 @@ public static class ConfigSecrets
             RequireDistinct(config, errors,
                 "Polp:WebhookToken", "Polp:WebhookTokenPrevious", "Polp:WebhookSigningSecret",
                 "JwtSettings:SecretKey", "Encryption:Key");
+
+            // O Sandbox fabrica contas e valores: em produção o usuário veria dados inventados como reais.
+            if (!isDevelopment && (config["Polp:BaseUrl"] ?? "").Contains("/sandbox", StringComparison.OrdinalIgnoreCase))
+                errors.Add("Polp:BaseUrl aponta para o Sandbox da Polp");
         }
 
         return errors;

@@ -250,8 +250,9 @@ export default function ConnectBankPage() {
 
               <dt>Como a sincronização funciona</dt>
               <dd>
-                Os dados são atualizados quando você abre o painel ou pede uma sincronização (no máximo a
-                cada 5 minutos por banco). Não é em tempo real.
+                Depois da primeira importação, a Polp atualiza os dados periodicamente, conforme a agenda
+                de cada banco, e nos avisa quando há novidades. Você também pode pedir a atualização do
+                saldo de uma conta no seletor de contas. Não é em tempo real.
               </dd>
 
               <dt>Como desconectar</dt>

@@ -1,48 +1,49 @@
+using ControlFinance.API.Models;
 using ControlFinance.API.Services;
 
 namespace ControlFinance.API.Tests;
 
 public class TransferDetectionTests
 {
-    [Fact]
-    public void Nome_do_titular_abreviado_no_banco_e_reconhecido()
+    [Theory]
+    [InlineData("LOAN_PAYMENTS_CREDIT_CARD_PAYMENT", PolpMovementKind.CardBillPayment)]
+    [InlineData("TRANSFER_IN_ACCOUNT_TRANSFER", PolpMovementKind.OwnTransfer)]
+    [InlineData("TRANSFER_OUT_ACCOUNT_TRANSFER", PolpMovementKind.OwnTransfer)]
+    public void Codigos_de_pagamento_de_fatura_e_transferencia_propria_viram_o_tipo_certo(string categoryRef, PolpMovementKind expected)
     {
-        Assert.True(TransferDetection.IsSelfTransfer("Transferência enviada|IGOR L ACCIOLY LINS LIMA", null, "Igor Luis Accioly Lins Lima"));
+        Assert.Equal(expected, TransferDetection.ToMovementKind(categoryRef));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("MEDICAL_PHARMACIES_AND_SUPPLEMENTS")]
+    [InlineData("TRANSFER_OUT_WITHDRAWAL")]
+    [InlineData("TRANSFER_IN_DEPOSIT")]
+    [InlineData("TRANSFER_OUT_ACCOUNT_TRANSFER_X")]
+    [InlineData("LOAN_PAYMENTS_CREDIT_CARD_PAYMENT_X")]
+    [InlineData("transfer_out_account_transfer")]
+    [InlineData("loan_payments_credit_card_payment")]
+    [InlineData("LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT")]
+    [InlineData("FOOD_AND_DRINK_GROCERIES")]
+    [InlineData("Pagamento de fatura")]
+    [InlineData("Transferência mesma titularidade")]
+    public void Qualquer_outro_codigo_vira_None(string? categoryRef)
+    {
+        Assert.Equal(PolpMovementKind.None, TransferDetection.ToMovementKind(categoryRef));
+    }
+
+    [Theory]
+    [InlineData(PolpMovementKind.CardBillPayment)]
+    [InlineData(PolpMovementKind.OwnTransfer)]
+    public void Pagamento_de_fatura_e_transferencia_entre_contas_proprias_sao_movimentacao_propria(PolpMovementKind kind)
+    {
+        Assert.True(TransferDetection.IsSelfTransfer(kind));
     }
 
     [Fact]
-    public void Contraparte_com_outro_sobrenome_nao_e_transferencia_propria()
+    public void None_conta_normalmente()
     {
-        Assert.False(TransferDetection.IsSelfTransfer("Transferência enviada|Igor Souza", null, "Igor Lima"));
-    }
-
-    [Fact]
-    public void Categoria_de_mesma_titularidade_basta_sem_nome_do_dono()
-    {
-        Assert.True(TransferDetection.IsSelfTransfer("Pix enviado", "Transferência mesma titularidade", null));
-    }
-
-    [Fact]
-    public void Sem_nome_do_dono_e_sem_categoria_propria_nao_exclui_nada()
-    {
-        Assert.False(TransferDetection.IsSelfTransfer("Transferência enviada|Igor Lima", null, null));
-    }
-
-    [Fact]
-    public void Compra_comum_nao_e_transferencia()
-    {
-        Assert.False(TransferDetection.IsSelfTransfer("Mercado Igor Lima", "Alimentação", "Igor Lima"));
-    }
-
-    [Fact]
-    public void Nome_vazio_nunca_e_transferencia()
-    {
-        Assert.False(TransferDetection.IsSelfTransfer("  ", "Transferência mesma titularidade", "Igor Lima"));
-    }
-
-    [Fact]
-    public void Acentos_e_caixa_diferentes_ainda_casam()
-    {
-        Assert.True(TransferDetection.IsSelfTransfer("TED enviada|JOSÉ DA SILVA", null, "Jose da Silva"));
+        Assert.False(TransferDetection.IsSelfTransfer(PolpMovementKind.None));
     }
 }

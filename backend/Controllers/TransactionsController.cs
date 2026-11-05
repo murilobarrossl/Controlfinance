@@ -29,8 +29,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         var result = await ProjectToDto(query.OrderByDescending(t => t.DueDate).Take(MaxResults)).ToListAsync();
 
-        var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
-        result = WithComputedFields(result, ownerName, today);
+        result = WithComputedFields(result, today);
 
         return Ok(result);
     }
@@ -55,11 +54,10 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         return query;
     }
 
-    private static List<TransactionDto> WithComputedFields(List<TransactionDto> items, string? ownerName, DateTime today) =>
+    private static List<TransactionDto> WithComputedFields(List<TransactionDto> items, DateTime today) =>
         items
             .Select(t => t with
             {
-                IsTransfer = TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName),
                 Status = t.Status == nameof(TransactionStatus.Pending) && t.DueDate.Date < today
                     ? nameof(TransactionStatus.Overdue)
                     : t.Status,
@@ -122,8 +120,6 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             query = query.Where(t => t.DueDate >= startOfMonth && t.DueDate < endOfMonth);
         }
 
-        var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync();
-
         // Amount é criptografado (guardado como texto): "ORDER BY"/"SUM" direto na coluna
         // cifrada ou dá erro de SQL, ou (no caso do ORDER BY) roda sem erro nenhum e devolve uma
         // ordem sem sentido, porque estaria ordenando o texto cifrado, não o valor real. Por
@@ -148,7 +144,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             if (!string.IsNullOrWhiteSpace(search))
                 all = all.Where(t => MatchesSearch(t.Name, search)).ToList();
             totalCount = all.Count;
-            all = WithComputedFields(all, ownerName, today);
+            all = WithComputedFields(all, today);
             items = SortInMemory(all, sortBy, desc).Skip((page - 1) * pageSize).Take(pageSize).ToList();
         }
         else
@@ -156,10 +152,10 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             totalCount = await query.CountAsync();
             var ordered = ApplySort(query, sortBy, desc);
             items = await ProjectToDto(ordered.Skip((page - 1) * pageSize).Take(pageSize)).ToListAsync();
-            items = WithComputedFields(items, ownerName, today);
+            items = WithComputedFields(items, today);
         }
 
-        (totalIncome, totalExpense) = await SumTotalsAsync(query, search, ownerName);
+        (totalIncome, totalExpense) = await SumTotalsAsync(query, search);
 
         return Ok(new TransactionReportDto(items, totalCount, totalIncome, totalExpense));
     }
@@ -183,14 +179,12 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         if (rangeError is not null)
             return BadRequest(new { message = rangeError });
 
-        var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync(ct);
-
         var today = await UserTodayAsync(db, ct);
         var rows = FilteredQuery(bankAccountId, null, null, today)
             .Where(t => t.DueDate >= start && t.DueDate < end)
             .OrderByDescending(t => t.DueDate)
             .ThenBy(t => t.Id)
-            .Select(t => new { t.Type, t.Amount, t.Name, t.DueDate, CategoryName = t.Category != null ? t.Category.Name : null })
+            .Select(t => new { t.Type, t.Amount, t.Name, t.DueDate, CategoryName = t.Category != null ? t.Category.Name : null, t.PolpMovementKind })
             .AsNoTracking()
             .AsAsyncEnumerable();
 
@@ -202,7 +196,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         await foreach (var t in rows.WithCancellation(ct))
         {
-            if (TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName)) continue;
+            if (TransferDetection.IsSelfTransfer(t.PolpMovementKind)) continue;
 
             var categoryName = string.IsNullOrEmpty(t.CategoryName) ? null : t.CategoryName;
             var monthKey = (t.DueDate.Year, t.DueDate.Month);
@@ -244,17 +238,17 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
     }
 
     private static async Task<(decimal Income, decimal Expense)> SumTotalsAsync(
-        IQueryable<Transaction> query, string? search, string? ownerName)
+        IQueryable<Transaction> query, string? search)
     {
         decimal income = 0, expense = 0;
         var rows = query
-            .Select(t => new { t.Type, t.Amount, t.Name, CategoryName = t.Category != null ? t.Category.Name : null })
+            .Select(t => new { t.Type, t.Amount, t.Name, t.PolpMovementKind })
             .AsAsyncEnumerable();
 
         await foreach (var t in rows)
         {
             if (!string.IsNullOrWhiteSpace(search) && !MatchesSearch(t.Name, search)) continue;
-            if (TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName)) continue;
+            if (TransferDetection.IsSelfTransfer(t.PolpMovementKind)) continue;
             if (t.Type == TransactionType.Income) income += t.Amount;
             else if (t.Type == TransactionType.Expense) expense += t.Amount;
         }
@@ -302,8 +296,6 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         if (rangeError is not null)
             return BadRequest(new { message = rangeError });
 
-        var ownerName = await db.Users.Where(u => u.Id == UserId).Select(u => u.Name).FirstOrDefaultAsync(ct);
-
         var today = await UserTodayAsync(db, ct);
         var rows = ProjectToDto(FilteredQuery(bankAccountId, null, type, today)
                 .Where(t => t.DueDate >= start && t.DueDate < end)
@@ -315,13 +307,13 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         var items = new List<TransactionDto>();
         await foreach (var t in rows.WithCancellation(ct))
         {
-            if (TransferDetection.IsSelfTransfer(t.Name, t.CategoryName, ownerName)) continue;
+            if (t.IsTransfer) continue;
             if (category is not null && (string.IsNullOrEmpty(t.CategoryName) ? "Sem categoria" : t.CategoryName) != category) continue;
             if (establishment is not null && EstablishmentKey(t.Name) != establishment) continue;
             items.Add(t);
         }
 
-        return Ok(WithComputedFields(items, ownerName, today));
+        return Ok(WithComputedFields(items, today));
     }
 
     private static (DateTime Start, DateTime End, string? Error) ParseRange(string? from, string? to)
@@ -347,7 +339,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             t.Category != null ? t.Category.Name : null,
             t.BankAccount != null ? t.BankAccount.Name : null,
             t.IsFixed,
-            false
+            TransferDetection.IsSelfTransfer(t.PolpMovementKind)
         ));
 
     // Todo critério de ordenação termina com ThenBy(Id): DueDate (e os outros campos) frequentemente

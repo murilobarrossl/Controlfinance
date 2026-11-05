@@ -18,7 +18,7 @@ public enum RemoteDeletionOutcome
 // Desconectar um banco = parar de sincronizar + apagar tudo que veio daquela conexão + pedir à
 // Polp que exclua a integração. Antes, "Sair" só marcava a conta como inativa: as transações
 // ficavam guardadas e o sync automático continuava buscando dados dessa conexão na Polp.
-public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<PolpDisconnectService> logger)
+public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrationLock integrationLock, ILogger<PolpDisconnectService> logger)
 {
     /// <summary>Status local de uma integração cuja exclusão na Polp ainda não foi aceita. Toda
     /// rota de sincronização ignora integrações nesse status.</summary>
@@ -26,19 +26,18 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
 
     public async Task<RemoteDeletionOutcome> DisconnectAsync(PolpIntegration local, CancellationToken ct)
     {
-        // Mesmo lock do sync: espera um sync em andamento dessa conexão terminar antes de apagar,
-        // senão ele regravaria contas/transações logo depois da exclusão.
-        await PolpSyncService.SyncOneWithLockAsync(async () =>
-        {
-            // Marca primeiro: a partir daqui nenhum sync novo pega essa integração, mesmo que a
-            // exclusão local abaixo falhe no meio.
-            local.Status = PendingStatus;
-            local.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync(ct);
+        // Marca antes e fora do lock: um sync em andamento pode segurar o lock enquanto grava, e
+        // a partir daqui ele (e qualquer sync novo) desiste em vez de gravar.
+        await db.PolpIntegrations
+            .Where(p => p.Id == local.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.Status, PendingStatus)
+                .SetProperty(p => p.UpdatedAt, DateTime.UtcNow), ct);
+        await db.Entry(local).ReloadAsync(ct);
 
-            await DeleteConnectionDataAsync(local.UserId, local.PolpIntegrationId, ct);
-            return 0;
-        }, local.Id, ct);
+        // Sob o lock: um sync que já tinha passado da checagem termina de gravar antes, e o que
+        // ele gravou é apagado aqui.
+        await DeleteConnectionDataLockedAsync(local, ct);
 
         return await TryRemoteDeleteAsync(local, ct);
     }
@@ -50,7 +49,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
         var pending = await db.PolpIntegrations.Where(p => p.Status == PendingStatus).ToListAsync(ct);
         foreach (var local in pending)
         {
-            await DeleteConnectionDataAsync(local.UserId, local.PolpIntegrationId, ct);
+            await DeleteConnectionDataLockedAsync(local, ct);
             await TryRemoteDeleteAsync(local, ct);
         }
 
@@ -69,6 +68,13 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
         }
         if (orphaned.Count > 0) await db.SaveChangesAsync(ct);
     }
+
+    private Task<int> DeleteConnectionDataLockedAsync(PolpIntegration local, CancellationToken ct) =>
+        integrationLock.RunAsync(db, local.Id, async () =>
+        {
+            await DeleteConnectionDataAsync(local.UserId, local.PolpIntegrationId, ct);
+            return 0;
+        }, ct);
 
     /// <summary>
     /// Usado na exclusão da conta: tenta pedir a exclusão de todas as integrações na Polp na hora;
@@ -117,12 +123,35 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
 
     private async Task DeleteConnectionDataAsync(Guid userId, Guid polpIntegrationId, CancellationToken ct)
     {
-        var accountIds = await db.BankAccounts
+        var accounts = await db.BankAccounts
             .Where(b => b.UserId == userId && b.PolpIntegrationId == polpIntegrationId)
-            .Select(b => b.Id)
+            .Select(b => new { b.Id, b.PolpAccountId })
             .ToListAsync(ct);
 
-        await DeleteAccountsDataAsync(db, userId, accountIds, ct);
+        await using var tx = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
+
+        await RemovedPolpResources.MarkAsync(db,
+            accounts.Where(a => a.PolpAccountId.HasValue).Select(a => a.PolpAccountId!.Value).Append(polpIntegrationId),
+            DateTime.UtcNow, ct);
+        await DeleteAccountsDataAsync(db, userId, accounts.Select(a => a.Id).ToList(), ct);
+
+        if (tx is not null) await tx.CommitAsync(ct);
+    }
+
+    /// <summary>Exclusão da conta: marca como removidos os consentimentos e as contas/cartões da
+    /// Polp do usuário. Chamar na mesma transação que apaga os dados.</summary>
+    public async Task MarkAccountResourcesRemovedAsync(Guid userId, CancellationToken ct)
+    {
+        var consentIds = await db.PolpIntegrations
+            .Where(p => p.UserId == userId)
+            .Select(p => p.PolpIntegrationId)
+            .ToListAsync(ct);
+        var resourceIds = await db.BankAccounts
+            .Where(b => b.UserId == userId && b.PolpIntegrationId != null && b.PolpAccountId != null)
+            .Select(b => b.PolpAccountId!.Value)
+            .ToListAsync(ct);
+
+        await RemovedPolpResources.MarkAsync(db, consentIds.Concat(resourceIds), DateTime.UtcNow, ct);
     }
 
     /// <summary>
@@ -134,7 +163,9 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
     {
         if (accountIds.Count == 0) return;
 
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // Dentro do IIntegrationLock a transação já existe; fora dele (exclusão de uma conta
+        // avulsa) abre a própria.
+        await using var tx = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
 
         await db.RecurrenceDecisions
             .Where(r => r.UserId == userId && accountIds.Contains(r.BankAccountId))
@@ -149,7 +180,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, ILogger<P
             .Where(b => b.UserId == userId && accountIds.Contains(b.Id))
             .ExecuteDeleteAsync(ct);
 
-        await tx.CommitAsync(ct);
+        if (tx is not null) await tx.CommitAsync(ct);
     }
 }
 

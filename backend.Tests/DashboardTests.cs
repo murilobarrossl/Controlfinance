@@ -134,27 +134,15 @@ public class DashboardTests
         var day = MonthStart().AddDays(9);
         t.AddTransaction(account, TransactionType.Income, 1000m, day, "Salario");
         t.AddTransaction(account, TransactionType.Expense, 300m, day, "Mercado");
-        t.AddTransaction(account, TransactionType.Expense, 2000m, day, "Transferência enviada|IGOR L LIMA");
-        t.AddTransaction(account, TransactionType.Income, 2000m, day, "Transferência recebida|Igor Luis Lima");
+        t.AddTransaction(account, TransactionType.Expense, 2000m, day, "Transferência enviada|IGOR L LIMA",
+            movementKind: PolpMovementKind.OwnTransfer);
+        t.AddTransaction(account, TransactionType.Income, 2000m, day, "Transferência recebida|Igor Luis Lima",
+            movementKind: PolpMovementKind.OwnTransfer);
 
         var s = await Summary(t);
 
         Assert.Equal(1000m, s.TotalIncome);
         Assert.Equal(300m, s.TotalExpense);
-    }
-
-    [Fact]
-    public async Task Categoria_de_mesma_titularidade_tambem_e_excluida_dos_totais()
-    {
-        using var t = new TestDb();
-        var account = t.AddAccount();
-        var category = t.AddCategory("Transferência mesma titularidade");
-        t.AddTransaction(account, TransactionType.Expense, 800m, MonthStart().AddDays(9), "Pix enviado - Fulano", category: category);
-        t.AddTransaction(account, TransactionType.Expense, 50m, MonthStart().AddDays(9), "Padaria");
-
-        var s = await Summary(t);
-
-        Assert.Equal(50m, s.TotalExpense);
     }
 
     [Fact]
@@ -174,7 +162,8 @@ public class DashboardTests
     {
         using var t = new TestDb("Igor Luis Lima");
         var account = t.AddAccount();
-        t.AddTransaction(account, TransactionType.Expense, 2000m, Dates.Today.AddDays(2), "Transferência enviada|IGOR L LIMA", TransactionStatus.Pending);
+        t.AddTransaction(account, TransactionType.Expense, 2000m, Dates.Today.AddDays(2), "Transferência enviada|IGOR L LIMA", TransactionStatus.Pending,
+            movementKind: PolpMovementKind.OwnTransfer);
 
         var s = await Summary(t);
 

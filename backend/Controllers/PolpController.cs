@@ -17,9 +17,8 @@ public class PolpController(
     InstitutionNameResolver institutionNames,
     IEncryptionService encryption,
     PolpDisconnectService disconnectService,
-    IServiceScopeFactory scopeFactory,
-    IMemoryCache cache,
-    ILogger<PolpController> logger) : ApiControllerBase
+    IPolpInbox inbox,
+    IMemoryCache cache) : ApiControllerBase
 {
     private const string ConnectorsCacheKey = "polp:connectors";
     private static readonly TimeSpan ConnectorsCacheDuration = TimeSpan.FromMinutes(10);
@@ -138,25 +137,34 @@ public class PolpController(
         // linha local em vez de violar o índice único.
         var localIntegration = await db.PolpIntegrations
             .FirstOrDefaultAsync(p => p.PolpIntegrationId == created.Id, ct);
-        if (localIntegration is not null && localIntegration.UserId != UserId)
+        // Linha em DISCONNECT_PENDING está sendo apagada e o consentimento revogado: reativá-la
+        // traria de volta uma conexão que o usuário mandou desfazer.
+        if (localIntegration is not null
+            && (localIntegration.UserId != UserId || localIntegration.Status == PolpDisconnectService.PendingStatus))
             return Conflict(new { message = "Não foi possível iniciar a conexão com o banco." });
 
+        var institutionName = created.Institution?.Name ?? localIntegration?.InstitutionName
+            ?? await institutionNames.FindAsync(institutionId, ct);
+
+        var reused = localIntegration is not null;
         if (localIntegration is null)
         {
             localIntegration = new PolpIntegration
             {
                 UserId = UserId,
                 PolpIntegrationId = created.Id,
-                InstitutionId = institutionId
+                InstitutionId = institutionId,
+                Status = created.Status,
+                ExecutionStatus = created.ExecutionStatus,
+                InstitutionName = institutionName,
+                UpdatedAt = DateTime.UtcNow
             };
             db.PolpIntegrations.Add(localIntegration);
         }
-
-        localIntegration.Status = created.Status;
-        localIntegration.ExecutionStatus = created.ExecutionStatus;
-        localIntegration.InstitutionName = created.Institution?.Name ?? localIntegration.InstitutionName
-            ?? await institutionNames.FindAsync(institutionId, ct);
-        localIntegration.UpdatedAt = DateTime.UtcNow;
+        else
+        {
+            db.Entry(localIntegration).State = EntityState.Detached;
+        }
 
         db.ConsentRecords.Add(new ConsentRecord
         {
@@ -167,10 +175,26 @@ public class PolpController(
         });
         await db.SaveChangesAsync(ct);
 
-        // Sandbox (e consentimento reaproveitado) já nasce AUTHORISED e a Polp pode não mandar o
-        // webhook "consents": dispara o backfill inicial aqui para não depender dele.
+        if (reused)
+        {
+            var now = DateTime.UtcNow;
+            var updated = await db.PolpIntegrations
+                .Where(p => p.Id == localIntegration.Id && p.Status != PolpDisconnectService.PendingStatus)
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(p => p.Status, created.Status)
+                    .SetProperty(p => p.ExecutionStatus, created.ExecutionStatus)
+                    .SetProperty(p => p.InstitutionName, institutionName)
+                    .SetProperty(p => p.UpdatedAt, now), ct);
+            if (updated == 0)
+                return Conflict(new { message = "Não foi possível iniciar a conexão com o banco." });
+        }
+
+        // avoidDuplicates pode devolver um consentimento já desconectado: sem limpar a marca, os
+        // avisos da nova conexão seriam ignorados como restos da anterior.
+        await RemovedPolpResources.ClearAsync(db, [created.Id], ct);
+
         if (created.Status == "AUTHORISED" && !localIntegration.SyncedLocally)
-            QueueBackgroundSync(localIntegration.Id, UserId);
+            await EnqueueBackfillAsync(created.Id, ct);
 
         return Ok(new
         {
@@ -180,8 +204,6 @@ public class PolpController(
             urlToAuthenticate = created.UrlToAuthenticate
         });
     }
-
-    private static readonly TimeSpan BackfillResumeWindow = TimeSpan.FromMinutes(5);
 
     [HttpGet("integrations")]
     public async Task<IActionResult> GetIntegrations(CancellationToken ct)
@@ -199,17 +221,7 @@ public class PolpController(
         // vez em vez de uma query por conta.
         var localByRemoteId = await db.PolpIntegrations
             .Where(p => p.UserId == UserId)
-            .ToDictionaryAsync(p => p.PolpIntegrationId, p => new { p.Id, p.LastSyncedAt, p.ExecutionStatus, p.Status, p.SyncedLocally }, ct);
-
-        // Conexão autorizada que nunca chegou a importar nada (backfill caiu antes de a Polp gerar
-        // as contas, ou a API reiniciou no meio): retoma aqui, no máximo uma vez por janela.
-        foreach (var pending in localByRemoteId.Values.Where(p => p.Status == "AUTHORISED" && !p.SyncedLocally))
-        {
-            var retryKey = $"polp:backfill-retry:{pending.Id}";
-            if (cache.TryGetValue(retryKey, out _)) continue;
-            cache.Set(retryKey, true, BackfillResumeWindow);
-            QueueBackgroundSync(pending.Id, UserId);
-        }
+            .ToDictionaryAsync(p => p.PolpIntegrationId, p => new { p.Id, p.LastSyncedAt, p.EnrichmentPending }, ct);
 
         var result = accounts.Select(a =>
         {
@@ -228,9 +240,7 @@ public class PolpController(
                 a.PolpIntegrationId,
                 localIntegrationId = local?.Id,
                 lastSyncedAt = local?.LastSyncedAt,
-                // PARTIAL_SUCCESS não bloqueia nada: só avisa que categoria/counterparty ainda
-                // estão sendo refinadas pela Polp.
-                enrichmentPending = local?.ExecutionStatus == "PARTIAL_SUCCESS",
+                enrichmentPending = local?.EnrichmentPending == true,
                 // Só contas (não cartões) têm saldo que a Polp consegue consultar na hora.
                 canSyncBalance = a.PolpAccountId.HasValue && !isCreditCard,
                 // Tipo cru da Polp + a mesma decisão de "é cartão" que Cartões/Dashboard já usam
@@ -251,6 +261,7 @@ public class PolpController(
     public async Task<IActionResult> GetIntegrationStatus(Guid id, CancellationToken ct)
     {
         var local = await db.PolpIntegrations
+            .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == id && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus, ct);
 
         if (local is null) return NotFound();
@@ -263,27 +274,40 @@ public class PolpController(
         // máximo uma vez por janela.
         if (local.Status == "AWAITING_AUTHORIZATION" && DateTime.UtcNow - local.UpdatedAt > StatusRefreshWindow)
         {
+            PolpConsentDto remote;
+            string? institutionName;
             try
             {
-                var remote = await polp.GetConsentAsync(local.PolpIntegrationId, ct);
-                local.Status = remote.Status;
-                local.ExecutionStatus = remote.ExecutionStatus;
-                local.InstitutionName = remote.Institution?.Name ?? local.InstitutionName
+                remote = await polp.GetConsentAsync(local.PolpIntegrationId, ct);
+                institutionName = remote.Institution?.Name ?? local.InstitutionName
                     ?? await institutionNames.FindAsync(local.InstitutionId, ct);
-                urlToAuthenticate = remote.UrlToAuthenticate;
-                error = remote.ErrorMessage;
             }
             catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
             {
                 return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível consultar o status da conexão." });
             }
 
+            // Condicional: a desconexão pode ter marcado DISCONNECT_PENDING durante a consulta.
             // A URL de autenticação vai direto pro navegador e não é gravada: é de uso único.
-            local.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync(ct);
+            var enrichmentPending = PolpSyncService.HasEnrichmentPending(remote.Flags);
+            var now = DateTime.UtcNow;
+            var updated = await db.PolpIntegrations
+                .Where(p => p.Id == local.Id && p.Status != PolpDisconnectService.PendingStatus)
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(p => p.Status, remote.Status)
+                    .SetProperty(p => p.ExecutionStatus, remote.ExecutionStatus)
+                    .SetProperty(p => p.EnrichmentPending, enrichmentPending)
+                    .SetProperty(p => p.InstitutionName, institutionName)
+                    .SetProperty(p => p.UpdatedAt, now), ct);
+            if (updated == 0) return NotFound();
+
+            local.Status = remote.Status;
+            local.ExecutionStatus = remote.ExecutionStatus;
+            urlToAuthenticate = remote.UrlToAuthenticate;
+            error = remote.ErrorMessage;
 
             if (local.Status == "AUTHORISED" && !local.SyncedLocally)
-                QueueBackgroundSync(local.Id, UserId);
+                await EnqueueBackfillAsync(local.PolpIntegrationId, ct);
         }
 
         // Mapeia os status da Polp para os estados que o frontend já conhece.
@@ -378,49 +402,10 @@ public class PolpController(
         });
     }
 
-    // Backfill inicial em background. Roda com seu próprio escopo de DI (próprio DbContext,
-    // próprio PolpSyncService): o DbContext desta requisição é descartado assim que ela responde,
-    // e usá-lo depois disso numa Task solta derrubaria com ObjectDisposedException.
-    // CancellationToken.None de propósito: a requisição que disparou isso já terminou (e
-    // cancelaria o token dela), mas o sync em si deve seguir até o fim mesmo assim.
-    // Sem webhook garantido (ambiente local, ou o aviso se perde), o backfill não pode depender de
-    // a Polp já ter gerado as contas no primeiro instante: tenta de novo algumas vezes.
-    private static readonly TimeSpan[] BackfillRetryDelays =
-        [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30)];
-
-    private void QueueBackgroundSync(Guid integrationId, Guid userId)
-    {
-        _ = Task.Run(async () =>
-        {
-            using var scope = scopeFactory.CreateScope();
-            var scopedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var syncService = scope.ServiceProvider.GetRequiredService<PolpSyncService>();
-
-            try
-            {
-                var local = await scopedDb.PolpIntegrations
-                    .FirstOrDefaultAsync(p => p.Id == integrationId && p.UserId == userId);
-                if (local is null) return;
-
-                for (var attempt = 0; ; attempt++)
-                {
-                    var synced = await PolpSyncService.SyncOneWithLockAsync(async () =>
-                    {
-                        await scopedDb.Entry(local).ReloadAsync();
-                        if (local.SyncedLocally) return 1;
-                        return await syncService.SyncOneAsync(local, userId, CancellationToken.None);
-                    }, integrationId, CancellationToken.None);
-
-                    if (synced != 0 || attempt == BackfillRetryDelays.Length) return;
-                    await Task.Delay(BackfillRetryDelays[attempt]);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Falha ao sincronizar integração {IntegrationId} em background", integrationId);
-            }
-        });
-    }
+    // Sandbox (e consentimento reaproveitado) já nasce AUTHORISED e a Polp pode não mandar o
+    // webhook "consents": o backfill vai para a inbox e o worker tenta até as contas existirem.
+    private Task EnqueueBackfillAsync(Guid consentId, CancellationToken ct) =>
+        inbox.EnqueueAsync(new PolpInboxEvent(PolpInternalEvents.Backfill, "consents", consentId.ToString("D"), null), ct);
 
     private static string ResolveTextColor(string? hexColor)
     {

@@ -14,6 +14,8 @@ public static class JobLockKeys
     public const long ScheduledEmail = 0x4346_4A4F_0000_0001;
     public const long PendingDisconnectRetry = 0x4346_4A4F_0000_0002;
     public const long DataRetention = 0x4346_4A4F_0000_0003;
+    public const long PolpInboxCleanup = 0x4346_4A4F_0000_0004;
+    public const long PolpReconciliation = 0x4346_4A4F_0000_0005;
 }
 
 public static class JobLockExtensions
