@@ -13,6 +13,7 @@ import { formatMonthLong } from "../../../utils/monthLabel.js";
 import { getMonthsWindow } from "../../../utils/monthlyTrend.js";
 import { resolveCategoryColor, categoryInitials } from "../../../utils/categoryColors.js";
 import "./Relatorios.css";
+import usePageTitle from "../../../hooks/usePageTitle.js";
 
 const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
 const TYPE_LABELS = { Income: "Receita", Expense: "Despesa" };
@@ -91,6 +92,7 @@ function groupByDate(items) {
 }
 
 export default function Relatorios() {
+  usePageTitle("Relatórios");
   const { effectiveAccountId, dataRefreshKey, accountsStatus } = useAccount();
   const [result, setResult] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -233,7 +235,7 @@ export default function Relatorios() {
 
   return (
     <div className="relatorios">
-      <SectionHeading kicker="Histórico completo" title="Relatórios" align="left" />
+      <SectionHeading title="Relatórios">Histórico completo</SectionHeading>
 
       {saveError && <p className="relatorios__error">{saveError}</p>}
 

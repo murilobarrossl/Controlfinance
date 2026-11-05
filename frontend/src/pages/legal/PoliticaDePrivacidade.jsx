@@ -1,11 +1,13 @@
 import LegalPageLayout from "./LegalPageLayout.jsx";
 import { PRIVACY_VERSION } from "../../legal/versions.js";
+import usePageTitle from "../../hooks/usePageTitle.js";
 
 // Este texto descreve o que o código faz hoje. Ao mudar como um dado é coletado, guardado ou
 // compartilhado, atualize aqui E a versão em legal/versions.js + backend/Services/LegalDocuments.cs.
 // Itens [PENDENTE] dependem de informação que ainda não existe (dados da empresa, contratos,
 // fornecedores): não preencher com suposições.
 export default function PoliticaDePrivacidade() {
+  usePageTitle("Política de privacidade");
   return (
     <LegalPageLayout kicker="Legal" title="Política de privacidade" updatedAt={`31 de outubro de 2026 (versão ${PRIVACY_VERSION})`}>
       <h2>Resumo</h2>

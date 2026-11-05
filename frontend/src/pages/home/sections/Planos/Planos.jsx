@@ -7,7 +7,7 @@ const { monthly, quarterly, annual } = PLANS;
 const PLAN_CARDS = [
   {
     plan: monthly,
-    billingNote: "cobrado mensalmente",
+    billingNote: "Cobrado mensalmente",
     benefits: [
       "Relatórios e dashboards.",
       "Planejamentos e metas.",
@@ -18,19 +18,18 @@ const PLAN_CARDS = [
   },
   {
     plan: quarterly,
-    highlight: true,
     billingNote: `Cobrado ${formatPrice(quarterly.totalPrice)} a cada 3 meses`,
     benefitsTitle: "Todos os benefícios do mensal e mais:",
-    benefits: [`${quarterly.discountPercent}% de economia`, "suporte prioritário"],
+    benefits: [`${quarterly.discountPercent}% de economia`, "Suporte prioritário"],
     extraNotes: [
       `Economia de ${formatPrice(quarterly.savingsPerPeriod)} a cada 3 meses em relação ao mensal`,
     ],
   },
   {
     plan: annual,
-    billingNote: `cobrado ${formatPrice(annual.totalPrice)}/ano`,
+    billingNote: `Cobrado ${formatPrice(annual.totalPrice)}/ano`,
     benefitsTitle: "Todos os benefícios do trimestral e mais:",
-    benefits: [`${annual.discountPercent}% de economia`, "suporte prioritário com respostas mais rápidas"],
+    benefits: [`${annual.discountPercent}% de economia`, "Suporte prioritário com respostas mais rápidas"],
     extraNotes: [`Economia de ${formatPrice(annual.savingsPerPeriod)} por ano em relação ao mensal`],
   },
 ];
@@ -38,13 +37,19 @@ const PLAN_CARDS = [
 export default function Planos() {
   return (
     <section id="planos" className="planos">
-      <SectionHeading kicker="Assinatura" title="Planos" />
+      <SectionHeading title="Planos" />
+
+      <p role="note" className="planos__notice">
+        Preços de referência: a contratação paga ainda não está aberta e nenhuma cobrança é feita.
+        Quando abrir, cada plano terá {FREE_TRIAL_DAYS} dias grátis, e as condições completas (renovação,
+        cancelamento e reembolso) serão publicadas antes de qualquer cobrança.
+      </p>
 
       <div className="planos__grid">
-        {PLAN_CARDS.map(({ plan, highlight, billingNote, benefitsTitle, benefits, extraNotes }) => {
+        {PLAN_CARDS.map(({ plan, billingNote, benefitsTitle, benefits, extraNotes }) => {
           const price = splitPrice(plan.monthlyPrice);
           return (
-            <div key={plan.id} className={`planos__card ${highlight ? "planos__card--highlight" : ""}`}>
+            <div key={plan.id} className="planos__card">
               <div className="planos__card-head">
                 <h3 className="planos__plan-name">{plan.name}</h3>
               </div>
@@ -59,19 +64,15 @@ export default function Planos() {
               {benefitsTitle && <p className="planos__benefits-title">{benefitsTitle}</p>}
               <ul className="planos__benefits">
                 {benefits.map((benefit) => (
-                  <li key={benefit}>
-                    <span className="planos__check">✓</span> {benefit}
-                  </li>
+                  <li key={benefit}>{benefit}</li>
                 ))}
               </ul>
 
-              {extraNotes && (
-                <ul className="planos__extra-notes">
-                  {extraNotes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              )}
+              {extraNotes?.map((note) => (
+                <p key={note} className="planos__extra-note">
+                  {note}
+                </p>
+              ))}
 
               {/* Não existe checkout nem cobrança no sistema ainda: o botão não pode sugerir uma
                   contratação que não acontece (CDC arts. 30 e 37; Decreto 7.962/2013 art. 4º). */}
@@ -82,12 +83,6 @@ export default function Planos() {
           );
         })}
       </div>
-
-      <p className="planos__footer-note">
-        Preços de referência: a contratação paga ainda não está aberta e nenhuma cobrança é feita.
-        Quando abrir, cada plano terá {FREE_TRIAL_DAYS} dias grátis, e as condições completas (renovação,
-        cancelamento e reembolso) serão publicadas antes de qualquer cobrança.
-      </p>
     </section>
   );
 }

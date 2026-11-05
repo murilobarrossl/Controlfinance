@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import Button from "../../components/ui/Button/Button.jsx";
 import { EyeIcon, EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
@@ -9,6 +9,7 @@ import { useAuth } from "../../context/AuthContext.jsx";
 import { applyMask, CNPJ_MASK, getCpfCnpjMask } from "../../utils/masks.js";
 import logo from "../../assets/images/cflogobranco.svg";
 import "./Login.css";
+import usePageTitle from "../../hooks/usePageTitle.js";
 
 const DESTAQUES = [
   { Icon: ShieldIcon, texto: "Valores e extratos guardados de forma cifrada" },
@@ -16,6 +17,7 @@ const DESTAQUES = [
 ];
 
 export default function LoginPage({ mode = "email" }) {
+  usePageTitle("Entrar");
   const navigate = useNavigate();
   const { login: startSession } = useAuth();
   const [identifier, setIdentifier] = useState("");
@@ -23,8 +25,14 @@ export default function LoginPage({ mode = "email" }) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [errorAttempt, setErrorAttempt] = useState(0);
+  const identifierRef = useRef(null);
 
   const isCpf = mode === "cpf";
+
+  useEffect(() => {
+    if (error) identifierRef.current?.focus();
+  }, [error, errorAttempt]);
 
   const identifierConfig = isCpf
     ? {
@@ -33,7 +41,7 @@ export default function LoginPage({ mode = "email" }) {
         placeholder: "000.000.000-00 ou 00.000.000/0000-00",
       }
     : {
-        label: "E-MAIL",
+        label: "E-mail",
         type: "email",
         placeholder: "exemplo@email.com",
       };
@@ -54,6 +62,7 @@ export default function LoginPage({ mode = "email" }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (submitting) return;
     setError("");
     setSubmitting(true);
 
@@ -77,7 +86,9 @@ export default function LoginPage({ mode = "email" }) {
 
       navigate(hasAccount ? "/dashboard" : "/conectar-banco");
     } catch (err) {
-      setError(err.message || "Não foi possível entrar. Tente novamente.");
+      const invalidCredentials = isCpf ? "CPF/CNPJ ou senha incorretos." : "E-mail ou senha incorretos.";
+      setError(err.status === 401 ? invalidCredentials : err.message || "Não foi possível entrar. Tente novamente.");
+      setErrorAttempt((n) => n + 1);
     } finally {
       setSubmitting(false);
     }
@@ -88,117 +99,129 @@ export default function LoginPage({ mode = "email" }) {
       <aside className="login__intro">
         <div className="login__top">
           <Link to="/" className="login__back">
-            <span aria-hidden="true">‹</span> Voltar
-          </Link>
-          <Link to="/" className="login__logo">
-            <img src={logo} alt="Control Finance" />
+            <span aria-hidden="true">‹</span>
+            <img src={logo} alt="" className="login__logo" />
+            Voltar
           </Link>
         </div>
 
-        <span className="login__badge">Entrar na sua conta</span>
+        <div className="login__intro-body">
+          <h1 className="login__title">
+            Suas finanças organizadas no seu bolso
+          </h1>
 
-        <h1 className="login__title">
-          Suas finanças organizadas
-          <br />
-          no seu bolso
-        </h1>
-
-        <p className="login__subtitle">
-          Organize suas finanças, simule financiamentos e planeje seu futuro,
-          tudo em um só lugar.
-        </p>
-
-        <p className="login__welcome-back">
-          Entrar em sua conta: que bom te ver novamente!
-        </p>
-
-        <ul className="login__highlights">
-          {DESTAQUES.map(({ Icon, texto }) => (
-            <li key={texto} className="login__highlight">
-              <span className="login__highlight-icon">
-                <Icon />
-              </span>
-              {texto}
-            </li>
-          ))}
-        </ul>
+          <p className="login__subtitle">
+            Organize suas finanças, simule financiamentos e planeje seu futuro,
+            tudo em um só lugar.
+          </p>
+        </div>
       </aside>
 
-      <div className="login__panel">
-        <form className="login__card" onSubmit={handleSubmit}>
-          <h2 className="login__card-title">Entrar na conta</h2>
+      <main className="login__panel">
+        <form className="login__card" onSubmit={handleSubmit} aria-busy={submitting}>
+          <div className="login__card-head">
+            <h2 className="login__card-title">Entrar na conta</h2>
 
-          <p className="login__card-subtitle">
-            Não tem conta?{" "}
-            <Link to="/register" className="login__link">
-              Cadastre-se agora
-            </Link>
-          </p>
+            <p className="login__card-subtitle">
+              Não tem conta?{" "}
+              <Link to="/register" className="login__link">
+                Cadastre-se agora
+              </Link>
+            </p>
+            <p className="login__required-note">Todos os campos são obrigatórios.</p>
+          </div>
 
-          <label className="login__field">
-            <span className="login__field-label">
-              {identifierConfig.label}
-            </span>
+          <div className="login__fields">
+            <label className="login__field">
+              <span className="login__field-label">
+                {identifierConfig.label}
+              </span>
 
-            <input
-              type={identifierConfig.type}
-              value={identifier}
-              onChange={handleIdentifierChange}
-              className="login__input"
-              placeholder={identifierConfig.placeholder}
-              autoComplete={isCpf ? "off" : "email"}
-              inputMode={isCpf ? "numeric" : "email"}
-              maxLength={isCpf ? CNPJ_MASK.length : undefined}
-              required
-            />
-          </label>
-
-          <label className="login__field">
-            <span className="login__field-label">SENHA</span>
-
-            <div className="login__password-wrapper">
               <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="login__input login__input--password"
-                placeholder="Digite sua senha"
-                autoComplete="current-password"
+                ref={identifierRef}
+                id="login-identifier"
+                name="username"
+                type={identifierConfig.type}
+                value={identifier}
+                onChange={handleIdentifierChange}
+                className="login__input"
+                placeholder={identifierConfig.placeholder}
+                autoComplete={isCpf ? "username" : "email"}
+                inputMode={isCpf ? "numeric" : "email"}
+                maxLength={isCpf ? CNPJ_MASK.length : undefined}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? "login-error" : undefined}
                 required
               />
-              <button
-                type="button"
-                className="login__password-toggle"
-                onClick={() => setShowPassword((prev) => !prev)}
-                aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                aria-pressed={showPassword}
-              >
-                {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
-              </button>
-            </div>
-          </label>
+            </label>
 
-          {error && <p className="login__error">{error}</p>}
+            <label className="login__field">
+              <span className="login__field-label">Senha</span>
 
-          <Button
-            as="button"
-            type="submit"
-            variant="primary"
-            size="md"
-            className="login__submit"
-            disabled={submitting}
-          >
-            {submitting ? "Entrando..." : "Entrar"}
-          </Button>
+              <div className="login__password-wrapper">
+                <input
+                  id="login-password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="login__input login__input--password"
+                    autoComplete="current-password"
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? "login-error" : undefined}
+                  required
+                />
+                <button
+                  type="button"
+                  className="login__password-toggle"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
+                </button>
+              </div>
+            </label>
+          </div>
 
-          <Link
-            to={isCpf ? "/loginemail" : "/logincpf-cnpj"}
-            className="login__mode-toggle"
-          >
-            {isCpf ? "Entrar com e-mail" : "Entrar com CPF/CNPJ"}
-          </Link>
+          <div className="login__actions">
+            {error && (
+              <p key={errorAttempt} id="login-error" className="login__error" role="alert">
+                {error}
+              </p>
+            )}
+
+            <Button
+              as="button"
+              type="submit"
+              variant="primary"
+              size="md"
+              className="login__submit"
+              disabled={submitting}
+            >
+              {submitting ? "Entrando..." : "Entrar"}
+            </Button>
+
+            <Link
+              to={isCpf ? "/loginemail" : "/logincpf-cnpj"}
+              className="login__mode-toggle"
+            >
+              {isCpf ? "Entrar com e-mail" : "Entrar com CPF/CNPJ"}
+            </Link>
+          </div>
+
+          <ul className="login__highlights">
+            {DESTAQUES.map(({ Icon, texto }) => (
+              <li key={texto} className="login__highlight">
+                <span className="login__highlight-icon" aria-hidden="true">
+                  <Icon />
+                </span>
+                {texto}
+              </li>
+            ))}
+          </ul>
         </form>
-      </div>
+      </main>
     </div>
   );
 }

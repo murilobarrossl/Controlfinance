@@ -16,6 +16,7 @@ import { formatMonthLong } from "../../../utils/monthLabel.js";
 import { getMonthsWindow, monthRange } from "../../../utils/monthlyTrend.js";
 import { computeTrend } from "../../../utils/trend.js";
 import "./ReceitasDespesas.css";
+import usePageTitle from "../../../hooks/usePageTitle.js";
 
 
 function breakdownFromAggregates(categories, type) {
@@ -81,6 +82,7 @@ function closingSentence(totalIncome, totalExpense) {
 }
 
 export default function ReceitasDespesas() {
+  usePageTitle("Receitas e despesas");
   const navigate = useNavigate();
   const { effectiveAccountId, dataRefreshKey, accountsStatus } = useAccount();
   const [aggregateResult, setAggregateResult] = useState(null);
@@ -156,7 +158,7 @@ export default function ReceitasDespesas() {
 
   return (
     <div className="receitas-despesas">
-      <SectionHeading kicker="O mapa do seu dinheiro" title="Receitas e despesas" align="left" />
+      <SectionHeading title="Receitas e despesas">O mapa do seu dinheiro</SectionHeading>
 
       <RangePicker
         label={formatMonthLong(currentMonth)}

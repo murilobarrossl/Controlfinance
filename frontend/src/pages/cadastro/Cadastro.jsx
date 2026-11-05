@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import Button from "../../components/ui/Button/Button.jsx";
 import { EyeIcon, EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
@@ -6,24 +6,14 @@ import { register } from "../../api/auth.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { applyMask, CNPJ_MASK, getCpfCnpjMask } from "../../utils/masks.js";
 import { TERMS_VERSION, PRIVACY_VERSION } from "../../legal/versions.js";
+import { documentError, passwordError } from "../../utils/authRules.js";
 import logo from "../../assets/images/cflogobranco.svg";
 import TermsDialog from "./TermsDialog.jsx";
 import "./Cadastro.css";
-
-const STEPS = [
-  {
-    number: 1,
-    title: "Crie sua conta",
-    description: "Preencha seus dados básicos e escolha uma senha segura.",
-  },
-  {
-    number: 2,
-    title: "Conecte seus bancos",
-    description: "Sincronize suas contas bancárias com segurança total.",
-  },
-];
+import usePageTitle from "../../hooks/usePageTitle.js";
 
 export default function RegisterPage() {
+  usePageTitle("Criar conta");
   const navigate = useNavigate();
   const { login: startSession } = useAuth();
   const [name, setName] = useState("");
@@ -37,6 +27,34 @@ export default function RegisterPage() {
   const [confirmsAdult, setConfirmsAdult] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [errorField, setErrorField] = useState(null);
+  const [errorAttempt, setErrorAttempt] = useState(0);
+  const documentRef = useRef(null);
+  const passwordRef = useRef(null);
+  const confirmPasswordRef = useRef(null);
+  const errorRef = useRef(null);
+
+  useEffect(() => {
+    if (!error) return;
+    const fieldRefs = { document: documentRef, password: passwordRef, confirmPassword: confirmPasswordRef };
+    const target = fieldRefs[errorField]?.current ?? errorRef.current;
+    target?.focus();
+  }, [error, errorField, errorAttempt]);
+
+  function showError(message, field = null) {
+    setErrorField(field);
+    setError(message);
+    setErrorAttempt((n) => n + 1);
+  }
+
+  function fieldAria(field, hintId) {
+    const invalid = errorField === field;
+    const describedBy = [hintId, invalid ? "register-error" : null].filter(Boolean).join(" ");
+    return {
+      "aria-invalid": invalid ? true : undefined,
+      "aria-describedby": describedBy || undefined,
+    };
+  }
 
   function handleDocumentChange(e) {
     const rawValue = e.target.value;
@@ -48,10 +66,24 @@ export default function RegisterPage() {
 
   function handleSubmit(e) {
     e.preventDefault();
+    if (submitting) return;
     setError("");
+    setErrorField(null);
+
+    const documentProblem = documentError(document);
+    if (documentProblem) {
+      showError(documentProblem, "document");
+      return;
+    }
+
+    const passwordProblem = passwordError(password);
+    if (passwordProblem) {
+      showError(passwordProblem, "password");
+      return;
+    }
 
     if (password !== confirmPassword) {
-      setError("As senhas não coincidem.");
+      showError("As senhas não coincidem.", "confirmPassword");
       return;
     }
 
@@ -63,6 +95,7 @@ export default function RegisterPage() {
   }, [submitting]);
 
   async function handleAcceptTerms() {
+    if (submitting) return;
     setSubmitting(true);
     try {
       const data = await register({
@@ -81,7 +114,7 @@ export default function RegisterPage() {
       navigate("/conectar-banco");
     } catch (err) {
       setTermsOpen(false);
-      setError(err.message || "Não foi possível criar a conta. Tente novamente.");
+      showError(err.message || "Não foi possível criar a conta. Tente novamente.");
     } finally {
       setSubmitting(false);
     }
@@ -92,180 +125,196 @@ export default function RegisterPage() {
       <aside className="register__intro">
         <div className="register__top">
           <Link to="/" className="register__back">
-            <span aria-hidden="true">‹</span> Voltar
-          </Link>
-          <Link to="/" className="register__logo">
-            <img src={logo} alt="Control Finance" />
+            <span aria-hidden="true">‹</span>
+            <img src={logo} alt="" className="register__logo" />
+            Voltar
           </Link>
         </div>
 
-        <span className="register__badge">Novo: comece hoje mesmo</span>
-        <h1 className="register__title">
-          Crie sua conta e
-          <br />
-          comece a planejar
-        </h1>
-        <p className="register__subtitle">
-          Em alguns cliques você terá acesso ao seu painel
-          financeiro.
-        </p>
-        <ol className="register__steps">
-          {STEPS.map((step) => (
-            <li className="register__step" key={step.number}>
-              <span className="register__step-number">{step.number}</span>
-              <div className="register__step-content">
-                <h3 className="register__step-title">{step.title}</h3>
-                <p className="register__step-description">
-                  {step.description}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ol>
+        <div className="register__intro-body">
+          <h1 className="register__title">
+            Crie sua conta e comece a planejar
+          </h1>
+          <p className="register__subtitle">
+            Em alguns cliques você terá acesso ao seu painel
+            financeiro.
+          </p>
+        </div>
       </aside>
 
-      <div className="register__panel">
-        <form className="register__card" onSubmit={handleSubmit}>
-          <h2 className="register__card-title">Criar conta grátis</h2>
-          <p className="register__card-subtitle">
-            Já tem conta?{" "}
-            <Link to="/loginemail" className="register__link">
-              Entrar agora
-            </Link>
-          </p>
+      <main className="register__panel">
+        <form className="register__card" onSubmit={handleSubmit} aria-busy={submitting}>
+          <div className="register__card-head">
+            <h2 className="register__card-title">Criar conta</h2>
+            <p className="register__card-subtitle">
+              Já tem conta?{" "}
+              <Link to="/loginemail" className="register__link">
+                Entrar agora
+              </Link>
+            </p>
+            <p className="register__required-note">Todos os campos são obrigatórios.</p>
+          </div>
 
-          <label className="register__field">
-            <span className="register__field-label">NOME</span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="register__input"
-              autoComplete="name"
-              placeholder="Digite seu nome completo"
-              required
-            />
-          </label>
-
-          <label className="register__field">
-            <span className="register__field-label">E-MAIL</span>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="register__input"
-              autoComplete="email"
-              placeholder="exemplo@email.com"
-              required
-            />
-          </label>
-
-          <label className="register__field">
-            <span className="register__field-label">CPF/CNPJ</span>
-            <input
-              type="text"
-              value={document}
-              onChange={handleDocumentChange}
-              className="register__input"
-              inputMode="numeric"
-              maxLength={CNPJ_MASK.length}
-              autoComplete="off"
-              placeholder="000.000.000-00 ou 00.000.000/0000-00"
-              required
-            />
-            <span className="register__field-hint">
-              Usado para entrar com CPF/CNPJ e para confirmar que é você ao conectar um banco. O número
-              não fica guardado: guardamos só um código de verificação gerado a partir dele.
-            </span>
-          </label>
-
-          <label className="register__field">
-            <span className="register__field-label">SENHA</span>
-            <div className="register__password-wrapper">
+          <div className="register__group">
+            <div className="register__field">
+              <label htmlFor="register-name" className="register__field-label">Nome</label>
               <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="register__input register__input--password"
-                autoComplete="new-password"
-                placeholder="Crie uma senha segura"
+                type="text"
+                id="register-name"
+                name="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="register__input"
+                autoComplete="name"
                 required
               />
-              <button
-                type="button"
-                className="register__password-toggle"
-                onClick={() => setShowPassword((prev) => !prev)}
-                aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                aria-pressed={showPassword}
-              >
-                {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
-              </button>
             </div>
-            <span className="register__field-hint">
-              Mínimo de 8 caracteres, incluindo letras e números.
-            </span>
-          </label>
 
-          <label className="register__field">
-            <span className="register__field-label">CONFIRMAR SENHA</span>
-            <div className="register__password-wrapper">
+            <div className="register__field">
+              <label htmlFor="register-email" className="register__field-label">E-mail</label>
               <input
-                type={showConfirmPassword ? "text" : "password"}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="register__input register__input--password"
-                autoComplete="new-password"
-                placeholder="Repita a senha criada"
+                type="email"
+                id="register-email"
+                name="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="register__input"
+                autoComplete="email"
+                placeholder="exemplo@email.com"
                 required
               />
-              <button
-                type="button"
-                className="register__password-toggle"
-                onClick={() => setShowConfirmPassword((prev) => !prev)}
-                aria-label={
-                  showConfirmPassword ? "Ocultar senha" : "Mostrar senha"
-                }
-                aria-pressed={showConfirmPassword}
-              >
-                {showConfirmPassword ? <EyeSlashIcon /> : <EyeIcon />}
-              </button>
             </div>
-          </label>
 
-          <label className="register__terms">
-            <input
-              type="checkbox"
-              checked={confirmsAdult}
-              onChange={(e) => setConfirmsAdult(e.target.checked)}
-              className="register__checkbox"
-              required
-            />
-            <span className="register__terms-text">Declaro que tenho 18 anos ou mais.</span>
-          </label>
+            <div className="register__field">
+              <label htmlFor="register-document" className="register__field-label">CPF/CNPJ</label>
+              <input
+                type="text"
+                ref={documentRef}
+                id="register-document"
+                name="document"
+                value={document}
+                onChange={handleDocumentChange}
+                className="register__input"
+                inputMode="numeric"
+                maxLength={CNPJ_MASK.length}
+                autoComplete="off"
+                placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                {...fieldAria("document", "register-document-hint")}
+                required
+              />
+              <span id="register-document-hint" className="register__field-hint">
+                Usado para entrar com CPF/CNPJ e para confirmar que é você ao conectar um banco. O número
+                não fica guardado: guardamos só um código de verificação gerado a partir dele.
+              </span>
+            </div>
 
-          <p className="register__privacy-note">
-            Seus dados são tratados como descrito na{" "}
-            <Link to="/politica-de-privacidade" className="register__link" target="_blank" rel="noopener noreferrer">
-              Política de privacidade
-            </Link>
-            : o que guardamos, com quem compartilhamos, por quanto tempo e como excluir. Conectar um banco
-            é opcional e pedido à parte, depois do cadastro.
-          </p>
+          </div>
 
-          {error && <p className="register__error">{error}</p>}
+          <div className="register__group">
+            <div className="register__field">
+              <label htmlFor="register-password" className="register__field-label">Senha</label>
+              <div className="register__password-wrapper">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  ref={passwordRef}
+                  id="register-password"
+                  name="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="register__input register__input--password"
+                  autoComplete="new-password"
+                  {...fieldAria("password", "register-password-hint")}
+                  required
+                />
+                <button
+                  type="button"
+                  className="register__password-toggle"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
+                </button>
+              </div>
+              <span id="register-password-hint" className="register__field-hint">
+                Mínimo de 8 caracteres, incluindo letras e números.
+              </span>
+            </div>
 
-          <Button
-            as="button"
-            type="submit"
-            variant="primary"
-            size="md"
-            className="register__submit"
-            disabled={submitting}
-          >
-            {submitting ? "Criando conta..." : "Criar conta grátis"}
-          </Button>
+            <div className="register__field">
+              <label htmlFor="register-confirm-password" className="register__field-label">Confirmar senha</label>
+              <div className="register__password-wrapper">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  ref={confirmPasswordRef}
+                  id="register-confirm-password"
+                  name="confirmPassword"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="register__input register__input--password"
+                  autoComplete="new-password"
+                  {...fieldAria("confirmPassword")}
+                  required
+                />
+                <button
+                  type="button"
+                  className="register__password-toggle"
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  aria-label={
+                    showConfirmPassword ? "Ocultar senha" : "Mostrar senha"
+                  }
+                  aria-pressed={showConfirmPassword}
+                >
+                  {showConfirmPassword ? <EyeSlashIcon /> : <EyeIcon />}
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          <div className="register__group register__group--consent">
+            <label className="register__terms">
+              <input
+                type="checkbox"
+                checked={confirmsAdult}
+                onChange={(e) => setConfirmsAdult(e.target.checked)}
+                className="register__checkbox"
+                required
+              />
+              <span className="register__terms-text">Declaro que tenho 18 anos ou mais.</span>
+            </label>
+
+            <p className="register__privacy-note">
+              Seus dados são tratados como descrito na{" "}
+              <Link to="/politica-de-privacidade" className="register__link" target="_blank" rel="noopener noreferrer">
+                Política de privacidade
+              </Link>
+              : o que guardamos, com quem compartilhamos, por quanto tempo e como excluir. Conectar um banco
+              é opcional e pedido à parte, depois do cadastro.
+            </p>
+
+          </div>
+
+          <div className="register__actions">
+            {error && (
+              <p key={errorAttempt} id="register-error" ref={errorRef} className="register__error" role="alert" tabIndex={-1}>
+                {error}
+              </p>
+            )}
+
+            <Button
+              as="button"
+              type="submit"
+              variant="primary"
+              size="md"
+              className="register__submit"
+              disabled={submitting}
+            >
+              {submitting ? "Criando conta..." : "Criar conta"}
+            </Button>
+          </div>
         </form>
-      </div>
+      </main>
 
       {termsOpen && (
         <TermsDialog submitting={submitting} onAccept={handleAcceptTerms} onClose={closeTerms} />

@@ -10,6 +10,8 @@ web
 
 Pessoa física (CPF) e pequenos negócios (CNPJ), com peso igual: nenhum perfil tem prioridade, e cada tela precisa servir aos dois. O denominador comum é quem não entende de finanças e quer saber, sem esforço, para onde o dinheiro está indo, o que vence e quanto sobra. A pessoa está lidando com o próprio dinheiro, muitas vezes com pressa ou preocupação, e o produto vai ser usado por milhares delas.
 
+No painel logado, os dois usos têm o mesmo peso: a olhada rápida e frequente (saldo, o que vence, se algo mudou) e a revisão do mês (para onde foi o dinheiro, comparação com o mês anterior). Celular e computador também têm a mesma prioridade.
+
 ## Product Purpose
 
 O Control Finance é uma plataforma SaaS de gestão financeira para o mercado brasileiro, desenvolvida pela Mitech. O usuário conecta a conta bancária uma vez pelo Open Finance, e cada transação passa a ser importada e organizada por categoria automaticamente. A proposta central é devolver clareza financeira a quem não é da área: **explicação em vez de dado cru**. O sucesso é o usuário entender a própria situação financeira sem precisar interpretar números soltos.
@@ -22,7 +24,7 @@ Uma única conexão pelo Open Finance basta para organizar as contas de PF e PJ 
 
 ## Operating Context
 
-- Conexão bancária: o usuário autoriza no próprio banco, pelo Open Finance, por meio de um fornecedor parceiro (Polp). Depois da carga inicial, a sincronização é automática, quando o fornecedor avisa que há dados novos; o produto não oferece um botão de "sincronizar agora". Toda informação vinda do banco precisa mostrar de quando ela é (data da última sincronização).
+- Conexão bancária: o usuário autoriza no próprio banco, pelo Open Finance, por meio de um fornecedor parceiro (Polp). Depois da carga inicial, a sincronização é automática, quando o fornecedor avisa que há dados novos; o produto não oferece um botão de "sincronizar agora" para transações; existe apenas a atualização de saldo sob demanda, por conta. Toda informação vinda do banco precisa mostrar de quando ela é (data da última sincronização).
 - A conexão pode ser desfeita a qualquer momento no painel; ao desconectar, os dados daquela conexão são apagados.
 - Lembretes por e-mail: um aviso agregado de vencimentos (o usuário pode desativar) e um aviso mensal (o usuário precisa ativar), os dois sem nomes nem valores.
 - Assinatura: os planos (Mensal, Trimestral, Anual; preços derivados de `frontend/src/utils/pricing.js`) aparecem só como preço de referência. **Não há checkout nem cobrança**, e o botão diz "Contratação em breve". O teste grátis previsto é de 14 dias. Renovação, cancelamento e reembolso precisam ser publicados antes de qualquer cobrança.
@@ -30,7 +32,11 @@ Uma única conexão pelo Open Finance basta para organizar as contas de PF e PJ 
 ## Capabilities and Constraints
 
 - **Telas atuais:** landing pública (Hero, Funcionalidades, Planos, Sobre nós, FAQ), cadastro com aceite dos termos, login, conexão bancária, painel inicial, Receitas e Despesas, Relatórios, Categorias, Cartões (faturas, parcelas, vencimentos), Investimentos e Privacidade (exportação de dados, preferências de e-mail, exclusão da conta). Há também as páginas de Termos de Uso e de Política de Privacidade.
-- **Investimentos:** a aba vai passar por uma reforma grande depois. Por enquanto fica como está (comparações por banco com taxas de referência datadas e simuladores) e fica fora do escopo do redesign, a não ser que você peça.
+- **Painel logado (escopo do redesign atual):** Dashboard inteligente, Receitas e despesas, Categorias, Cartões, Relatórios, Privacidade e dados e Conectar banco, além dos componentes compartilhados (navegação, AccountSwitcher, cabeçalho, Button). O redesign mantém dados, cálculos, funcionalidades e fluxo; muda só a interface, coerente com a landing e o login já reformulados.
+- **Ações sensíveis no painel:** desconectar banco, remover conta, excluir a conta e exportar dados pedem confirmação clara e não podem ser disparadas por engano.
+- **Gráficos:** todo gráfico tem alternativa textual (os mesmos números legíveis sem o gráfico).
+- **Em aberto (PF e PJ no mesmo login):** ainda não está definido se um mesmo login pode reunir contas de PF e de PJ (por exemplo, um MEI com a conta pessoal e a da empresa). Até decidir, o painel não pode somar ou misturar contas de naturezas diferentes de forma ambígua.
+- **Investimentos:** a aba vai passar por uma reforma grande depois. Por enquanto fica como está (comparações por banco com taxas de referência datadas e simuladores, incluindo o simulador de financiamento) e fica fora do escopo do redesign, a não ser que você peça.
 - **Correção antes de velocidade:** a interface nunca pode exibir um valor errado, desatualizado ou ambíguo, nem por um instante. Prefira um estado de carregamento explícito a um número provisório.
 - **Dinheiro:** sempre no padrão brasileiro (R$ 1.234,56). Sinal, cor e rótulo de entrada e saída precisam ser consistentes. A cor nunca pode ser o único indicador de positivo ou negativo.
 - **Recência:** datas, saldos, faturas e status de sincronização deixam claro de quando é a informação.
@@ -40,15 +46,16 @@ Uma única conexão pelo Open Finance basta para organizar as contas de PF e PJ 
 - **CDC:** preço, recorrência, período de teste, renovação e cancelamento ficam sempre explícitos e visíveis. Nada de dark patterns: sem letras miúdas, sem cancelamento escondido, sem urgência falsa, sem botão enganoso, sem botão que sugira uma contratação que não acontece.
 - **CVM:** nenhuma tela sugere recomendação de investimento personalizada. O produto organiza e explica dados, não presta consultoria. O rodapé declara que o Control Finance não é instituição financeira.
 - **Sem promessas:** nenhuma promessa de resultado financeiro, nenhum número de usuários, nenhum depoimento que não seja real.
-- **Termos:** "Abrir conta" é o CTA de cadastro; "Open Finance", "sincronização" e "fatura" são termos usados na interface.
+- **Termos:** "Abrir conta" é o CTA de cadastro na landing e "Criar conta" é o título e o botão da tela de cadastro (criar a conta não é gratuito); "Open Finance", "sincronização" e "fatura" são termos usados na interface.
 
 ## Brand Commitments
 
 - Nome: Control Finance, desenvolvido pela Mitech. Logos em `frontend/src/assets/images/cflogobranco.svg` e `cflogopreto.svg`.
 - Tom institucional, confiável e claro: nem banco tradicional, nem startup genérica. Linguagem simples para quem não é da área.
 - Todo texto da interface em português do Brasil.
+- Referência de inspiração para o painel (não é para copiar): https://motionsites.ai/.
 - A foto de arranha-céus do hero (`frontend/src/assets/images/hero-bg.webp`) fica: escolha do usuário, mantida em redesigns.
-- **Em aberto:** razão social, CNPJ, endereço e encarregado de dados (DPO) ainda não foram informados e aparecem como `[PENDENTE]` no rodapé e na Política de Privacidade. Também não está confirmado se a Mitech é a razão social do controlador. Não inventar esses dados.
+- **Bloqueia a publicação:** a empresa ainda não tem CNPJ nem endereço registrados, e o site não está em produção. Razão social, CNPJ, endereço e encarregado de dados (DPO) ficam como `[PENDENTE]` no rodapé e na Política de Privacidade até a abertura da empresa, e o site não pode ser publicado antes disso (Decreto 7.962/2013 art. 2º; LGPD art. 41). Também não está confirmado se a Mitech será a razão social do controlador. Não inventar esses dados.
 
 ## Evidence on Hand
 

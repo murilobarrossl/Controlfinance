@@ -11,6 +11,13 @@ export function setCsrfToken(token) {
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+export const ERROR_MESSAGES = {
+  network: "Não foi possível conectar. Verifique sua internet e tente de novo.",
+  server: "O serviço está instável no momento. Tente de novo em alguns minutos.",
+  timeout: "A resposta demorou demais. Tente de novo em instantes.",
+  unknown: "Não foi possível concluir a operação. Tente de novo.",
+};
+
 // Endpoints em que 401 é resposta esperada (credencial errada, ou só checando se existe
 // sessão), não "a sessão caiu": não disparam o redirecionamento pro login.
 const NO_REDIRECT_ENDPOINTS = ["/auth/login", "/auth/register", "/auth/me"];
@@ -20,19 +27,30 @@ const NO_REDIRECT_ENDPOINTS = ["/auth/login", "/auth/register", "/auth/me"];
 export async function apiRequest(endpoint, options = {}) {
   const method = (options.method || "GET").toUpperCase();
 
-  return fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    method,
-    credentials: "include",
-    headers: {
-      ...(options.body !== undefined && { "Content-Type": "application/json" }),
-      ...(UNSAFE_METHODS.has(method) && csrfToken && { "X-CSRF-Token": csrfToken }),
-      ...options.headers,
-    },
-  });
+  try {
+    return await fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      method,
+      credentials: "include",
+      headers: {
+        ...(options.body !== undefined && { "Content-Type": "application/json" }),
+        ...(UNSAFE_METHODS.has(method) && csrfToken && { "X-CSRF-Token": csrfToken }),
+        ...options.headers,
+      },
+    });
+  } catch (err) {
+    if (isAbortError(err)) throw err;
+    const error = new Error(ERROR_MESSAGES.network);
+    error.status = 0;
+    error.kind = "network";
+    throw error;
+  }
 }
 
 export async function readError(response) {
+  if (response.status === 408 || response.status === 504) return ERROR_MESSAGES.timeout;
+  if (response.status >= 500) return ERROR_MESSAGES.server;
+
   const text = await response.text();
   let data = {};
   try {
@@ -43,7 +61,7 @@ export async function readError(response) {
   // Erros de validação (ex: ModelState do ASP.NET) trazem a causa específica em "errors":
   // isso é mais útil pro usuário do que o "title" genérico ("One or more validation errors...").
   const fieldErrors = data.errors ? Object.values(data.errors).flat().join(" ") : "";
-  return fieldErrors || data.message || data.title || `Erro ${response.status}`;
+  return fieldErrors || data.message || ERROR_MESSAGES.unknown;
 }
 
 export const apiFetch = async (endpoint, options = {}) => {

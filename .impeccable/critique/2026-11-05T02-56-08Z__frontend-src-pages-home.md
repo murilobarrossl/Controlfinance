@@ -8,6 +8,7 @@ p1_count: 7
 target_identity: "file:/Users/igor/Desktop/workspace/projetos/Controlfinance/frontend/src/pages/home"
 timestamp: 2026-11-05T02-56-08Z
 slug: frontend-src-pages-home
+closed: true
 ---
 # Critique — landing page (frontend/src/pages/home)
 

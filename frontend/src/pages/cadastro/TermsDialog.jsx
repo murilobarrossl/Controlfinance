@@ -55,9 +55,9 @@ export default function TermsDialog({ submitting, onAccept, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="terms-dialog__header">
-          <h3 id="terms-dialog-title" className="terms-dialog__title">
+          <h2 id="terms-dialog-title" className="terms-dialog__title">
             Termos de uso
-          </h3>
+          </h2>
           <p className="terms-dialog__updated">Última atualização: {TERMS_UPDATED_AT}</p>
         </div>
 
@@ -67,6 +67,8 @@ export default function TermsDialog({ submitting, onAccept, onClose }) {
           onScroll={handleScroll}
           onClick={handleContentClick}
           tabIndex={0}
+          role="region"
+          aria-labelledby="terms-dialog-title"
         >
           <div>
             <TermosDeUsoTexto />

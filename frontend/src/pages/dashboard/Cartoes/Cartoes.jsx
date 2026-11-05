@@ -21,6 +21,7 @@ import { summarizeCards, groupCards } from "../../../utils/cardGroups.js";
 import { buildUpcoming } from "../../../utils/upcomingDues.js";
 import CardStatement from "./CardStatement.jsx";
 import "./Cartoes.css";
+import usePageTitle from "../../../hooks/usePageTitle.js";
 
 const EMPTY_DETAIL_FORM = { id: null, brand: "", creditLimit: "", closingDay: "1", dueDay: "10" };
 const EMPTY_MANUAL_FORM = { name: "", brand: "", creditLimit: "", closingDay: "1", dueDay: "10" };
@@ -70,6 +71,7 @@ function normalizeColor(raw) {
 // conta está ativa no seletor — a mesma BankAccount aparece aqui sempre que for identificada como
 // cartão, sem relação com qual conta o usuário escolheu ver no Dashboard Inteligente.
 export default function Cartoes() {
+  usePageTitle("Cartões");
   const { user } = useAuth();
   const { connectors } = useAccount();
   const [data, setData] = useState(null);
@@ -352,7 +354,7 @@ export default function Cartoes() {
 
   return (
     <div className="cartoes">
-      <SectionHeading kicker="Fatura, limite e parcelamentos" title="Cartões" align="left" />
+      <SectionHeading title="Cartões">Fatura, limite e parcelamentos</SectionHeading>
 
       {error && <p className="cartoes__error">{error}</p>}
 

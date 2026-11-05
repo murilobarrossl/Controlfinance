@@ -10,6 +10,7 @@ import { BANK_CONNECTION_NOTICE_VERSION } from "../../legal/versions.js";
 import { setPendingIntegrationId, watchPolpConnection, wait } from "../../services/polpConnection.js";
 import logo from "../../assets/images/cflogobranco.svg";
 import "./ConectarBanco.css";
+import usePageTitle from "../../hooks/usePageTitle.js";
 
 const POLL_MAX_ATTEMPTS = 10;
 const POLL_INTERVAL_MS = 1000;
@@ -23,6 +24,7 @@ function isSafeHttpUrl(url) {
 }
 
 export default function ConnectBankPage() {
+  usePageTitle("Conectar banco");
   const navigate = useNavigate();
   const [step, setStep] = useState("intro"); // "intro" | "choosing"
   const [connectors, setConnectors] = useState([]);

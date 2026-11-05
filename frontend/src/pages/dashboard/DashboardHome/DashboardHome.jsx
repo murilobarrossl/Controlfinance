@@ -29,6 +29,7 @@ import {
 } from "../../../utils/monthlyTrend.js";
 import { computeTrend } from "../../../utils/trend.js";
 import "./DashboardHome.css";
+import usePageTitle from "../../../hooks/usePageTitle.js";
 
 const MAX_DONUT_SLICES = 4;
 const TREND_MONTHS = 6;
@@ -56,11 +57,9 @@ function DashboardHomeSkeleton({ firstName }) {
   return (
     <div className="dashboard-home" aria-busy="true">
       <div className="dashboard-home__header">
-        <SectionHeading
-          kicker="Visão geral"
-          title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"}
-          align="left"
-        />
+        <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"}>
+          Visão geral
+        </SectionHeading>
         <div className="dashboard-home__account-controls">
           <Skeleton width="12rem" height="2.5rem" />
         </div>
@@ -97,6 +96,7 @@ function DashboardHomeSkeleton({ firstName }) {
 }
 
 export default function DashboardHome() {
+  usePageTitle("Dashboard inteligente");
   const { user } = useAuth();
   const navigate = useNavigate();
   const {
@@ -251,11 +251,9 @@ export default function DashboardHome() {
   return (
     <div className="dashboard-home">
       <div className="dashboard-home__header">
-        <SectionHeading
-          kicker="Visão geral"
-          title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"}
-          align="left"
-        />
+        <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"}>
+          Visão geral
+        </SectionHeading>
 
         <div className="dashboard-home__account-controls">
           {isActiveAccountCard ? (

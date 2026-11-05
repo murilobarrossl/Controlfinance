@@ -1,9 +1,10 @@
 import SectionHeading from "../../../../components/ui/SectionHeading/SectionHeading.jsx";
 import "./SobreNos.css";
 
-// Só o que o produto entrega e dá pra demonstrar: "tempo real" saiu porque a sincronização roda
-// ao abrir o painel (com intervalo mínimo por banco), e a comparação de preço com concorrentes
-// saiu porque não havia levantamento guardado que a sustentasse (CDC art. 36, parágrafo único).
+// Só o que o produto entrega e dá pra demonstrar: "tempo real" saiu porque a sincronização é
+// automática, quando há informações novas do banco, e não instantânea; a comparação de preço com
+// concorrentes saiu porque não havia levantamento guardado que a sustentasse (CDC art. 36,
+// parágrafo único).
 const DIFERENCIAIS = [
   "Conexão com bancos pelo Open Finance, com sua autorização",
   "Coleta mínima: o CPF não fica guardado e e-mails não levam valores",
@@ -13,7 +14,7 @@ const DIFERENCIAIS = [
 export default function SobreNos() {
   return (
     <section id="sobre-nos" className="sobre-nos">
-      <SectionHeading kicker="Quem somos" title="Sobre nós" />
+      <SectionHeading title="Sobre nós" />
 
       <div className="sobre-nos__grid">
         <div className="sobre-nos__narrative">

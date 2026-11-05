@@ -1,11 +1,10 @@
 import "./SectionHeading.css";
 
-export default function SectionHeading({ kicker, title, align = "center" }) {
+export default function SectionHeading({ title, children }) {
   return (
-    <div className={`section-heading section-heading--${align}`}>
-      {kicker && <span className="section-heading__kicker">{kicker}</span>}
+    <div className="section-heading">
       <h2 className="section-heading__title">{title}</h2>
-      <span className="section-heading__bar" />
+      {children && <p className="section-heading__lead">{children}</p>}
     </div>
   );
 }

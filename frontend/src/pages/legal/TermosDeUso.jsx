@@ -1,12 +1,14 @@
 import LegalPageLayout from "./LegalPageLayout.jsx";
 import { TERMS_VERSION } from "../../legal/versions.js";
+import usePageTitle from "../../hooks/usePageTitle.js";
 
 // Descreve o serviço como ele existe hoje. Itens [PENDENTE] dependem de informação que ainda não
 // existe (dados da empresa, condições comerciais). Mudou o texto, muda a versão em legal/versions.js e em
 // backend/Services/LegalDocuments.cs.
-export const TERMS_UPDATED_AT = `31 de outubro de 2026 (versão ${TERMS_VERSION})`;
+export const TERMS_UPDATED_AT = `5 de novembro de 2026 (versão ${TERMS_VERSION})`;
 
 export default function TermosDeUso() {
+  usePageTitle("Termos de uso");
   return (
     <LegalPageLayout kicker="Legal" title="Termos de uso" updatedAt={TERMS_UPDATED_AT}>
       <TermosDeUsoTexto />
@@ -45,7 +47,7 @@ export function TermosDeUsoTexto() {
       <h2>3. Conexão com bancos</h2>
       <ul>
         <li>Conectar um banco é opcional. A autorização é dada por você no ambiente do próprio banco, pelo Open Finance.</li>
-        <li>Os dados exibidos são os informados pelo banco, por meio do fornecedor, na última sincronização. A sincronização acontece quando você abre o painel ou pede uma atualização (no máximo a cada 5 minutos por banco); não é em tempo real. Dados podem chegar incompletos ou atrasados quando o banco ou o fornecedor não os enviam.</li>
+        <li>Os dados exibidos são os informados pelo banco, por meio do fornecedor, na última sincronização. A sincronização é automática: os dados são atualizados quando há informações novas do banco, não em tempo real, e o painel mostra quando foi a última sincronização. Dados podem chegar incompletos ou atrasados quando o banco ou o fornecedor não os enviam.</li>
         <li>A conexão depende do fornecedor de integração e dos bancos. Ela pode ficar indisponível temporariamente; nesse caso, os dados já importados continuam visíveis, mas não são atualizados.</li>
         <li>Você pode desconectar um banco a qualquer momento no painel. Ao desconectar, apagamos do Control Finance os dados que vieram dele e pedimos ao fornecedor que exclua a conexão. Você também pode revogar a autorização no aplicativo do banco.</li>
       </ul>

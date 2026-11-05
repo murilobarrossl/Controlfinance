@@ -21,6 +21,7 @@ import { formatCurrency, formatDate, formatPercentage } from "../../../utils/fin
 import { donutSliceColors, resolveCategoryColor } from "../../../utils/categoryColors.js";
 import { formatMonthLong, toIsoDate } from "../../../utils/monthLabel.js";
 import "./Categorias.css";
+import usePageTitle from "../../../hooks/usePageTitle.js";
 
 const EMPTY_LIST = [];
 
@@ -103,6 +104,7 @@ function installmentLabel(name) {
 }
 
 export default function Categorias() {
+  usePageTitle("Categorias");
   const [searchParams] = useSearchParams();
   const [categoryFromLink] = useState(() => searchParams.get("categoria"));
   const { accounts, connectors, effectiveAccountId, setSelectedAccountId, dataRefreshKey, accountsStatus } = useAccount();
@@ -343,7 +345,7 @@ export default function Categorias() {
 
   return (
     <div className="categorias">
-      <SectionHeading kicker="Onde seu dinheiro vai" title="Categorias" align="left" />
+      <SectionHeading title="Categorias">Onde seu dinheiro vai</SectionHeading>
 
       <div className="categorias__period">
         <div className="categorias__period-modes" role="radiogroup" aria-label="Período">

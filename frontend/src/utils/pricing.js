@@ -40,10 +40,10 @@ export const PLANS = {
 };
 
 export function formatPrice(value) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/\s/g, "");
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/\s/g, "\u00a0");
 }
 
-// Divide o preço em "R$49" e ",90" pro destaque visual dos cards de plano.
+// Divide o preço em "R$ 49" e ",90" pro destaque visual dos cards de plano.
 export function splitPrice(value) {
   const [integer, cents] = formatPrice(value).split(",");
   return { integer, cents: `,${cents}` };

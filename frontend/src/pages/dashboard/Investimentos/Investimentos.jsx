@@ -22,6 +22,7 @@ import BankYieldCards from "./BankYieldCards.jsx";
 import YieldSimulator from "./YieldSimulator.jsx";
 import FinancingSimulator from "./FinancingSimulator.jsx";
 import "./Investimentos.css";
+import usePageTitle from "../../../hooks/usePageTitle.js";
 
 const EMPTY_GOAL_FORM = { name: "", targetAmount: "", currentAmount: "", deadline: "" };
 
@@ -409,6 +410,7 @@ function GoalsSection() {
 // Cada seção guarda o próprio estado: digitar no simulador ou numa meta não re-renderiza a lista
 // de instituições (nem refaz o agrupamento), como acontecia com tudo num componente só.
 export default function Investimentos() {
+  usePageTitle("Investimentos");
   const { accounts, connectors, accountsStatus } = useAccount();
   const institutions = useMemo(() => groupInvestmentsByInstitution(accounts, connectors), [accounts, connectors]);
   // O guia só explica as modalidades que o usuário de fato tem, pra não virar um glossário genérico.

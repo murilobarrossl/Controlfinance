@@ -46,7 +46,7 @@ const PERGUNTAS = [
   {
     pergunta: "O que eu encontro no painel?",
     resposta:
-      "Um dashboard com saldo, receitas e despesas do mês e principais categorias de gasto; a aba Cartões, com fatura, limite, próximos vencimentos e parcelamentos; Receitas e despesas e Categorias, para entender para onde vai o dinheiro; Relatórios, com o histórico de lançamentos filtrável por mês ou por todo o período; Investimentos, com as contas de reserva e investimento reconhecidas nos seus bancos conectados, metas de economia e um simulador de financiamento; e Privacidade e dados, onde você baixa uma cópia dos seus dados, desconecta bancos e exclui a conta. Os dados do banco são atualizados quando você abre o painel, não em tempo real.",
+      "Um dashboard com saldo, receitas e despesas do mês e principais categorias de gasto; a aba Cartões, com fatura, limite, próximos vencimentos e parcelamentos; Receitas e despesas e Categorias, para entender para onde vai o dinheiro; Relatórios, com o histórico de lançamentos filtrável por mês ou por todo o período; Investimentos, com as contas de reserva e investimento reconhecidas nos seus bancos conectados, metas de economia e um simulador de financiamento; e Privacidade e dados, onde você baixa uma cópia dos seus dados, desconecta bancos e exclui a conta. Os dados do banco são atualizados automaticamente quando há informações novas, não em tempo real, e o painel mostra quando foi a última sincronização.",
   },
   {
     pergunta: "Vou receber lembretes de vencimento?",
@@ -92,27 +92,41 @@ export default function FAQ() {
 
   return (
     <section id="faq" className="faq">
-      <SectionHeading kicker="Dúvidas" title="Tire suas dúvidas" />
+      <div className="faq__intro">
+        <SectionHeading title="Tire suas dúvidas" />
+        <p className="faq__footer">
+          Não encontrou sua resposta? Fale conosco{" "}
+          <a href="mailto:suporte@controlfinance.app.br" className="faq__link">
+            suporte@controlfinance.app.br
+          </a>
+        </p>
+      </div>
+
       <ul className="faq__list">
         {PERGUNTAS.map(({ pergunta, resposta }, index) => {
           const isOpen = openIndex === index;
           const answerId = `faq-answer-${index}`;
+          const questionId = `faq-question-${index}`;
           return (
             <li key={pergunta} className="faq__item">
               <button
+                id={questionId}
+                type="button"
                 className="faq__question"
                 onClick={() => toggle(index)}
                 aria-expanded={isOpen}
                 aria-controls={answerId}
               >
                 {pergunta}
-                <span className={`faq__chevron ${isOpen ? "faq__chevron--open" : ""}`}>
+                <span className={`faq__chevron ${isOpen ? "faq__chevron--open" : ""}`} aria-hidden="true">
                   <ChevronIcon />
                 </span>
               </button>
               <div
                 id={answerId}
                 role="region"
+                aria-labelledby={questionId}
+                inert={!isOpen}
                 className={`faq__answer ${isOpen ? "faq__answer--open" : ""}`}
               >
                 <div className="faq__answer-inner">
@@ -123,12 +137,6 @@ export default function FAQ() {
           );
         })}
       </ul>
-      <p className="faq__footer">
-        Não encontrou sua resposta? Fale conosco{" "}
-        <a href="mailto:suporte@controlfinance.app.br" className="faq__link">
-          suporte@controlfinance.app.br
-        </a>
-      </p>
     </section>
   );
 }

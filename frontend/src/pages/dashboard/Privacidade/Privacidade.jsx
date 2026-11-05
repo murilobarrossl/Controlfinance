@@ -13,10 +13,12 @@ import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading
 import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
 import DeleteAccountDialog from "./DeleteAccountDialog.jsx";
 import "./Privacidade.css";
+import usePageTitle from "../../../hooks/usePageTitle.js";
 
 // Tudo que o titular pode fazer sobre os próprios dados, num lugar só e funcionando de verdade
 // (cada botão chama um endpoint real; nenhum só muda texto na tela).
 export default function Privacidade() {
+  usePageTitle("Privacidade e dados");
   const navigate = useNavigate();
   const { user, logout, updateUser } = useAuth();
   const { accounts, connectors, accountsStatus, disconnectConnection } = useAccount();
@@ -116,7 +118,7 @@ export default function Privacidade() {
 
   return (
     <div className="privacidade">
-      <SectionHeading kicker="Seus dados, suas escolhas" title="Privacidade e dados" align="left" />
+      <SectionHeading title="Privacidade e dados">Seus dados, suas escolhas</SectionHeading>
 
       <Card title="O que guardamos sobre você">
         <ul className="privacidade__list">
