@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "cost-reducer": {
+      "source": "huyvp/claude-skills",
+      "sourceType": "github",
+      "skillPath": "cost-reducer/SKILL.md",
+      "computedHash": "4a3d5bb348a19451ae192e7e0be25839d3d19a30cbfdd089ac8380b5121ca208"
+    }
+  }
+}
