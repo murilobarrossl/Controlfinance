@@ -225,8 +225,8 @@ export default function ConnectBankPage() {
 
         <h1 className="connect-bank__title">Conecte sua conta</h1>
         <p className="connect-bank__subtitle">
-          Conectar um banco é opcional. Sem conexão, você ainda pode usar o painel com contas, cartões
-          e lançamentos cadastrados manualmente.
+          O Control Finance funciona com os bancos que você conecta: contas, saldos, extratos e cartões
+          chegam automaticamente pelo Open Finance, por meio da Polp. Não é preciso digitar nada.
         </p>
 
         {connectingStage === "waiting" && (
@@ -346,7 +346,7 @@ export default function ConnectBankPage() {
               {loadingConnectors ? "Carregando bancos..." : "Escolher banco"}
             </Button>
             <Link to="/dashboard" className="connect-bank__skip">
-              Agora não, usar sem conectar
+              Agora não, conectar depois
             </Link>
           </form>
         )}

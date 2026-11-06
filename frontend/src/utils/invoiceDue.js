@@ -1,13 +1,3 @@
-function todayIso() {
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-
-export function isPastDue(date) {
-  return Boolean(date) && String(date).slice(0, 10) < todayIso();
-}
-
 export function formatDueDay(date) {
   const [, month, day] = String(date).slice(0, 10).split("-");
   return `Venceu em ${day}/${month}`;

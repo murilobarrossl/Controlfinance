@@ -371,19 +371,8 @@ public class PolpController(
         if (account?.PolpAccountId is not Guid remoteId || CreditCardAccountDetector.LooksLikeCreditCard(account))
             return NotFound();
 
-        lock (BalanceSyncLock)
-        {
-            var cacheKey = $"polp:balance-sync:{account.Id}";
-            if (cache.TryGetValue(cacheKey, out DateTime last) && DateTime.UtcNow - last < BalanceSyncWindow)
-            {
-                return StatusCode(StatusCodes.Status429TooManyRequests, new
-                {
-                    message = "O saldo foi atualizado há pouco. Tente novamente em instantes.",
-                    retryAfterSeconds = (int)Math.Ceiling((BalanceSyncWindow - (DateTime.UtcNow - last)).TotalSeconds)
-                });
-            }
-            cache.Set(cacheKey, DateTime.UtcNow, BalanceSyncWindow);
-        }
+        if (!TryReserveBalanceSync(account.Id, out var retryAfter))
+            return BalanceSyncTooSoon(retryAfter);
 
         PolpAccountDto remote;
         try
@@ -403,6 +392,77 @@ public class PolpController(
 
         return Ok(new { balance = account.Balance });
     }
+
+    // Saldo de todas as contas (não cartões) de uma conexão. Uma chamada por conta, em série, com a
+    // mesma janela por conta da rota acima: o limite de 30 req/min da Polp é global do cliente.
+    [HttpPost("integrations/{id:guid}/balance-sync")]
+    public async Task<IActionResult> SyncConnectionBalance(Guid id, CancellationToken ct)
+    {
+        var integration = await db.PolpIntegrations
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus, ct);
+        if (integration is null) return NotFound();
+
+        var accounts = (await db.BankAccounts
+                .Where(b => b.UserId == UserId && b.IsActive && b.PolpIntegrationId == integration.PolpIntegrationId && b.PolpAccountId != null)
+                .ToListAsync(ct))
+            .Where(b => !CreditCardAccountDetector.LooksLikeCreditCard(b))
+            .ToList();
+        if (accounts.Count == 0) return NotFound();
+
+        var due = new List<BankAccount>();
+        var shortestWait = BalanceSyncWindow;
+        foreach (var account in accounts)
+        {
+            if (TryReserveBalanceSync(account.Id, out var wait)) due.Add(account);
+            else if (wait < shortestWait) shortestWait = wait;
+        }
+        if (due.Count == 0) return BalanceSyncTooSoon(shortestWait);
+
+        var failed = 0;
+        foreach (var account in due)
+        {
+            try
+            {
+                var remote = await polp.SyncBalanceAsync(account.PolpAccountId!.Value, ct);
+                if (remote.Balance?.AvailableAmount?.Value is { } balance) account.Balance = balance;
+            }
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
+            {
+                failed++;
+            }
+        }
+
+        if (failed == due.Count)
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível atualizar o saldo agora." });
+
+        await db.SaveChangesAsync(ct);
+        return Ok(new { updated = due.Count - failed, failed, skipped = accounts.Count - due.Count });
+    }
+
+    private bool TryReserveBalanceSync(Guid accountId, out TimeSpan retryAfter)
+    {
+        lock (BalanceSyncLock)
+        {
+            var cacheKey = $"polp:balance-sync:{accountId}";
+            var now = DateTime.UtcNow;
+            if (cache.TryGetValue(cacheKey, out DateTime last) && now - last < BalanceSyncWindow)
+            {
+                retryAfter = BalanceSyncWindow - (now - last);
+                return false;
+            }
+            cache.Set(cacheKey, now, BalanceSyncWindow);
+            retryAfter = TimeSpan.Zero;
+            return true;
+        }
+    }
+
+    private ObjectResult BalanceSyncTooSoon(TimeSpan retryAfter) =>
+        StatusCode(StatusCodes.Status429TooManyRequests, new
+        {
+            message = "O saldo foi atualizado há pouco. Tente novamente em instantes.",
+            retryAfterSeconds = (int)Math.Ceiling(retryAfter.TotalSeconds)
+        });
 
     // Desconecta uma conexão bancária inteira (conta corrente + cartão do mesmo banco vêm no mesmo
     // consentimento e não dá pra revogar uma sem a outra). Apaga na hora tudo que veio dessa

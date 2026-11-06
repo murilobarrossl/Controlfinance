@@ -185,8 +185,47 @@ public class PolpCurrentInvoiceTests
 
         s.T.Clock.UtcNow = lastMinute.AddMinutes(1);
         await s.SyncCard();
-        Assert.Equal(40m, s.Card().CurrentInvoiceAmount);
-        Assert.Equal(Day(2026, 12, 10), s.Card().InvoiceDueDate);
+        Assert.Equal(500m, s.Card().CurrentInvoiceAmount);
+        Assert.Equal(Day(2026, 11, 10), s.Card().InvoiceDueDate);
+
+        await using var db = s.T.NewContext();
+        var today = await UserClock.TodayForUserAsync(db, s.T.User.Id, s.T.Clock);
+        var dto = (await CreditCardSummaryBuilder.BuildRecognizedListAsync(db, s.T.User.Id, today)).Single();
+        Assert.Equal(nameof(TransactionStatus.Overdue), dto.InvoiceStatus);
+    }
+
+    [Fact]
+    public async Task Vencida_sem_pagamento_continua_sendo_a_fatura_atual()
+    {
+        using var s = new Scenario(new DateTimeOffset(2026, 11, 15, 15, 0, 0, TimeSpan.Zero));
+        s.Polp.Bills[s.CardId] = [ScriptedPolp.Bill("2026-10-28", "2026-11-10", "500.00")];
+        s.Polp.CardTransactions[s.CardId] = [ScriptedPolp.CardTx("2026-11-01T15:00:00.000Z", "40.00")];
+
+        await s.SyncCard();
+
+        var card = s.Card();
+        Assert.Equal(500m, card.CurrentInvoiceAmount);
+        Assert.Equal(Day(2026, 11, 10), card.InvoiceDueDate);
+    }
+
+    [Fact]
+    public async Task Vencida_com_pagamento_minimo_da_lugar_a_fatura_em_aberto()
+    {
+        using var s = new Scenario(new DateTimeOffset(2026, 11, 15, 15, 0, 0, TimeSpan.Zero));
+        var bill = ScriptedPolp.Bill("2026-10-28", "2026-11-10", "500.00");
+        bill.BillMinimumAmount = ScriptedPolp.Money("75.00");
+        s.Polp.Bills[s.CardId] = [bill];
+        s.Polp.CardTransactions[s.CardId] =
+        [
+            ScriptedPolp.CardTx("2026-11-01T15:00:00.000Z", "40.00"),
+            ScriptedPolp.CardTx("2026-11-09T15:00:00.000Z", "75.00", credit: true, type: "PAGAMENTO_FATURA"),
+        ];
+
+        await s.SyncCard();
+
+        var card = s.Card();
+        Assert.Equal(40m, card.CurrentInvoiceAmount);
+        Assert.Equal(Day(2026, 12, 10), card.InvoiceDueDate);
     }
 
     [Fact]

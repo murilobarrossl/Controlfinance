@@ -23,10 +23,11 @@ export const getIntegrationStatus = async (integrationId) =>
   apiFetch(`/polp/integrations/${integrationId}`);
 
 // Não existe mais "sincronizar tudo agora": a Polp sincroniza por agenda e avisa o backend por
-// webhook. A única consulta na hora que sobrou é o saldo de uma conta, a pedido do usuário
-// (limitada pela Polp; devolve 429 com retryAfterSeconds se for repetida em menos de 1 minuto).
-export const syncAccountBalance = async (accountId) =>
-  apiFetch(`/polp/accounts/${accountId}/balance-sync`, {
+// webhook. A única consulta na hora que sobrou é o saldo, a pedido do usuário: aqui de todas as
+// contas de uma conexão (limitada pela Polp; devolve 429 com retryAfterSeconds se todas foram
+// atualizadas há menos de 1 minuto).
+export const syncConnectionBalance = async (localIntegrationId) =>
+  apiFetch(`/polp/integrations/${localIntegrationId}/balance-sync`, {
     method: "POST",
   });
 

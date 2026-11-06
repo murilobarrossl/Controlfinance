@@ -346,7 +346,7 @@ public class PolpSyncService(
 
     // Fatura atual. /bills só traz faturas fechadas, e os payments[] de uma fatura são os pagos
     // durante o ciclo dela (quitam a anterior): se ela foi paga só aparece como PAGAMENTO_FATURA
-    // nas transações do cartão, depois do fechamento. Fatura paga ou vencida nunca vira "atual".
+    // nas transações do cartão, depois do fechamento. Fatura paga nunca vira "atual".
     private async Task ApplyCurrentInvoiceAsync(BankAccount card, List<PolpBillDto> bills, DateTime today, bool hadBills, CancellationToken ct)
     {
         var closed = ClosedBills(bills).ToList();
@@ -369,6 +369,20 @@ public class PolpSyncService(
         }
 
         var lastClosed = closed.OrderByDescending(b => b.Closing).FirstOrDefault();
+
+        // Depois do próximo fechamento o saldo já passou pra fatura seguinte.
+        if (lastClosed is { Total: not null } && lastClosed.Due < today && today <= lastClosed.Closing.AddMonths(1))
+        {
+            var paid = transactions
+                .Where(t => t.PolpMovementKind == PolpMovementKind.CardBillPayment && t.DueDate > lastClosed.Closing)
+                .Sum(t => t.Type == TransactionType.Income ? t.Amount : -t.Amount);
+            if (paid < (lastClosed.Minimum ?? lastClosed.Total.Value))
+            {
+                card.CurrentInvoiceAmount = lastClosed.Total.Value;
+                card.InvoiceDueDate = lastClosed.Due;
+                return;
+            }
+        }
 
         // O cartão já teve fatura e agora a lista veio sem nenhuma: resposta incoerente; somar o
         // histórico inteiro como "fatura aberta" seria um valor errado.
@@ -393,14 +407,14 @@ public class PolpSyncService(
         }
     }
 
-    private sealed record ClosedBill(DateTime Due, DateTime Closing, decimal? Total);
+    private sealed record ClosedBill(DateTime Due, DateTime Closing, decimal? Total, decimal? Minimum);
 
     // Datas de fatura são do calendário do banco (Brasília), não do fuso do usuário.
     private static IEnumerable<ClosedBill> ClosedBills(List<PolpBillDto> bills) =>
         bills
-            .Select(b => (due: ToCivilDate(b.DueDate, Brasilia), closing: ToCivilDate(b.BillClosingDate, Brasilia), total: b.BillTotalAmount?.Value))
+            .Select(b => (due: ToCivilDate(b.DueDate, Brasilia), closing: ToCivilDate(b.BillClosingDate, Brasilia), total: b.BillTotalAmount?.Value, minimum: b.BillMinimumAmount?.Value))
             .Where(b => b.due.HasValue && b.closing.HasValue)
-            .Select(b => new ClosedBill(b.due!.Value, b.closing!.Value, b.total));
+            .Select(b => new ClosedBill(b.due!.Value, b.closing!.Value, b.total, b.minimum));
 
     private async Task UpsertTransactionsAsync(
         Plan plan, Dictionary<Guid, BankAccount> byRemote, Dictionary<string, Guid> categoryIds, TimeZoneInfo zone, CancellationToken ct)

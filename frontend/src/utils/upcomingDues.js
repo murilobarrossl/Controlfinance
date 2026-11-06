@@ -1,4 +1,5 @@
-import { isPastDue, formatPastDue } from "./invoiceDue.js";
+import { formatPastDue } from "./invoiceDue.js";
+import { isInvoiceOverdue } from "./cardLimits.js";
 
 const MAX_UPCOMING = 8;
 
@@ -16,8 +17,8 @@ export function buildUpcoming(cards, installments, pendingTransactions) {
       meta: [c.bankName, c.brand].filter(Boolean).join(" · ") || "Cartão de crédito",
       date: c.invoiceDueDate,
       amount: c.currentInvoice,
-      status: "Pending",
-      pastDueText: isPastDue(c.invoiceDueDate) ? formatPastDue(c.invoiceDueDate, c.connectionLastSyncedAt) : null,
+      status: c.invoiceStatus,
+      pastDueText: isInvoiceOverdue(c) ? formatPastDue(c.invoiceDueDate, c.connectionLastSyncedAt) : null,
     }));
   const nextInstallments = installments.map((i) => ({
     key: `installment-${i.id}`,

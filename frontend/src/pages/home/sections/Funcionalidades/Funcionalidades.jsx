@@ -46,7 +46,7 @@ const GRUPOS = [
       },
       {
         titulo: "Histórico financeiro",
-        descricao: "Extrato importado do banco conectado e lançamentos manuais, com filtros por mês e categoria",
+        descricao: "Extrato importado automaticamente dos bancos conectados, com filtros por mês e categoria",
         Icon: HistoryIcon,
       },
       {

@@ -21,7 +21,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             : await db.BankAccounts.AsNoTracking().FirstOrDefaultAsync(b => b.UserId == UserId && b.IsActive);
 
         if (account is null)
-            return Ok(new { message = "Nenhuma conta bancária cadastrada." });
+            return Ok(new { message = "Nenhum banco conectado ainda." });
 
         var accountDto = BankAccountDto.FromEntity(account);
 

@@ -9,7 +9,7 @@ import usePageTitle from "../../hooks/usePageTitle.js";
 export default function PoliticaDePrivacidade() {
   usePageTitle("Política de privacidade");
   return (
-    <LegalPageLayout kicker="Legal" title="Política de privacidade" updatedAt={`31 de outubro de 2026 (versão ${PRIVACY_VERSION})`}>
+    <LegalPageLayout kicker="Legal" title="Política de privacidade" updatedAt={`6 de novembro de 2026 (versão ${PRIVACY_VERSION})`}>
       <h2>Resumo</h2>
       <ul>
         <li>Coletamos o mínimo para o painel funcionar. O número do seu CPF/CNPJ não fica guardado, e não pedimos telefone.</li>
@@ -55,7 +55,7 @@ export default function PoliticaDePrivacidade() {
 
       <p><strong>Dados que você cadastra</strong></p>
       <ul>
-        <li>Contas e cartões manuais, lançamentos, parcelamentos (a descrição é guardada cifrada), categorias e edições de nome/categoria.</li>
+        <li>Cartões e parcelamentos cadastrados por você (a descrição do parcelamento é guardada cifrada), categorias e edições de nome/categoria das transações importadas.</li>
       </ul>
 
       <p><strong>Registros de aceite e preferências</strong></p>
@@ -145,7 +145,7 @@ export default function PoliticaDePrivacidade() {
 
       <h2>7. Por quanto tempo guardamos</h2>
       <ul>
-        <li>Cadastro, lançamentos manuais e preferências: até você excluir a conta (ou remover o item).</li>
+        <li>Cadastro, cartões e parcelamentos cadastrados por você, edições e preferências: até você excluir a conta (ou remover o item).</li>
         <li>Dados de um banco conectado: até você desconectar esse banco ou excluir a conta. Ao desconectar, apagamos na hora tudo que veio dele. Um prazo máximo para o histórico importado pode ser configurado; o prazo em vigor aparece em Privacidade e dados, no painel.</li>
         <li>Registros de aceite: enquanto a conta existir; são apagados junto com ela.</li>
         <li>Identificador de sessão encerrada: até o horário em que a sessão expiraria (no máximo 8 horas).</li>

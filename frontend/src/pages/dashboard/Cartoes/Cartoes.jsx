@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Link } from "react-router";
 import { getCreditCardsSummary, createCreditCard, updateCreditCard, setPrimaryCard } from "../../../api/creditCards.js";
 import { getInstallments, createInstallment, deleteInstallment } from "../../../api/installments.js";
 import { getTransactions } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
+import { useDashboardHeaderSlot } from "../../../context/DashboardHeaderContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
@@ -17,11 +20,12 @@ import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.js
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import { CardIcon, WalletIcon, BellIcon, HistoryIcon, StarIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
-import { formatCurrency, formatDate } from "../../../utils/financeMath.js";
+import LimitBar from "../../../components/dashboard/LimitBar/LimitBar.jsx";
+import { formatCurrency, formatDate, formatPercentage } from "../../../utils/financeMath.js";
 import { summarizeCards, groupCards } from "../../../utils/cardGroups.js";
 import { buildUpcoming } from "../../../utils/upcomingDues.js";
-import { isPastDue, formatDueDay, formatDataAge } from "../../../utils/invoiceDue.js";
-import { cardLimits } from "../../../utils/cardLimits.js";
+import { formatDueDay, formatDataAge } from "../../../utils/invoiceDue.js";
+import { cardLimits, isInvoiceOverdue } from "../../../utils/cardLimits.js";
 import { getCardBase, cardTextColor } from "../../../utils/cardColors.js";
 import CardStatement from "./CardStatement.jsx";
 import CardPicker from "../../../components/dashboard/CardPicker/CardPicker.jsx";
@@ -50,6 +54,21 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
+function installmentRemovalMessage(installment) {
+  const remaining = Math.max(0, installment.totalInstallments - installment.currentInstallment + 1);
+  const card = installment.creditCardName || "sem cartão vinculado";
+  const parts = [
+    `Parcela ${installment.currentInstallment} de ${installment.totalInstallments} (${formatCurrency(installment.installmentAmount)} por mês, ${card}).`,
+    remaining === 1
+      ? `A última parcela, de ${formatCurrency(installment.installmentAmount)}, sai desta lista e dos próximos vencimentos.`
+      : `As ${remaining} parcelas restantes, somando ${formatCurrency(remaining * installment.installmentAmount)}, saem desta lista e dos próximos vencimentos.`,
+  ];
+  if (installment.affectsCardLimit)
+    parts.push(`O limite usado de ${installment.creditCardName} diminui nesse mesmo valor.`);
+  parts.push("Os lançamentos do extrato não são apagados. Não é possível desfazer.");
+  return parts.join(" ");
+}
+
 function todayIso() {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
@@ -69,6 +88,7 @@ export default function Cartoes() {
   usePageTitle("Cartões");
   const { user } = useAuth();
   const { connectors } = useAccount();
+  const headerSlot = useDashboardHeaderSlot();
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
@@ -86,6 +106,7 @@ export default function Cartoes() {
   const [pendingInstallment, setPendingInstallment] = useState(null);
   const focusAfterDelete = useRef(null);
   const installmentsRef = useRef(null);
+  const manualFormRef = useRef(null);
 
   const cards = data?.cards ?? EMPTY_LIST;
   const installments = data?.installments ?? EMPTY_LIST;
@@ -277,18 +298,34 @@ export default function Cartoes() {
     .map((c) => c.connectionLastSyncedAt)
     .sort((a, b) => new Date(a) - new Date(b))[0];
   const dataAge = formatDataAge(oldestSync);
-  const scopeLines = noCards
-    ? [{ label: "Nenhum cartão para somar", value: "" }]
-    : [{ label: [scopeLabel, dataAge].filter(Boolean).join(" · "), value: "" }];
-  const summaryValue = (value) => (loading ? valueSkeleton : noCards ? "—" : formatCurrency(value));
+  const scopeLines = [{ label: [scopeLabel, dataAge].filter(Boolean).join(" · "), value: "" }];
+  const summaryValue = (value) => (loading ? valueSkeleton : formatCurrency(value));
+  const usageLines =
+    summary.usagePercent == null
+      ? scopeLines
+      : [
+          {
+            label:
+              summary.overLimitCards > 0
+                ? `Limite excedido em ${formatCurrency(summary.overAmount)} · ${formatPercentage(summary.usagePercent)} do limite`
+                : `${formatPercentage(summary.usagePercent)} do limite`,
+            value: "",
+          },
+          ...scopeLines,
+        ];
+
+  function openManualForm() {
+    setShowManualForm(true);
+    requestAnimationFrame(() => manualFormRef.current?.querySelector("input")?.focus());
+  }
 
   const valueSkeleton = <Skeleton width="7rem" height="1.5rem" />;
 
   function renderCardTile(card) {
     const selected = scopeCard?.id === card.id;
     const brand = brandOf(card);
-    const { available, usagePercent, overLimit } = cardLimits(card);
-    const pastDue = isPastDue(card.invoiceDueDate);
+    const { available, usagePercent, overLimit, overAmount } = cardLimits(card);
+    const pastDue = isInvoiceOverdue(card);
     const base = getCardBase({ name: card.name, productType: card.productType, institutionColor: card.institutionColor });
     const group = groups.find((g) => g.cards.includes(card));
     return [
@@ -333,12 +370,12 @@ export default function Cartoes() {
             <span className="cartoes__tile-stat cartoes__tile-stat--wide">
               <span>Limite disponível</span>
               <strong>{available != null ? formatCurrency(available) : "—"}</strong>
+              <LimitBar usagePercent={usagePercent} size="sm" />
               {usagePercent != null && (
-                <span className="cartoes__tile-bar" aria-hidden="true">
-                  <span
-                    className={overLimit ? "cartoes__tile-bar-fill cartoes__tile-bar-fill--over" : "cartoes__tile-bar-fill"}
-                    style={{ width: `${Math.min(100, usagePercent)}%` }}
-                  />
+                <span className={`cartoes__tile-limit-note${overLimit ? " cartoes__tile-limit-note--over" : ""}`}>
+                  {overLimit
+                    ? `Limite excedido em ${formatCurrency(overAmount)} · ${formatPercentage(usagePercent)} usado`
+                    : `${formatPercentage(usagePercent)} do limite usado`}
                 </span>
               )}
             </span>
@@ -481,68 +518,87 @@ export default function Cartoes() {
           Os números abaixo mostram: <strong>{scopeLabel}</strong>
         </p>
       )}
-      {!loading && cards.length > 1 && (
-        <div className="cartoes__scope">
-          <span className="cartoes__scope-title" id="cartoes-escopo-rotulo">
-            Os números abaixo mostram
-          </span>
-          <CardPicker
-            id="cartoes-escopo"
-            labelId="cartoes-escopo-rotulo"
-            options={pickerOptions}
-            value={scopeCard?.id ?? "all"}
-            onChange={setSummaryScope}
-          />
-        </div>
-      )}
+      {!loading &&
+        cards.length > 1 &&
+        headerSlot &&
+        createPortal(
+          <div className="dashboard-toolbar__scope">
+            <CardPicker
+              id="cartoes-escopo"
+              labelId="cartoes-escopo-rotulo"
+              options={pickerOptions}
+              value={scopeCard?.id ?? "all"}
+              onChange={setSummaryScope}
+            />
+          </div>,
+          headerSlot,
+        )}
 
-      <div className="cartoes__summary">
-        <StatCard
-          icon={<CardIcon />}
-          label="Limite usado"
-          value={summaryValue(summary.usedLimit)}
-          secondaryLines={loading ? [] : scopeLines}
-        />
-        <StatCard
-          icon={<WalletIcon />}
-          label="Limite disponível"
-          value={summaryValue(summary.availableLimit)}
-          secondaryLines={loading ? [] : scopeLines}
-        />
-        <StatCard
-          icon={<BellIcon />}
-          label="Faturas abertas"
-          value={summaryValue(summary.openInvoices)}
-          secondaryLines={loading ? [] : scopeLines}
-        />
-        <StatCard
-          icon={<HistoryIcon />}
-          label="Próximo vencimento"
-          value={
-            loading
-              ? valueSkeleton
-              : !summary.nextDue
-                ? "—"
-                : summary.nextDue.pastDue
-                  ? formatDueDay(summary.nextDue.date)
-                  : formatDate(summary.nextDue.date)
-          }
-          secondaryLines={
-            noCards
-              ? scopeLines
-              : !loading && summary.nextDue
+      {noCards ? (
+        <Card className="cartoes__empty">
+          <p className="cartoes__empty-title">Você ainda não tem cartões por aqui</p>
+          <p className="cartoes__hint">
+            Limite, fatura e vencimento aparecem quando um cartão de crédito chega por um banco conectado ou é
+            cadastrado manualmente.
+          </p>
+          <div className="cartoes__empty-actions">
+            <Button as={Link} to="/conectar-banco" variant="primary" size="sm">
+              Conectar banco
+            </Button>
+            <Button as="button" type="button" variant="outline" size="sm" onClick={openManualForm}>
+              Cadastrar cartão
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <div className="cartoes__summary">
+          <StatCard
+            icon={<CardIcon />}
+            label="Limite usado"
+            value={summaryValue(summary.usedLimit)}
+            valueTone={!loading && summary.overLimitCards > 0 ? "expense" : "default"}
+            secondaryLines={loading ? [] : usageLines}
+          />
+          <StatCard
+            icon={<WalletIcon />}
+            label="Limite disponível"
+            value={summaryValue(summary.availableLimit)}
+            secondaryLines={loading ? [] : scopeLines}
+          />
+          <StatCard
+            icon={<BellIcon />}
+            label="Fatura atual"
+            value={summaryValue(summary.currentInvoice)}
+            secondaryLines={loading ? [] : scopeLines}
+          />
+          <StatCard
+            icon={<HistoryIcon />}
+            label="Próximo vencimento"
+            value={
+              loading
+                ? valueSkeleton
+                : !summary.nextDue
+                  ? "—"
+                  : summary.nextDue.pastDue
+                    ? formatDueDay(summary.nextDue.date)
+                    : formatDate(summary.nextDue.date)
+            }
+            valueTone={!loading && summary.nextDue?.pastDue ? "expense" : "default"}
+            secondaryLines={
+              !loading && summary.nextDue
                 ? [
                     {
                       label: summary.nextDue.pastDue
-                        ? [formatDataAge(summary.nextDue.syncedAt), summary.nextDue.label].filter(Boolean).join(" · ")
+                        ? ["Fatura atrasada", summary.nextDue.label, formatDataAge(summary.nextDue.syncedAt)].filter(Boolean).join(" · ")
                         : [summary.nextDue.label, formatDataAge(summary.nextDue.syncedAt)].filter(Boolean).join(" · "),
                       value: "",
                     },
                   ]
                 : []
-          }
-        />
-      </div>
+            }
+          />
+        </div>
+      )}
 
       <Card title="Próximos vencimentos">
         {!loading && pendingTransactions.length >= TRANSACTIONS_CAP && (
@@ -565,9 +621,7 @@ export default function Cartoes() {
                     {item.meta} · {item.pastDueText ?? formatDate(item.date)}
                   </span>
                 </div>
-                {!item.pastDueText && (
-                  <StatusPill status={item.status}>{STATUS_LABELS[item.status] || item.status}</StatusPill>
-                )}
+                <StatusPill status={item.status}>{STATUS_LABELS[item.status] || item.status}</StatusPill>
                 <span className="cartoes__list-amount">{item.amount != null ? formatCurrency(item.amount) : "—"}</span>
               </li>
             ))}
@@ -599,6 +653,7 @@ export default function Cartoes() {
           </Card>
         ))}
 
+      <div ref={manualFormRef}>
       <Card title="Cadastrar cartão não sincronizado">
         <p className="cartoes__hint">Pra um cartão que não veio de nenhum banco conectado.</p>
         {showManualForm ? (
@@ -683,12 +738,13 @@ export default function Cartoes() {
           </form>
         ) : (
           <div className="cartoes__form-hint">
-            <Button as="button" type="button" variant="outline" size="sm" onClick={() => setShowManualForm(true)}>
+            <Button as="button" type="button" variant="outline" size="sm" onClick={openManualForm}>
               Cadastrar cartão
             </Button>
           </div>
         )}
       </Card>
+      </div>
 
       <div ref={installmentsRef} className="cartoes__installments">
       <Card title="Parcelamentos">
@@ -718,7 +774,7 @@ export default function Cartoes() {
                   type="button"
                   className="cartoes__remove"
                   onClick={() => setPendingInstallment(i)}
-                  aria-label="Remover parcelamento"
+                  aria-label={`Remover parcelamento ${i.description}`}
                   title="Remover parcelamento"
                 >
                   ×
@@ -830,8 +886,8 @@ export default function Cartoes() {
 
       <ConfirmDialog
         open={pendingInstallment !== null}
-        title={`Remover ${pendingInstallment?.description ?? "parcelamento"}?`}
-        message="O parcelamento sai desta lista e dos próximos vencimentos. Se ele estiver ligado a um cartão cadastrado manualmente, o limite usado desse cartão diminui. Não é possível desfazer."
+        title={`Remover o parcelamento "${pendingInstallment?.description ?? ""}"?`}
+        message={pendingInstallment ? installmentRemovalMessage(pendingInstallment) : ""}
         confirmLabel="Remover"
         cancelLabel="Cancelar"
         onConfirm={() => {

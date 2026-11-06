@@ -1,15 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { ChevronDownIcon, CardIcon } from "../../ui/icons/FeatureIcons.jsx";
-import { syncAccountBalance } from "../../../api/polp.js";
+import { ChevronDownIcon, CardIcon, MoreIcon } from "../../ui/icons/FeatureIcons.jsx";
 import ConfirmDialog from "../../ui/ConfirmDialog/ConfirmDialog.jsx";
 import { groupAccounts } from "../../../utils/accountGrouping.js";
 import { isCreditCardAccount, getAccountKindLabel } from "../../../utils/accountKind.js";
 import "./AccountSwitcher.css";
-
-// Tempo suficiente pro usuário ler o resultado ("Saldo atualizado" ou o erro) antes do botão
-// voltar sozinho pro estado normal, sem precisar de um clique extra pra limpar o feedback.
-const SYNC_FEEDBACK_DURATION_MS = 4000;
 
 // Mesma cor usada na tarja ao lado de cada banco na tela de conectar-banco, nunca
 // escolhida à mão aqui, só repassada do conector correspondente (via bankCode).
@@ -49,41 +44,32 @@ function sortGroupAccounts(accounts) {
   return [...accounts].sort((a, b) => Number(isCreditCardAccount(a)) - Number(isCreditCardAccount(b)));
 }
 
-export default function AccountSwitcher({ accounts, activeAccountId, connectors, onSelect, onDisconnect, onRemoveManual, onSynced }) {
+export default function AccountSwitcher({ accounts, activeAccountId, connectors, onSelect, onDisconnect, onRemoveManual }) {
   const [open, setOpen] = useState(false);
+  const [actionsFor, setActionsFor] = useState(null);
   // { kind: "connection", id, label } | { kind: "manual", id, label } | null
   const [pendingRemoval, setPendingRemoval] = useState(null);
-  const [syncState, setSyncState] = useState({}); // accountId -> { status: "loading" | "done" | "error", message? }
   const rootRef = useRef(null);
 
   useEffect(() => {
+    if (!open) return undefined;
+    function close() {
+      setOpen(false);
+      setActionsFor(null);
+    }
     function handleClickOutside(e) {
-      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(e.target)) close();
+    }
+    function handleKeyDown(e) {
+      if (e.key === "Escape") close();
     }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Única consulta "na hora" que sobrou: o saldo de uma conta, a pedido do usuário. O resto
-  // (transações, faturas, limites) chega por webhook, no ritmo da agenda da Polp. A resposta já
-  // traz o saldo novo, então dá pra recarregar os dados logo em seguida.
-  async function handleBalanceSync(accountId) {
-    setSyncState((prev) => ({ ...prev, [accountId]: { status: "loading" } }));
-    try {
-      await syncAccountBalance(accountId);
-      setSyncState((prev) => ({ ...prev, [accountId]: { status: "done" } }));
-      onSynced?.();
-    } catch (err) {
-      setSyncState((prev) => ({ ...prev, [accountId]: { status: "error", message: err.message } }));
-    } finally {
-      setTimeout(() => {
-        setSyncState((prev) => {
-          const { [accountId]: _removed, ...rest } = prev;
-          return rest;
-        });
-      }, SYNC_FEEDBACK_DURATION_MS);
-    }
-  }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
 
   if (accounts.length === 0) return null;
 
@@ -91,12 +77,17 @@ export default function AccountSwitcher({ accounts, activeAccountId, connectors,
   const activeAccount = accounts.find((a) => a.id === activeAccountId) ?? accounts[0];
   const groups = groupAccounts(accounts, connectorsById);
 
+  function closeMenu() {
+    setOpen(false);
+    setActionsFor(null);
+  }
+
   return (
     <div className="account-switcher" ref={rootRef}>
       <button
         type="button"
         className="account-switcher__trigger"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => (open ? closeMenu() : setOpen(true))}
         aria-expanded={open}
       >
         <AccountLabel account={activeAccount} connectorsById={connectorsById} />
@@ -107,97 +98,90 @@ export default function AccountSwitcher({ accounts, activeAccountId, connectors,
 
       {open && (
         <div className="account-switcher__menu" role="menu">
-          {groups.map((group) => (
-            <div key={group.accounts[0].id}>
-              {group.accounts.length > 1 && (
-                <p className="account-switcher__group-label">
-                  {group.label ?? "Mesma conexão bancária"} · {group.accounts.length} contas vinculadas
-                </p>
-              )}
+          {groups.map((group) => {
+            const groupKey = group.accounts[0].id;
+            const connectionId = group.accounts[0].localIntegrationId;
+            const title = group.label ?? (connectionId ? group.accounts[0].name : null);
+            const actionsOpen = actionsFor === groupKey;
 
-              {sortGroupAccounts(group.accounts).map((account) => {
-                const nestedClass =
-                  isCreditCardAccount(account) && group.accounts.some((a) => !isCreditCardAccount(a))
-                    ? "account-switcher__row--nested"
-                    : "";
-                return account.id === activeAccount.id ? (
-                  <div key={account.id} className={`account-switcher__current ${nestedClass}`}>
-                    <AccountLabel account={account} connectorsById={connectorsById} />
-                    {!account.localIntegrationId && (
-                      <button
-                        type="button"
-                        className="account-switcher__disconnect"
-                        onClick={() => {
-                          setPendingRemoval({ kind: "manual", id: account.id, label: account.name });
-                          setOpen(false);
-                        }}
-                      >
-                        Remover
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <button
-                    key={account.id}
-                    type="button"
-                    role="menuitem"
-                    className={`account-switcher__option ${nestedClass}`}
-                    onClick={() => {
-                      onSelect(account.id);
-                      setOpen(false);
-                    }}
-                  >
-                    <AccountLabel account={account} connectorsById={connectorsById} />
-                  </button>
-                );
-              })}
-
-              {group.accounts[0].localIntegrationId && (
-                <div className="account-switcher__sync-row">
-                  {(() => {
-                    const balanceAccount = group.accounts.find((a) => a.canSyncBalance);
-                    if (!balanceAccount) return null;
-                    const state = syncState[balanceAccount.id];
-                    return (
-                      <>
+            return (
+              <div key={groupKey} className="account-switcher__group">
+                {title && (
+                  <div className="account-switcher__group-header">
+                    <p className="account-switcher__group-label">{title}</p>
+                    {connectionId && (
+                      <div className="account-switcher__actions">
                         <button
                           type="button"
-                          className="account-switcher__sync-btn"
-                          disabled={state?.status === "loading"}
-                          onClick={() => handleBalanceSync(balanceAccount.id)}
+                          className="account-switcher__actions-trigger"
+                          aria-haspopup="menu"
+                          aria-expanded={actionsOpen}
+                          aria-label={`Opções de ${title}`}
+                          onClick={() => setActionsFor(actionsOpen ? null : groupKey)}
                         >
-                          {state?.status === "loading"
-                            ? "Atualizando..."
-                            : state?.status === "done"
-                            ? "Saldo atualizado"
-                            : "Atualizar saldo"}
+                          <MoreIcon />
                         </button>
-                        {state?.status === "error" && (
-                          <span className="account-switcher__sync-error">{state.message}</span>
+                        {actionsOpen && (
+                          <div className="account-switcher__actions-menu" role="menu">
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="account-switcher__actions-item"
+                              onClick={() => {
+                                setPendingRemoval({ kind: "connection", id: connectionId, label: title });
+                                closeMenu();
+                              }}
+                            >
+                              Desconectar banco
+                            </button>
+                          </div>
                         )}
-                      </>
-                    );
-                  })()}
-                  <button
-                    type="button"
-                    className="account-switcher__disconnect"
-                    onClick={() => {
-                      setPendingRemoval({
-                        kind: "connection",
-                        id: group.accounts[0].localIntegrationId,
-                        label: group.label ?? group.accounts[0].name,
-                      });
-                      setOpen(false);
-                    }}
-                  >
-                    Desconectar banco
-                  </button>
-                </div>
-              )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
-              <div className="account-switcher__divider" />
-            </div>
-          ))}
+                {sortGroupAccounts(group.accounts).map((account) => {
+                  const nestedClass =
+                    isCreditCardAccount(account) && group.accounts.some((a) => !isCreditCardAccount(a))
+                      ? "account-switcher__row--nested"
+                      : "";
+                  return account.id === activeAccount.id ? (
+                    <div key={account.id} className={`account-switcher__current ${nestedClass}`}>
+                      <AccountLabel account={account} connectorsById={connectorsById} />
+                      {!account.localIntegrationId && (
+                        <button
+                          type="button"
+                          className="account-switcher__disconnect"
+                          onClick={() => {
+                            setPendingRemoval({ kind: "manual", id: account.id, label: account.name });
+                            closeMenu();
+                          }}
+                        >
+                          Remover
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      key={account.id}
+                      type="button"
+                      role="menuitem"
+                      className={`account-switcher__option ${nestedClass}`}
+                      onClick={() => {
+                        onSelect(account.id);
+                        closeMenu();
+                      }}
+                    >
+                      <AccountLabel account={account} connectorsById={connectorsById} />
+                    </button>
+                  );
+                })}
+
+                <div className="account-switcher__divider" />
+              </div>
+            );
+          })}
 
           <Link to="/conectar-banco" className="account-switcher__option account-switcher__option--add">
             + Conectar outro banco

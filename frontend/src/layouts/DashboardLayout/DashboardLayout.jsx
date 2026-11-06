@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { AccountProvider, useAccount } from "../../context/AccountContext.jsx";
+import { DashboardHeaderSlotContext } from "../../context/DashboardHeaderContext.jsx";
 import { logout as logoutRequest } from "../../api/auth.js";
 import ErrorBoundary from "../../components/ErrorBoundary/ErrorBoundary.jsx";
 import NavUserMenu from "../../components/dashboard/NavUserMenu/NavUserMenu.jsx";
+import AccountSwitcher from "../../components/dashboard/AccountSwitcher/AccountSwitcher.jsx";
+import BalanceSyncButton from "../../components/dashboard/BalanceSyncButton/BalanceSyncButton.jsx";
+import Skeleton from "../../components/ui/Skeleton/Skeleton.jsx";
 import Avatar from "../../components/ui/Avatar/Avatar.jsx";
 import { MenuIcon, CloseIcon } from "../../components/ui/icons/FeatureIcons.jsx";
 import logo from "../../assets/images/cflogobranco.svg";
@@ -19,6 +23,9 @@ const TABS = [
   { label: "Investimentos", to: "/dashboard/investimentos" },
 ];
 
+const ACCOUNT_SCOPED_PATHS = new Set(["/dashboard", "/dashboard/receitas-despesas", "/dashboard/relatorios", "/dashboard/categorias"]);
+const CARDS_PATH = "/dashboard/cartoes";
+
 export default function DashboardLayout() {
   return (
     <AccountProvider>
@@ -29,9 +36,46 @@ export default function DashboardLayout() {
 
 function DashboardLayoutContent() {
   const { user, logout } = useAuth();
-  const { notice, dismissNotice } = useAccount();
+  const {
+    accounts,
+    connectors,
+    accountsStatus,
+    effectiveAccountId,
+    setSelectedAccountId,
+    disconnectConnection,
+    removeManualAccount,
+    notice,
+    dismissNotice,
+  } = useAccount();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [headerSlot, setHeaderSlot] = useState(null);
+  const contentRef = useRef(null);
+  const toolbarRef = useRef(null);
+
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  const isCardsTab = path === CARDS_PATH;
+  const showToolbar = isCardsTab || ACCOUNT_SCOPED_PATHS.has(path);
+
+  // No desktop a barra fica na linha do título da aba, sobreposta ao topo da página; a largura
+  // real dela (que muda com o nome da conta ou o seletor de Cartões) vira o espaço reservado ao
+  // lado do título. Escrito direto no estilo, sem estado, pra não re-renderizar o painel.
+  useEffect(() => {
+    const content = contentRef.current;
+    const toolbar = toolbarRef.current;
+    if (!content) return undefined;
+    if (!toolbar) {
+      content.style.removeProperty("--dash-toolbar-space");
+      return undefined;
+    }
+    const observer = new ResizeObserver(() => {
+      const width = toolbar.offsetWidth;
+      content.style.setProperty("--dash-toolbar-space", width > 0 ? `calc(${width}px + 1.5rem)` : "0px");
+    });
+    observer.observe(toolbar);
+    return () => observer.disconnect();
+  }, [showToolbar]);
 
   useEffect(() => {
     const prefetch = () => {
@@ -167,7 +211,26 @@ function DashboardLayoutContent() {
         </div>
       </aside>
 
-      <main className="dashboard-content">
+      <main ref={contentRef} className="dashboard-content">
+        {showToolbar && (
+          <div ref={toolbarRef} className="dashboard-toolbar">
+            {isCardsTab ? (
+              <div ref={setHeaderSlot} className="dashboard-toolbar__slot" />
+            ) : accountsStatus === "loading" && accounts.length === 0 ? (
+              <Skeleton width="12rem" height="2.5rem" />
+            ) : (
+              <AccountSwitcher
+                accounts={accounts}
+                activeAccountId={effectiveAccountId}
+                connectors={connectors}
+                onSelect={setSelectedAccountId}
+                onDisconnect={disconnectConnection}
+                onRemoveManual={removeManualAccount}
+              />
+            )}
+            <BalanceSyncButton />
+          </div>
+        )}
         {notice && (
           <div className={`dashboard-notice dashboard-notice--${notice.tone}`} role="status">
             <p>{notice.text}</p>
@@ -176,9 +239,11 @@ function DashboardLayoutContent() {
             </button>
           </div>
         )}
-        <ErrorBoundary>
-          <Outlet />
-        </ErrorBoundary>
+        <DashboardHeaderSlotContext.Provider value={isCardsTab ? headerSlot : null}>
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
+        </DashboardHeaderSlotContext.Provider>
       </main>
     </div>
   );

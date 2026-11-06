@@ -27,6 +27,21 @@
   text-align: left;
 }
 
+.dashboard-home .card__title:has(> .dashboard-home__title-note) {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.dashboard-home__title-note {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 400;
+}
+
 .dashboard-home__hint {
   color: var(--color-text-secondary);
   font-size: 0.9rem;

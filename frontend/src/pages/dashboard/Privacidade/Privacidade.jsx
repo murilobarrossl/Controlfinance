@@ -124,14 +124,14 @@ export default function Privacidade() {
         <ul className="privacidade__list">
           <li><strong>Cadastro:</strong> nome, e-mail, senha (só em forma irreversível) e o tipo de documento. O número do CPF/CNPJ não fica guardado, só um código de verificação gerado a partir dele.</li>
           <li><strong>Bancos conectados:</strong> contas, saldos, extrato, dados de cartão e os 4 últimos dígitos do número da conta, cifrados, enquanto a conexão existir.</li>
-          <li><strong>O que você cadastra:</strong> contas e cartões manuais, lançamentos, parcelamentos e categorias.</li>
+          <li><strong>O que você cadastra:</strong> cartões e parcelamentos que não vieram de um banco, categorias e edições de nome/categoria das transações importadas.</li>
           <li><strong>Aceites:</strong> qual versão dos Termos e da Política você aceitou e quando, e cada autorização de conexão bancária.</li>
           <li>
             <strong>Prazo do histórico bancário:</strong>{" "}
             {dataPolicy === null
               ? <Skeleton width="60%" />
               : dataPolicy.syncedHistoryMonths
-              ? `transações importadas dos bancos com mais de ${dataPolicy.syncedHistoryMonths} meses não são importadas e são apagadas automaticamente (lançamentos manuais não são afetados).`
+              ? `transações importadas dos bancos com mais de ${dataPolicy.syncedHistoryMonths} meses não são importadas e são apagadas automaticamente (cartões e parcelamentos cadastrados por você não são afetados).`
               : "sem prazo máximo definido: o histórico importado fica guardado enquanto o banco estiver conectado."}
           </li>
           {dataPolicy?.accessLogEnabled && (

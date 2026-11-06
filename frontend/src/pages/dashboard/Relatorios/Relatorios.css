@@ -11,8 +11,13 @@
   gap: 0.6rem;
 }
 
+.relatorios__scope {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .relatorios__period-hint {
-  margin: -0.75rem 0 0;
   color: var(--color-text-tertiary);
   font-size: 0.8rem;
   line-height: 1.45;
@@ -35,73 +40,151 @@
   transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
+.relatorios__segmented {
+  display: inline-flex;
+  padding: 0.2rem;
+  gap: 0.2rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.relatorios__segment {
+  border: none;
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-pill);
+  padding: 0.45rem 1rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.relatorios__segment:hover {
+  color: var(--color-text-primary);
+}
+
+.relatorios__segment--active,
+.relatorios__segment--active:hover {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.relatorios__segment:focus-visible,
+.relatorios__chip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .relatorios__chip:hover {
   background-color: var(--color-surface-hover);
 }
 
-/* Tinta translúcida, não preenchimento sólido: com filtro de período + tipo + status na mesma
-   barra, três pílulas de laranja cheia ao mesmo tempo competiam entre si e gritavam mais que
-   qualquer dado da tabela embaixo. */
-.relatorios__chip--active {
-  background-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
-  border-color: var(--color-accent);
-  color: var(--color-text-primary);
+/* Seleção neutra: no painel o laranja da marca significa despesa, e um chip "Despesas" ativo em
+   laranja passava a ler como valor, não como filtro. */
+.relatorios__chip--active,
+.relatorios__chip--active:hover {
+  background-color: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+  color: var(--color-bg);
 }
 
-/* Barra fina de totais no lugar dos StatCards (mesma peça usada no Dashboard): aqui é só
-   número + rótulo lado a lado, sem ícone nem card próprio, pra não repetir a mesma moldura
-   usada em quase toda outra tela do app. */
-.relatorios__totals-bar {
+.relatorios__totals {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1.25rem;
-  padding: 0.85rem 1.1rem;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.relatorios__totals-note {
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  max-width: 52rem;
+}
+
+.relatorios__totals-value.relatorios__totals-value--muted {
+  color: var(--color-text-tertiary);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.relatorios__failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.relatorios__failure-hint {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.relatorios__retry {
+  border: 1px solid var(--color-border-strong);
+  background-color: transparent;
+  color: var(--color-text-primary);
+  border-radius: var(--radius-pill);
+  padding: 0.45rem 1rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.relatorios__retry:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.relatorios__retry:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.relatorios__totals-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
+  padding-block: 0.25rem;
 }
 
 .relatorios__totals-item {
   display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
 }
 
 .relatorios__totals-label {
   color: var(--color-text-secondary);
   font-size: 0.8rem;
-  white-space: nowrap;
 }
 
 .relatorios__totals-value {
-  font-size: 1rem;
+  font-size: 1.35rem;
   font-weight: 600;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.relatorios__totals-divider {
-  width: 1px;
-  height: 20px;
-  background-color: var(--color-border-strong);
-}
-
-@media (max-width: 700px) {
+@container relatorios (max-width: 36rem) {
   .relatorios__totals-bar {
-    flex-direction: column;
-    align-items: flex-start;
+    grid-template-columns: 1fr;
     gap: 0.6rem;
   }
 
-  .relatorios__totals-divider {
-    display: none;
+  .relatorios__totals-item {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
   }
-}
 
-.relatorios__hint {
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
+  .relatorios__totals-value {
+    font-size: 1.1rem;
+  }
 }
 
 .relatorios__error {
@@ -113,7 +196,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem 1.25rem;
+  gap: 0.75rem 1.5rem;
 }
 
 .relatorios__chip-group {
@@ -134,25 +217,18 @@
   font-size: 0.85rem;
 }
 
-.relatorios__search:focus {
-  outline: none;
-  border-color: var(--color-accent);
+.relatorios__search:focus-visible,
+.relatorios__edit-input:focus-visible,
+.relatorios__edit-select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
-/* Um único bloco com borda pra busca+filtros+tabela+paginação, em vez de pedaços soltos sem
-   nada em comum entre eles (o que ficava com peso visual inconsistente, mais parecendo
-   fragmentado que intencional). Ainda assim mais enxuto que o `Card` padrão do resto do app
-   (menos padding, cantos menos arredondados), pra continuar lendo como planilha/extrato.
-   Diferença real pra Categorias: aqui é um bloco só cobrindo a tela inteira, lá são dois
-   `Card`s lado a lado. */
 .relatorios__table-panel {
+  container: relatorios / inline-size;
   display: flex;
   flex-direction: column;
-  gap: 1.1rem;
-  padding: 1.1rem;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  gap: 1.5rem;
 }
 
 .relatorios__table-wrapper {
@@ -171,22 +247,59 @@
   color: var(--color-text-secondary);
   font-weight: 500;
   padding: 0.6rem 0.75rem;
-  background-color: var(--color-surface-hover);
-  border-bottom: 1px solid var(--color-border);
-  cursor: pointer;
+  border-bottom: 1px solid var(--color-border-strong);
   white-space: nowrap;
 }
 
-.relatorios__table th:first-child {
-  border-top-left-radius: var(--radius-md);
+.relatorios__sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
-.relatorios__table th:last-child {
-  border-top-right-radius: var(--radius-md);
-}
-
-.relatorios__table th:hover {
+.relatorios__sort-button:hover {
   color: var(--color-text-primary);
+}
+
+.relatorios__sort-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.relatorios__sort-icon {
+  display: inline-flex;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.relatorios__sort-button:hover .relatorios__sort-icon,
+.relatorios__sort-button:focus-visible .relatorios__sort-icon {
+  opacity: 0.45;
+}
+
+.relatorios__sort-icon--active,
+.relatorios__sort-button:hover .relatorios__sort-icon--active {
+  opacity: 1;
+  color: var(--color-text-primary);
+}
+
+.relatorios__amount-head .relatorios__sort-button {
+  flex-direction: row-reverse;
+}
+
+.relatorios__sort-icon--asc {
+  transform: rotate(180deg);
+}
+
+.relatorios__table th.relatorios__amount-head {
+  text-align: right;
 }
 
 .relatorios__table td {
@@ -198,21 +311,19 @@
 
 .relatorios__description {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.relatorios__description-text {
-  display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  min-width: 0;
   white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .relatorios__description-primary {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.25rem 0.5rem;
+  overflow-wrap: anywhere;
 }
 
 .relatorios__description-secondary {
@@ -224,14 +335,13 @@
   display: inline-flex;
   align-items: center;
   border-radius: var(--radius-pill);
-  padding: 0.2rem 0.6rem;
+  padding: 0.2rem 0.55rem;
   font-size: 0.7rem;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
-  background-color: color-mix(in srgb, var(--color-text-tertiary) 20%, transparent);
+  background-color: var(--color-surface-hover);
   color: var(--color-text-secondary);
-  border: 1px solid var(--color-border-strong);
 }
 
 /* Conta/Categoria vêm da Polp com nomes longos (ex.: razão social completa do banco); sem
@@ -248,11 +358,15 @@
   font-weight: 500;
 }
 
+.relatorios__table .relatorios__amount-cell--income {
+  color: var(--color-income);
+}
+
 .relatorios__edit-input,
 .relatorios__edit-select {
   width: 100%;
   min-width: 120px;
-  background-color: var(--color-border-strong);
+  background-color: var(--color-surface-hover);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   padding: 0.35rem 0.5rem;
@@ -261,64 +375,148 @@
   font-size: 0.85rem;
 }
 
-.relatorios__actions-cell {
-  white-space: nowrap;
-  text-align: right;
+.relatorios__tbody--refreshing {
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
 }
 
-.relatorios__actions-cell button {
+.relatorios__table .relatorios__placeholder-row td {
+  padding-block: 0.7rem;
+}
+
+.relatorios__notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  padding: 0.75rem 1rem;
   border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+
+.relatorios__edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.relatorios__edit-error {
+  color: var(--color-accent-soft);
+  font-size: 0.75rem;
+  white-space: normal;
+}
+
+.relatorios__edit-line {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.relatorios__row-action {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: none;
   background-color: transparent;
   color: var(--color-text-secondary);
   border-radius: var(--radius-sm);
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   cursor: pointer;
-  font-size: 0.9rem;
-  line-height: 1;
-  margin-left: 0.3rem;
 }
 
-.relatorios__actions-cell button:hover {
+/* Coluna própria na borda esquerda de cada linha: sempre no mesmo lugar, sem disputar espaço
+   com a descrição. */
+.relatorios__table .relatorios__edit-head,
+.relatorios__table .relatorios__edit-cell {
+  width: 1px;
+  padding-inline: 0 0.25rem;
+}
+
+.relatorios__name-tail {
+  white-space: nowrap;
+}
+
+.relatorios__edit-trigger--inline {
+  display: none;
+  margin-inline-start: 0.25rem;
+  vertical-align: middle;
+}
+
+/* O lápis fica discreto pra não competir com a descrição; ganha força quando a
+   linha está em foco ou sob o cursor. */
+.relatorios__edit-trigger {
+  width: 24px;
+  height: 24px;
+  color: var(--color-text-tertiary);
+}
+
+.relatorios__row:hover .relatorios__edit-trigger,
+.relatorios__edit-trigger:focus-visible {
+  color: var(--color-text-primary);
+}
+
+.relatorios__row-action:disabled {
+  opacity: 0.4;
+  cursor: progress;
+}
+
+.relatorios__icon-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.relatorios__row-action:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.relatorios__row-action:hover:not(:disabled) {
   background-color: var(--color-surface-hover);
   color: var(--color-text-primary);
 }
 
-/* A data só aparece uma vez por dia, na linha de grupo (relatorios__group-row). A coluna
-   continua existindo (o cabeçalho "Data" segue clicável pra ordenar), só a célula fica vazia. */
+/* Ordenado por data, a data aparece só na faixa do dia e esta célula fica vazia; em outra
+   ordenação não há faixa e a data vai na própria linha (--filled). */
 .relatorios__date-cell {
   width: 1px;
   padding: 0;
+}
+
+.relatorios__table .relatorios__date-cell--filled {
+  width: auto;
+  padding: 0.6rem 0.75rem;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
 }
 
 .relatorios__group-row {
   background-color: var(--color-surface-hover);
 }
 
-.relatorios__group-cell {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.5rem 0.75rem;
+.relatorios__table .relatorios__group-row td {
+  padding-block: 0.5rem;
   color: var(--color-text-secondary);
   font-size: 0.78rem;
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
 }
 
 .relatorios__group-date {
-  white-space: nowrap;
+  text-transform: capitalize;
 }
 
-.relatorios__group-totals {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-variant-numeric: tabular-nums;
-  text-transform: none;
-  letter-spacing: normal;
+.relatorios__table .relatorios__group-row .relatorios__group-totals {
+  text-align: right;
+}
+
+.relatorios__group-totals > span + span {
+  margin-inline-start: 0.75rem;
 }
 
 .relatorios__table tbody tr {
@@ -329,13 +527,6 @@
   background-color: var(--color-surface-hover);
 }
 
-.relatorios__table tfoot td {
-  border-bottom: none;
-  border-top: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font-weight: 500;
-}
-
 .relatorios__amount--income {
   color: var(--color-income);
 }
@@ -344,18 +535,37 @@
   color: var(--color-accent);
 }
 
-.relatorios__empty {
+.relatorios__table .relatorios__empty {
+  padding-block: 2rem;
   text-align: center;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
+  white-space: normal;
+}
+
+.relatorios__empty .relatorios__retry {
+  margin-top: 0.75rem;
 }
 
 .relatorios__pagination {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: 1.25rem;
-  color: var(--color-text-primary);
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
   font-size: 0.85rem;
+}
+
+.relatorios__count {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.relatorios__pager {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
 .relatorios__pagination button {
@@ -385,7 +595,7 @@
   cursor: not-allowed;
 }
 
-@media (max-width: 640px) {
+@container relatorios (max-width: 40rem) {
   .relatorios__toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -396,19 +606,188 @@
   }
 }
 
-/* Etiqueta de categoria: fundo e borda tingidos com a cor da própria categoria (a mesma usada nos
-   gráficos), mais as iniciais, pra dar pra bater o olho na coluna e separar uma categoria da outra. */
+.relatorios__sort {
+  display: none;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+
+.relatorios__sort select {
+  flex: 1;
+  min-width: 0;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.relatorios__sort select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Abaixo da largura em que as 7 colunas cabem (~885px), a tabela rolava pro lado e o Valor ficava
+   fora da tela: vira lista de duas linhas, com descrição e valor sempre lado a lado. */
+@container relatorios (max-width: 56rem) {
+  .relatorios__sort {
+    display: flex;
+  }
+
+  .relatorios__table thead {
+    display: none;
+  }
+
+  .relatorios__table,
+  .relatorios__table tbody,
+  .relatorios__table tbody tr:not(.relatorios__row):not(.relatorios__group-row),
+  .relatorios__table tbody .relatorios__empty,
+  .relatorios__table .relatorios__placeholder-row td {
+    display: block;
+  }
+
+  .relatorios__table .relatorios__group-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .relatorios__table .relatorios__group-row td {
+    padding: 0;
+    border: 0;
+  }
+
+  .relatorios__table .relatorios__date-cell {
+    display: none;
+  }
+
+  .relatorios__table .relatorios__row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "desc desc amount"
+      "cat acc status";
+    align-items: center;
+    gap: 0.4rem 0.75rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .relatorios__table .relatorios__row > td {
+    padding: 0;
+    border: 0;
+  }
+
+  .relatorios__table .relatorios__edit-cell {
+    display: none;
+  }
+
+  .relatorios__edit-trigger--inline {
+    display: inline-flex;
+  }
+
+  .relatorios__cell-desc {
+    grid-area: desc;
+    min-width: 0;
+  }
+
+  .relatorios__cell-cat {
+    grid-area: cat;
+  }
+
+  .relatorios__table .relatorios__cell-acc {
+    grid-area: acc;
+    max-width: none;
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
+  }
+
+  .relatorios__cell-status {
+    grid-area: status;
+    justify-self: end;
+  }
+
+  .relatorios__table .relatorios__amount-cell {
+    grid-area: amount;
+    align-self: start;
+  }
+
+  .relatorios__table .relatorios__row--editing {
+    grid-template-areas:
+      "desc desc amount"
+      "cat cat status";
+  }
+
+  .relatorios__row--editing .relatorios__cell-cat {
+    max-width: none;
+  }
+
+  .relatorios__table .relatorios__row--editing .relatorios__cell-acc {
+    display: none;
+  }
+
+  .relatorios__table .relatorios__date-cell--filled {
+    display: block;
+    grid-area: date;
+    padding: 0;
+    font-size: 0.75rem;
+  }
+
+  .relatorios__table .relatorios__row--dated {
+    grid-template-areas:
+      "date date date"
+      "desc desc amount"
+      "cat acc status";
+  }
+
+  .relatorios__table .relatorios__row--dated.relatorios__row--editing {
+    grid-template-areas:
+      "date date date"
+      "desc desc amount"
+      "cat cat status";
+  }
+
+  .relatorios__row .relatorios__edit-input,
+  .relatorios__row .relatorios__edit-select {
+    min-width: 0;
+  }
+}
+
+@media (pointer: coarse) {
+  .relatorios__segment,
+  .relatorios__chip,
+  .relatorios__search,
+  .relatorios__sort select {
+    min-height: 2.75rem;
+  }
+
+  .relatorios__pagination button {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .relatorios__row-action::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+}
+
+/* Iniciais na cor da categoria (a mesma dos gráficos): separam duas categorias de cor parecida. */
 .relatorios__category {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.45rem;
   max-width: 100%;
-  padding: 0.15rem 0.55rem 0.15rem 0.2rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--category-color) 55%, transparent);
-  background-color: color-mix(in srgb, var(--category-color) 14%, transparent);
   color: var(--color-text-primary);
-  font-size: 0.78rem;
   vertical-align: middle;
 }
 
@@ -435,9 +814,11 @@
 }
 
 .relatorios__category--empty {
-  padding: 0.15rem 0.55rem;
-  border-style: dashed;
-  border-color: var(--color-border-strong);
-  background-color: transparent;
   color: var(--color-text-tertiary);
+}
+
+.relatorios .status-pill--paid {
+  padding-inline: 0;
+  background-color: transparent;
+  color: var(--color-text-secondary);
 }

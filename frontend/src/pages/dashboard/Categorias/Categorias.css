@@ -266,51 +266,49 @@
 }
 
 .categorias__period-modes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.categorias__period-chip {
+  display: inline-flex;
+  padding: 0.2rem;
+  gap: 0.2rem;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-pill);
+}
+
+.categorias__segment {
+  border: none;
   background-color: transparent;
-  padding: 0.45rem 0.95rem;
   color: var(--color-text-secondary);
+  border-radius: var(--radius-pill);
+  padding: 0.45rem 1rem;
   font-family: inherit;
   font-size: 0.85rem;
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.categorias__period-chip:hover {
-  background-color: var(--color-surface-hover);
-}
-
-.categorias__period-chip--active {
-  background-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
-  border-color: var(--color-accent);
+.categorias__segment:hover {
   color: var(--color-text-primary);
 }
 
-.categorias__period-chip:focus-visible {
+.categorias__segment--active,
+.categorias__segment--active:hover {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.categorias__segment:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
-.categorias__period-label {
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
+@media (pointer: coarse) {
+  .categorias__segment {
+    min-height: 2.75rem;
+  }
 }
 
 /* Qual conta/cartão está sendo mostrado (e como trocar). */
-.categorias__scope {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
 .categorias__scope-title {
   margin: 0;
   color: var(--color-text-secondary);

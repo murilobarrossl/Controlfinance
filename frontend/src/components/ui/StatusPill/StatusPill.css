@@ -15,8 +15,8 @@
 }
 
 .status-pill--overdue {
-  background-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
-  color: var(--color-accent);
+  background-color: color-mix(in srgb, var(--color-amber) 22%, transparent);
+  color: var(--color-amber-soft);
 }
 
 .status-pill--pending {

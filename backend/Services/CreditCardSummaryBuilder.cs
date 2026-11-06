@@ -110,6 +110,11 @@ public static class CreditCardSummaryBuilder
         var primaryCardId = await db.Users.Where(u => u.Id == userId).Select(u => u.PrimaryCardId).FirstOrDefaultAsync(ct);
         var effectivePrimaryId = result.Any(c => c.Id == primaryCardId) ? primaryCardId : result.FirstOrDefault()?.Id;
 
-        return result.Select(c => c with { IsPrimary = c.Id == effectivePrimaryId }).ToList();
+        return result.Select(c => c with
+        {
+            IsPrimary = c.Id == effectivePrimaryId,
+            InvoiceStatus = c.InvoiceDueDate is not DateTime due ? null
+                : due.Date < today.Date ? nameof(TransactionStatus.Overdue) : nameof(TransactionStatus.Pending),
+        }).ToList();
     }
 }

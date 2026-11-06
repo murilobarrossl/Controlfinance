@@ -7,7 +7,6 @@ import { useAccount } from "../../../context/AccountContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
-import CardPicker from "../../../components/dashboard/CardPicker/CardPicker.jsx";
 import { getAccountKindLabel, isCreditCardAccount } from "../../../utils/accountKind.js";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
@@ -38,8 +37,8 @@ const CATEGORY_SORT_OPTIONS = [
 ];
 
 const PERIOD_MODES = [
-  { value: "month", label: "Mês" },
-  { value: "year", label: "Ano" },
+  { value: "month", label: "Por mês" },
+  { value: "year", label: "Por ano" },
   { value: "all", label: "Todo o período" },
 ];
 
@@ -106,7 +105,7 @@ export default function Categorias() {
   usePageTitle("Categorias");
   const [searchParams] = useSearchParams();
   const [categoryFromLink] = useState(() => searchParams.get("categoria"));
-  const { accounts, connectors, effectiveAccountId, setSelectedAccountId, dataRefreshKey, accountsStatus } = useAccount();
+  const { accounts, connectors, effectiveAccountId, dataRefreshKey, accountsStatus } = useAccount();
   const [result, setResult] = useState(null);
   const [aggregateResult, setAggregateResult] = useState(null);
   // Período mostrado: um mês, um ano ou tudo. offset 0 = o atual, 1 = o anterior, e assim por diante.
@@ -125,6 +124,14 @@ export default function Categorias() {
   const [categorySort, setCategorySort] = useState("value-desc");
   const [categoryPage, setCategoryPage] = useState(1);
   const [expandedEstablishments, setExpandedEstablishments] = useState(() => new Set());
+  const [scopedAccountId, setScopedAccountId] = useState(effectiveAccountId);
+  if (scopedAccountId !== effectiveAccountId) {
+    setScopedAccountId(effectiveAccountId);
+    if (scopedAccountId != null) {
+      setSelectedCategory(null);
+      setCategoryPage(1);
+    }
+  }
   const [cutRate, setCutRate] = useState(0.3);
   const [goals] = useState(() => getGoals());
   const [reserve] = useState(() => getReserve());
@@ -310,7 +317,7 @@ export default function Categorias() {
       [...accounts]
         .map((account) => {
           const connector = connectorsById.get(account.bankCode);
-          const bankName = connector?.name ?? "Conta cadastrada manualmente";
+          const bankName = connector?.name ?? "Banco não identificado";
           const kind = getAccountKindLabel(account);
           const seen = new Set([bankName.toLowerCase(), "banco"]);
           const detail = [...String(account.name ?? "").split(" · "), kind].filter((part) => {
@@ -365,16 +372,14 @@ export default function Categorias() {
               type="button"
               role="radio"
               aria-checked={period.mode === option.value}
-              className={`categorias__period-chip ${period.mode === option.value ? "categorias__period-chip--active" : ""}`}
+              className={`categorias__segment ${period.mode === option.value ? "categorias__segment--active" : ""}`}
               onClick={() => setPeriod({ mode: option.value, offset: 0 })}
             >
               {option.label}
             </button>
           ))}
         </div>
-        {period.mode === "all" ? (
-          <span className="categorias__period-label">{range.label}</span>
-        ) : (
+        {period.mode !== "all" && (
           <RangePicker
             label={range.label}
             onPrev={() => setPeriod((prev) => ({ ...prev, offset: prev.offset + 1 }))}
@@ -384,38 +389,14 @@ export default function Categorias() {
         )}
       </div>
 
-      {activeOption &&
-        (accountOptions.length > 1 ? (
-          <div className="categorias__scope">
-            <span className="categorias__scope-title" id="categorias-conta-rotulo">
-              Mostrando as despesas de
-            </span>
-            <CardPicker
-              id="categorias-conta"
-              labelId="categorias-conta-rotulo"
-              options={accountOptions.map((option) => ({
-                value: option.account.id,
-                title: option.bankName,
-                subtitle: option.detail,
-                color: option.color,
-                logo: { name: option.bankName, logoUrl: option.logoUrl, color: option.color },
-              }))}
-              value={effectiveAccountId}
-              onChange={(id) => {
-                setSelectedAccountId(id);
-                setSelectedCategory(null);
-                setCategoryPage(1);
-              }}
-            />
-          </div>
-        ) : (
-          <p className="categorias__scope-title">
-            Mostrando as despesas de:{" "}
-            <strong>
-              {activeOption.bankName} · {activeOption.detail}
-            </strong>
-          </p>
-        ))}
+      {activeOption && (
+        <p className="categorias__scope-title">
+          Mostrando as despesas de:{" "}
+          <strong>
+            {activeOption.bankName} · {activeOption.detail}
+          </strong>
+        </p>
+      )}
 
       <p className="categorias__section-hint">Só despesas. Receitas ficam em Receitas e despesas.</p>
 
@@ -425,7 +406,7 @@ export default function Categorias() {
           {loading ? (
             <Skeleton width="100%" height="340px" />
           ) : breakdown.length === 0 ? (
-            <p className="categorias__hint">Nenhuma despesa categorizada em {range.label}.</p>
+            <p className="categorias__hint">Nenhuma despesa categorizada {period.mode === "all" ? "em nenhum período" : `em ${range.label}`}.</p>
           ) : (
             <div className="categorias__donut-block">
               <div className="categorias__donut-wrap">

@@ -15,12 +15,10 @@ import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
 import AreaTrendChart from "../../../components/charts/AreaTrendChart.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
-import AccountSwitcher from "../../../components/dashboard/AccountSwitcher/AccountSwitcher.jsx";
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import CardPicker from "../../../components/dashboard/CardPicker/CardPicker.jsx";
 import { cardBrand, cardPickerOption, connectorsByName } from "../../../utils/cardBrand.js";
 import { groupCards } from "../../../utils/cardGroups.js";
-import { groupAccounts } from "../../../utils/accountGrouping.js";
 import { isCreditCardAccount } from "../../../utils/accountKind.js";
 import { resolveCategoryColor, OTHERS_COLOR } from "../../../utils/categoryColors.js";
 import { WalletIcon, TrendUpIcon, TrendDownIcon, TargetIcon, CardIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
@@ -64,34 +62,44 @@ function DashboardHomeSkeleton({ firstName }) {
         <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"} level={1}>
           Visão geral
         </SectionHeading>
-        <div className="dashboard-home__account-controls">
-          <Skeleton width="12rem" height="2.5rem" />
-        </div>
       </div>
 
       <div className="dashboard-home__stats">
         <StatCard icon={null} label={<Skeleton width="9rem" />} value={<Skeleton width="7rem" height="1.5rem" />} />
-        <StatCard icon={<TrendUpIcon />} label="Receitas do mês" value={<Skeleton width="7rem" height="1.5rem" />} />
-        <StatCard icon={<TrendDownIcon />} label="Despesas do mês" value={<Skeleton width="7rem" height="1.5rem" />} />
+        <StatCard icon={<TrendUpIcon />} label="Entradas do mês" value={<Skeleton width="7rem" height="1.5rem" />} />
+        <StatCard icon={<TrendDownIcon />} label="Saídas do mês" value={<Skeleton width="7rem" height="1.5rem" />} />
         <StatCard
           icon={<TargetIcon />}
-          label="Saldo do mês (receitas - despesas)"
+          label="Resultado do mês"
           value={<Skeleton width="7rem" height="1.5rem" />}
           secondaryLines={[{ label: "% da receita gasta", value: <Skeleton width="3rem" /> }]}
         />
         <StatCard
           icon={<CardIcon />}
-          label="Tipo de cartão"
+          label="Cartão"
           value={<Skeleton width="7rem" height="1.5rem" />}
           secondaryLines={[{ label: <Skeleton width="4rem" />, value: <Skeleton width="6rem" /> }]}
         />
       </div>
 
       <div className="dashboard-home__grid">
-        <Card title={`Receitas x despesas (últimos ${TREND_MONTHS} meses)`}>
+        <Card
+          title={
+            <>
+              Receitas x despesas{" "}
+              <span className="dashboard-home__title-note">(últimos {TREND_MONTHS} meses)</span>
+            </>
+          }
+        >
           <Skeleton width="100%" height="220px" />
         </Card>
-        <Card title="Principais categorias (mês atual)">
+        <Card
+          title={
+            <>
+              Principais categorias <span className="dashboard-home__title-note">(mês atual)</span>
+            </>
+          }
+        >
           <Skeleton width="100%" height="220px" />
         </Card>
       </div>
@@ -107,12 +115,9 @@ export default function DashboardHome() {
     accounts,
     connectors,
     accountsStatus,
-    selectedAccountId,
-    setSelectedAccountId,
+    effectiveAccountId,
     dataRefreshKey,
     bumpDataRefresh,
-    disconnectConnection,
-    removeManualAccount,
   } = useAccount();
   const [categories, setCategories] = useState([]);
   const [allCards, setAllCards] = useState([]);
@@ -136,7 +141,7 @@ export default function DashboardHome() {
     }
   }
   const [result, setResult] = useState(null);
-  const requestKey = `${selectedAccountId ?? ""}|${dataRefreshKey}`;
+  const requestKey = `${effectiveAccountId ?? ""}|${dataRefreshKey}`;
   const loading = accountsStatus !== "ready" || result?.key !== requestKey;
   const [cardConfirmOpen, setCardConfirmOpen] = useState(false);
 
@@ -153,7 +158,7 @@ export default function DashboardHome() {
 
     const controller = new AbortController();
     const { signal } = controller;
-    const key = `${selectedAccountId ?? ""}|${dataRefreshKey}`;
+    const key = `${effectiveAccountId ?? ""}|${dataRefreshKey}`;
 
     const months = getMonthsWindow(TREND_MONTHS);
     const trendRange = monthRange(months[0], months[months.length - 1]);
@@ -164,15 +169,15 @@ export default function DashboardHome() {
         getTransactionAggregates({ bankAccountId, ...previousRange }, { signal }),
       ]);
 
-    const speculativeAggregates = selectedAccountId ? loadAggregates(selectedAccountId) : null;
+    const speculativeAggregates = effectiveAccountId ? loadAggregates(effectiveAccountId) : null;
     speculativeAggregates?.catch(() => {});
 
-    getDashboardSummary(selectedAccountId, { signal })
+    getDashboardSummary(effectiveAccountId, { signal })
       .then(async (summaryData) => {
         const accountId = summaryData?.activeAccount?.id;
         let aggregatesData = null;
         if (accountId) {
-          aggregatesData = await (accountId === selectedAccountId ? speculativeAggregates : loadAggregates(accountId));
+          aggregatesData = await (accountId === effectiveAccountId ? speculativeAggregates : loadAggregates(accountId));
         }
         if (signal.aborted) return;
         setResult({
@@ -189,7 +194,7 @@ export default function DashboardHome() {
       });
 
     return () => controller.abort();
-  }, [selectedAccountId, dataRefreshKey, accountsStatus]);
+  }, [effectiveAccountId, dataRefreshKey, accountsStatus]);
 
   const summary = result?.summary ?? null;
   const trend = result?.trend ?? null;
@@ -216,7 +221,7 @@ export default function DashboardHome() {
   if (!summary?.activeAccount) {
     return (
       <Card className="dashboard-home__empty">
-        <p>{summary?.message || "Nenhuma conta bancária cadastrada."}</p>
+        <p>{summary?.message || "Nenhum banco conectado ainda."}</p>
         <Button as={Link} to="/conectar-banco" variant="primary" size="md">
           Conectar banco
         </Button>
@@ -252,16 +257,6 @@ export default function DashboardHome() {
       ? computeTrend(activeAccount.balance, startOfMonthBalance, { label: "vs início do mês" })
       : null;
 
-  // Mesmo agrupamento por conexão bancária do seletor de contas abaixo, aqui só pra decidir se
-  // mostra o aviso abaixo do título. Sem isso, quem troca pro cartão de crédito no seletor não
-  // necessariamente entende que passou a ver os dados só do cartão, separados da conta corrente
-  // do mesmo banco.
-  const connectorsById = new Map(connectors.map((c) => [c.id, c]));
-  const activeGroup = groupAccounts(accounts, connectorsById).find((g) =>
-    g.accounts.some((a) => a.id === activeAccount.id)
-  );
-  const isMultiAccountGroup = (activeGroup?.accounts.length ?? 0) > 1;
-
   // A conta selecionada agora é a mesma que o sistema reconheceu automaticamente como cartão
   // (ver CreditCardAccountDetector) — fecha o ciclo apontando de volta pra Cartões, já que
   // fatura/limite/parcelas dessa conta só aparecem naquela tela.
@@ -284,78 +279,65 @@ export default function DashboardHome() {
           Visão geral
         </SectionHeading>
 
-        <div className="dashboard-home__account-controls">
-          {isActiveAccountCard ? (
+        {isActiveAccountCard && (
+          <div className="dashboard-home__account-controls">
             <span className="dashboard-home__account-hint">
               Você está vendo um cartão de crédito, não uma conta bancária: veja fatura, limite e parcelas em{" "}
               <Link to="/dashboard/cartoes">Cartões</Link>.
             </span>
-          ) : (
-            isMultiAccountGroup && (
-              <span className="dashboard-home__account-hint">
-                No seletor ao lado, o cartão de crédito aparece dentro do banco, abaixo da conta corrente:
-                escolha um deles pra ver só os dados dele, sem somar os dois.
-              </span>
-            )
-          )}
-
-          <AccountSwitcher
-            accounts={accounts}
-            activeAccountId={activeAccount.id}
-            connectors={connectors}
-            onSelect={setSelectedAccountId}
-            onDisconnect={disconnectConnection}
-            onRemoveManual={removeManualAccount}
-            onSynced={bumpDataRefresh}
-          />
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="dashboard-home__stats">
         <StatCard
           icon={isActiveAccountCard ? <CardIcon /> : <WalletIcon />}
-          label={isActiveAccountCard ? "Saldo do cartão (informado pelo banco)" : "Saldo da conta corrente"}
+          label={isActiveAccountCard ? "Saldo do cartão (informado pelo banco)" : "Saldo em conta"}
           value={formatCurrency(activeAccount.balance)}
           trend={isActiveAccountCard ? undefined : balanceTrend}
         />
         <StatCard
           icon={<TrendUpIcon />}
-          label="Receitas do mês"
+          label="Entradas do mês"
           value={formatCurrency(totalIncome)}
           valueTone="income"
           trend={incomeTrend}
         />
         <StatCard
           icon={<TrendDownIcon />}
-          label="Despesas do mês"
+          label="Saídas do mês"
           value={formatCurrency(totalExpense)}
           valueTone="expense"
           trend={expenseTrend}
         />
         <StatCard
           icon={<TargetIcon />}
-          label="Saldo do mês (receitas - despesas)"
+          label="Resultado do mês"
           value={formatCurrency(monthlyBalance)}
           valueTone={monthlyBalance >= 0 ? "income" : "expense"}
           secondaryLines={[{ label: "% da receita gasta", value: formatPercentage(percentageSpent) }]}
         />
         <StatCard
           icon={<CardIcon />}
-          label="Tipo de cartão"
+          label="Cartão"
           value={activeCard ? `Crédito${activeCard.brand ? ` · ${activeCard.brand}` : ""}` : "Nenhum cartão"}
           secondaryLines={
             activeCard
-              ? [
-                  { label: "Cartão", value: activeCard.name },
-                  { label: "Origem", value: activeCard.isSynced ? "Sincronizado pelo banco" : "Cadastrado manualmente" },
-                ]
+              ? [{ label: "Cartão", value: activeCard.name }]
               : [{ label: "Cadastre ou conecte em", value: "Cartões" }]
           }
         />
       </div>
 
       <div className="dashboard-home__grid">
-        <Card title={`Receitas x despesas (últimos ${TREND_MONTHS} meses)`}>
+        <Card
+          title={
+            <>
+              Receitas x despesas{" "}
+              <span className="dashboard-home__title-note">(últimos {TREND_MONTHS} meses)</span>
+            </>
+          }
+        >
           <AreaTrendChart
             height={220}
             formatValue={formatCurrency}
@@ -368,7 +350,13 @@ export default function DashboardHome() {
           />
         </Card>
 
-        <Card title="Principais categorias (mês atual)">
+        <Card
+          title={
+            <>
+              Principais categorias <span className="dashboard-home__title-note">(mês atual)</span>
+            </>
+          }
+        >
           {donutData.length === 0 ? (
             <p className="dashboard-home__hint">Nenhuma despesa categorizada este mês.</p>
           ) : (

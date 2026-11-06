@@ -72,8 +72,11 @@ public record TransactionReportDto(
     IEnumerable<TransactionDto> Items,
     int TotalCount,
     decimal TotalIncome,
-    decimal TotalExpense
+    decimal TotalExpense,
+    IEnumerable<ReportDayTotalDto> DayTotals
 );
+
+public record ReportDayTotalDto(DateTime Date, decimal Income, decimal Expense);
 
 public record TransactionDto(
     Guid Id,
@@ -169,13 +172,15 @@ public record InstallmentDto(
     int CurrentInstallment,
     int TotalInstallments,
     DateTime NextDueDate,
-    string? CreditCardName
+    string? CreditCardName,
+    bool AffectsCardLimit = false
 )
 {
     public static InstallmentDto FromEntity(Installment i) => new(
         i.Id, i.Description, i.InstallmentAmount,
         i.CurrentInstallment, i.TotalInstallments, i.NextDueDate,
-        i.CreditCard?.Name ?? i.BankAccount?.Name
+        i.CreditCard?.Name ?? i.BankAccount?.Name,
+        i.CreditCard is not null || i.BankAccount is { UsedLimit: not null, PolpAccountId: null }
     );
 }
 
@@ -215,4 +220,7 @@ public record RecognizedCardDto(
     string? BankName,
     DateTime? ConnectionLastSyncedAt,
     bool IsPrimary = false
-);
+)
+{
+    public string? InvoiceStatus { get; init; }
+}

@@ -377,4 +377,61 @@ public class TransactionReportTests
         Assert.Equal(23.99m, r.Items.First().Amount);
         Assert.Equal(23.00m, r.Items.Last().Amount);
     }
+
+    [Fact]
+    public async Task Subtotal_do_dia_dividido_entre_paginas_soma_o_dia_inteiro_nas_duas_paginas()
+    {
+        using var t = new TestDb();
+        var account = t.AddAccount();
+        BulkAdd(t, account, 20, TransactionType.Expense, 10m, "Hoje", new DateTime(2025, 3, 2, 12, 0, 0));
+        BulkAdd(t, account, 30, TransactionType.Expense, 1.50m, "Ontem", new DateTime(2025, 3, 1, 9, 0, 0));
+        BulkAdd(t, account, 2, TransactionType.Income, 100m, "Venda", new DateTime(2025, 3, 1, 18, 0, 0));
+
+        var p1 = await Report(t, page: 1, pageSize: 25);
+        var p2 = await Report(t, page: 2, pageSize: 25);
+
+        var day1OnP1 = Assert.Single(p1.DayTotals, d => d.Date == new DateTime(2025, 3, 1));
+        var day1OnP2 = Assert.Single(p2.DayTotals, d => d.Date == new DateTime(2025, 3, 1));
+        Assert.Equal(45.00m, day1OnP1.Expense);
+        Assert.Equal(200m, day1OnP1.Income);
+        Assert.Equal(day1OnP1, day1OnP2);
+        Assert.Equal(200m, Assert.Single(p1.DayTotals, d => d.Date == new DateTime(2025, 3, 2)).Expense);
+        Assert.DoesNotContain(p2.DayTotals, d => d.Date == new DateTime(2025, 3, 2));
+    }
+
+    [Fact]
+    public async Task Subtotal_do_dia_ignora_transferencia_entre_contas_proprias_e_respeita_busca_e_tipo()
+    {
+        using var t = new TestDb();
+        var account = t.AddAccount();
+        var day = new DateTime(2025, 3, 5, 10, 0, 0);
+        t.AddTransaction(account, TransactionType.Expense, 50m, day, "Mercado Central");
+        t.AddTransaction(account, TransactionType.Expense, 30m, day, "Farmacia");
+        t.AddTransaction(account, TransactionType.Income, 500m, day, "Mercado Central reembolso");
+        t.AddTransaction(account, TransactionType.Expense, 1000m, day, "Mercado poupanca", movementKind: PolpMovementKind.OwnTransfer);
+
+        var all = Assert.Single((await Report(t)).DayTotals);
+        Assert.Equal(80m, all.Expense);
+        Assert.Equal(500m, all.Income);
+
+        var search = Assert.Single((await Report(t, search: "mercado")).DayTotals);
+        Assert.Equal(50m, search.Expense);
+        Assert.Equal(500m, search.Income);
+
+        var expenses = Assert.Single((await Report(t, type: "Expense")).DayTotals);
+        Assert.Equal(80m, expenses.Expense);
+        Assert.Equal(0m, expenses.Income);
+    }
+
+    [Fact]
+    public async Task Subtotal_do_dia_nao_vem_quando_a_ordenacao_nao_e_por_data()
+    {
+        using var t = new TestDb();
+        var account = t.AddAccount();
+        BulkAdd(t, account, 5, TransactionType.Expense, 10m, "Item", Base);
+
+        Assert.Empty((await Report(t, sortBy: "amount")).DayTotals);
+        Assert.Empty((await Report(t, sortBy: "name")).DayTotals);
+        Assert.NotEmpty((await Report(t, sortBy: "dueDate", sortDir: "asc")).DayTotals);
+    }
 }

@@ -1,9 +1,10 @@
 import { useMemo } from "react";
-import { CardIcon, StarIcon } from "../../ui/icons/FeatureIcons.jsx";
-import { formatCurrency, formatDate } from "../../../utils/financeMath.js";
+import { StarIcon } from "../../ui/icons/FeatureIcons.jsx";
+import { formatCurrency, formatDate, formatPercentage } from "../../../utils/financeMath.js";
 import { getCardBase, cardTextColor } from "../../../utils/cardColors.js";
-import { isPastDue, formatDueDay, formatDataAge } from "../../../utils/invoiceDue.js";
-import { cardLimits } from "../../../utils/cardLimits.js";
+import { formatDueDay, formatDataAge } from "../../../utils/invoiceDue.js";
+import { cardLimits, isInvoiceOverdue } from "../../../utils/cardLimits.js";
+import LimitBar from "../LimitBar/LimitBar.jsx";
 import "./CreditCardVisual.css";
 
 // `card` é o RecognizedCardDto do backend, já achatado — sem entidade separada por trás: quando
@@ -19,13 +20,13 @@ export default function CreditCardVisual({
   showKeyStats = true,
   showFace = true,
 }) {
-  const { hasLimit, available: availableLimit, usagePercent, overLimit } = cardLimits(card);
+  const { hasLimit, available: availableLimit, usagePercent, overLimit, overAmount } = cardLimits(card);
   const FaceTag = onClick ? "button" : "div";
   const faceStyle = useMemo(() => {
     const base = getCardBase({ name: card.name, productType: card.productType, institutionColor: card.institutionColor });
     return { "--card-base": base, "--card-text": cardTextColor(base) };
   }, [card.name, card.productType, card.institutionColor]);
-  const pastDue = isPastDue(card.invoiceDueDate);
+  const pastDue = isInvoiceOverdue(card);
   const dataAge = pastDue ? formatDataAge(card.connectionLastSyncedAt) : null;
 
   const primaryButton = (
@@ -107,21 +108,14 @@ export default function CreditCardVisual({
               <span>
                 Limite usado: <strong>{formatCurrency(card.usedLimit)}</strong> de {formatCurrency(card.creditLimit)}
               </span>
-              {usagePercent != null && <span>{Math.round(usagePercent)}%</span>}
+              {usagePercent != null && <span>{formatPercentage(usagePercent)}</span>}
             </div>
             {overLimit && (
               <span className="credit-card-visual__over">
-                Acima do limite: <strong>{formatCurrency(card.usedLimit - card.creditLimit)}</strong>
+                Limite excedido em <strong>{formatCurrency(overAmount)}</strong>
               </span>
             )}
-            {usagePercent != null && (
-              <div className="credit-card-visual__progress">
-                <div
-                  className={`credit-card-visual__progress-fill${overLimit ? " credit-card-visual__progress-fill--over" : ""}`}
-                  style={{ width: `${Math.min(100, usagePercent)}%` }}
-                />
-              </div>
-            )}
+            <LimitBar usagePercent={usagePercent} />
           </div>
         ) : (
           <div className="credit-card-visual__limit">
@@ -136,12 +130,6 @@ export default function CreditCardVisual({
           <span className="credit-card-visual__minor-value">{card.installments ? card.installments.length : "—"}</span>
         </div>
       </div>
-
-      {onClick && (
-        <span className="credit-card-visual__hint">
-          <CardIcon /> Clique pra ver todos os seus cartões
-        </span>
-      )}
     </div>
   );
 }

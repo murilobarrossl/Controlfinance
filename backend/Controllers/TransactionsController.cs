@@ -138,6 +138,9 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             || string.Equals(sortBy, "name", StringComparison.OrdinalIgnoreCase)
             || !string.IsNullOrWhiteSpace(search);
 
+        var wantsDayTotals = string.Equals(sortBy, "dueDate", StringComparison.OrdinalIgnoreCase);
+        List<ReportDayTotalDto> dayTotals;
+
         if (needsInMemory)
         {
             var all = await ProjectToDto(query.OrderByDescending(t => t.DueDate)).ToListAsync();
@@ -146,6 +149,12 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             totalCount = all.Count;
             all = WithComputedFields(all, today);
             items = SortInMemory(all, sortBy, desc).Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+            // O filtro inteiro já está decifrado em memória: somar daqui evita ler e decifrar
+            // todas as linhas de novo no banco só pra chegar no mesmo total.
+            var rows = all.Select(t => new SumRow(t.DueDate, Enum.Parse<TransactionType>(t.Type), t.Amount, t.IsTransfer)).ToList();
+            (totalIncome, totalExpense) = SumTotals(rows);
+            dayTotals = wantsDayTotals ? SumDayTotals(rows, items) : [];
         }
         else
         {
@@ -153,11 +162,14 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             var ordered = ApplySort(query, sortBy, desc);
             items = await ProjectToDto(ordered.Skip((page - 1) * pageSize).Take(pageSize)).ToListAsync();
             items = WithComputedFields(items, today);
+
+            (totalIncome, totalExpense) = await SumTotalsAsync(SumRowsAsync(query));
+            dayTotals = wantsDayTotals && items.Count > 0
+                ? SumDayTotals(await CollectAsync(SumRowsAsync(DayRange(query, items))), items)
+                : [];
         }
 
-        (totalIncome, totalExpense) = await SumTotalsAsync(query, search);
-
-        return Ok(new TransactionReportDto(items, totalCount, totalIncome, totalExpense));
+        return Ok(new TransactionReportDto(items, totalCount, totalIncome, totalExpense, dayTotals));
     }
 
     private static readonly Regex InstallmentSuffix = new(@"([0-9]{2}/[0-9]{2})\z", RegexOptions.Compiled);
@@ -237,23 +249,78 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         return Ok(new TransactionAggregatesDto(totalIncome, totalExpense, count, monthList, categoryList, establishmentList));
     }
 
-    private static async Task<(decimal Income, decimal Expense)> SumTotalsAsync(
-        IQueryable<Transaction> query, string? search)
+    private sealed record SumRow(DateTime DueDate, TransactionType Type, decimal Amount, bool IsTransfer);
+
+    // Só as colunas que a soma usa: sem o nome (cifrado), que este caminho não filtra, cada
+    // página do relatório decifraria o nome de todas as linhas do filtro só pra descartar.
+    private static async IAsyncEnumerable<SumRow> SumRowsAsync(IQueryable<Transaction> query)
+    {
+        var rows = query
+            .Select(t => new { t.DueDate, t.Type, t.Amount, t.PolpMovementKind })
+            .AsAsyncEnumerable();
+        await foreach (var t in rows)
+            yield return new SumRow(t.DueDate, t.Type, t.Amount, TransferDetection.IsSelfTransfer(t.PolpMovementKind));
+    }
+
+    private static async Task<List<SumRow>> CollectAsync(IAsyncEnumerable<SumRow> rows)
+    {
+        var list = new List<SumRow>();
+        await foreach (var row in rows) list.Add(row);
+        return list;
+    }
+
+    private static async Task<(decimal Income, decimal Expense)> SumTotalsAsync(IAsyncEnumerable<SumRow> rows)
     {
         decimal income = 0, expense = 0;
-        var rows = query
-            .Select(t => new { t.Type, t.Amount, t.Name, t.PolpMovementKind })
-            .AsAsyncEnumerable();
-
         await foreach (var t in rows)
         {
-            if (!string.IsNullOrWhiteSpace(search) && !MatchesSearch(t.Name, search)) continue;
-            if (TransferDetection.IsSelfTransfer(t.PolpMovementKind)) continue;
+            if (t.IsTransfer) continue;
             if (t.Type == TransactionType.Income) income += t.Amount;
             else if (t.Type == TransactionType.Expense) expense += t.Amount;
         }
-
         return (income, expense);
+    }
+
+    private static IQueryable<Transaction> DayRange(IQueryable<Transaction> query, List<TransactionDto> items)
+    {
+        var start = DateTime.SpecifyKind(items.Min(i => i.DueDate).Date, DateTimeKind.Utc);
+        var end = DateTime.SpecifyKind(items.Max(i => i.DueDate).Date.AddDays(1), DateTimeKind.Utc);
+        return query.Where(t => t.DueDate >= start && t.DueDate < end);
+    }
+
+    private static (decimal Income, decimal Expense) SumTotals(IEnumerable<SumRow> rows)
+    {
+        decimal income = 0, expense = 0;
+        foreach (var t in rows)
+        {
+            if (t.IsTransfer) continue;
+            if (t.Type == TransactionType.Income) income += t.Amount;
+            else if (t.Type == TransactionType.Expense) expense += t.Amount;
+        }
+        return (income, expense);
+    }
+
+    // Subtotal de cada dia presente na página, somado sobre o filtro inteiro: um dia que continua
+    // na página seguinte não pode aparecer com a soma só das linhas desta página.
+    private static List<ReportDayTotalDto> SumDayTotals(IEnumerable<SumRow> rows, List<TransactionDto> items)
+    {
+        if (items.Count == 0) return [];
+
+        var days = items.Select(i => i.DueDate.Date).ToHashSet();
+        return rows
+            .Where(r => days.Contains(r.DueDate.Date))
+            .GroupBy(r => r.DueDate.Date)
+            .Select(g =>
+            {
+                var (income, expense) = SumTotals(g);
+                return (Day: g.Key, Income: income, Expense: expense);
+            })
+            .Concat(days.Select(d => (Day: d, Income: 0m, Expense: 0m)))
+            .GroupBy(x => x.Day)
+            .Select(g => new ReportDayTotalDto(
+                DateTime.SpecifyKind(g.Key, DateTimeKind.Utc), g.Sum(x => x.Income), g.Sum(x => x.Expense)))
+            .OrderBy(d => d.Date)
+            .ToList();
     }
 
     // Busca sem diferenciar maiúsculas nem acentos ("pao" acha "Pão"), como o ILIKE fazia para

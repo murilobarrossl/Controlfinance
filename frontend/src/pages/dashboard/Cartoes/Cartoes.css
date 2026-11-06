@@ -21,6 +21,25 @@
   gap: 1rem;
 }
 
+.cartoes__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cartoes__empty-title {
+  color: var(--color-text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.cartoes__empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
 @media (max-width: 56.25em) {
   .cartoes__summary {
     grid-template-columns: repeat(2, 1fr);
@@ -340,12 +359,6 @@
   font-size: 0.82rem;
 }
 
-.cartoes__scope {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
 .cartoes__scope-title {
   margin: 0;
   color: var(--color-text-secondary);
@@ -552,29 +565,19 @@
   grid-column: 1 / -1;
 }
 
-.cartoes__tile-bar {
-  display: block;
-  height: 4px;
+.cartoes__tile-limit-note {
   margin-top: 0.3rem;
-  border-radius: var(--radius-pill);
-  background-color: var(--color-border-strong);
-  overflow: hidden;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
-.cartoes__tile-bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background-color: var(--color-text-secondary);
+.cartoes__tile-limit-note--over {
+  color: var(--color-accent-soft);
 }
 
-.cartoes__tile-bar-fill--over {
-  background-color: var(--color-accent);
-  background-image: repeating-linear-gradient(
-    -45deg,
-    transparent 0 3px,
-    color-mix(in srgb, var(--color-bg) 55%, transparent) 3px 5px
-  );
+.cartoes__tile-stat .limit-bar {
+  margin-top: 0.3rem;
 }
 
 .cartoes__tile-detail {

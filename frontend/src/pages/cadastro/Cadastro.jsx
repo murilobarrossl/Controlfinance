@@ -202,10 +202,6 @@ export default function RegisterPage() {
                 {...fieldAria("document", "register-document-hint")}
                 required
               />
-              <span id="register-document-hint" className="register__field-hint">
-                Usado para entrar com CPF/CNPJ e para confirmar que é você ao conectar um banco. O número
-                não fica guardado: guardamos só um código de verificação gerado a partir dele.
-              </span>
             </div>
 
           </div>
