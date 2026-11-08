@@ -181,9 +181,12 @@ Account deletion (`POST /api/account/deletion`) queues failed provider deletions
   from any non-auth endpoint (session expired/revoked). All `api/*.js` modules build on this.
 - `pages/dashboard/*` are the authenticated app screens (income/expenses, reports, categories,
   investments, cards); `pages/home/sections/*` compose the public marketing landing page.
-- Some non-sensitive, per-user local state (investment goals, emergency reserve) is kept in
-  `localStorage`, namespaced by the user id that `AuthContext` mirrors there
-  (`cf_current_user_id`), see `utils/investmentStorage.js`, `utils/emergencyReserveStorage.js`.
+- Savings goals and the emergency reserve live on the server (`PlanningController`,
+  `SavingsGoals`/`EmergencyReserves`, names and amounts encrypted). They used to be in
+  `localStorage` (namespaced by `cf_current_user_id`); `api/planning.js` `loadPlanning` imports any
+  leftover browser copy once via `POST /api/planning/import` (never overwrites server data) and only
+  then deletes it locally. `utils/investmentStorage.js`/`emergencyReserveStorage.js` only read that
+  legacy copy now.
 
 ## Conventions
 

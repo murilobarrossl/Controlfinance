@@ -29,6 +29,8 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AccessLogEntry> AccessLogs => Set<AccessLogEntry>();
     public DbSet<PolpWebhookEvent> PolpWebhookEvents => Set<PolpWebhookEvent>();
     public DbSet<RemovedPolpResource> RemovedPolpResources => Set<RemovedPolpResource>();
+    public DbSet<EmergencyReserve> EmergencyReserves => Set<EmergencyReserve>();
+    public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
     public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -187,6 +189,31 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
              .WithMany()
              .HasForeignKey(i => i.BankAccountId)
              .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<EmergencyReserve>(e =>
+        {
+            e.HasKey(r => r.UserId);
+            e.Property(r => r.CurrentAmount).HasConversion(decimalConverter).HasColumnName("CurrentAmountEncrypted");
+            e.HasOne(r => r.User)
+             .WithOne()
+             .HasForeignKey<EmergencyReserve>(r => r.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Nome da meta é digitado pelo usuário e pode revelar planos pessoais ("Tratamento", "Divórcio"…):
+        // cifrado como a descrição dos parcelamentos, junto com os valores.
+        modelBuilder.Entity<SavingsGoal>(e =>
+        {
+            e.HasKey(g => g.Id);
+            e.HasIndex(g => g.UserId);
+            e.Property(g => g.Name).HasConversion(textConverter).HasColumnName("NameEncrypted");
+            e.Property(g => g.TargetAmount).HasConversion(decimalConverter).HasColumnName("TargetAmountEncrypted");
+            e.Property(g => g.CurrentAmount).HasConversion(decimalConverter).HasColumnName("CurrentAmountEncrypted");
+            e.HasOne(g => g.User)
+             .WithMany()
+             .HasForeignKey(g => g.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ConsentRecord>(e =>

@@ -60,7 +60,6 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
         var pendingEntities = await db.Transactions
             .AsNoTracking()
             .Include(t => t.Category)
-            .Include(t => t.BankAccount)
             .Where(t => t.UserId == UserId
                      && t.BankAccountId == account.Id
                      && (t.Status == TransactionStatus.Pending || t.Status == TransactionStatus.Overdue))
@@ -68,6 +67,8 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             .Take(100)
             .ToListAsync();
 
+        foreach (var t in pendingEntities)
+            t.BankAccount = account;
         var pending = pendingEntities.Select(t => TransactionDto.FromEntity(t, today)).ToList();
 
         var expensesByCategory = nonTransferMonthly
@@ -75,21 +76,15 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             .GroupBy(t => t.CategoryId)
             .Select(g => new
             {
-                CategoryId = g.Key,
+                Name = g.First().Category?.Name,
                 Amount = g.Sum(t => t.Amount)
             })
             .ToList();
 
-        var categoryIds = expensesByCategory.Select(e => e.CategoryId).ToList();
-        var categories = await db.Categories
-            .AsNoTracking()
-            .Where(c => c.UserId == UserId && categoryIds.Contains(c.Id))
-            .ToListAsync();
-
         var totalExpenseForCategories = expensesByCategory.Sum(e => e.Amount);
 
         var categoryExpenses = expensesByCategory.Select(e => new CategoryExpenseDto(
-            categories.FirstOrDefault(c => c.Id == e.CategoryId)?.Name ?? "Sem categoria",
+            e.Name ?? "Sem categoria",
             e.Amount,
             totalExpenseForCategories > 0 ? Math.Round(e.Amount / totalExpenseForCategories * 100, 1) : 0
         )).ToList();

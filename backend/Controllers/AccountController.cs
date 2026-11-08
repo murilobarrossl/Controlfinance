@@ -122,6 +122,18 @@ public class AccountController(
                 .Where(i => i.UserId == UserId)
                 .ToListAsync(ct))
                 .Select(i => new { descricao = i.Description, valorTotal = i.TotalAmount, parcelas = i.TotalInstallments, parcelaAtual = i.CurrentInstallment, valorParcela = i.InstallmentAmount, proximoVencimento = i.NextDueDate }),
+            reservaDeEmergencia = (await db.EmergencyReserves
+                .AsNoTracking()
+                .Where(r => r.UserId == UserId)
+                .ToListAsync(ct))
+                .Select(r => new { valor = r.CurrentAmount, atualizadaEm = r.UpdatedAt })
+                .FirstOrDefault(),
+            metasDeEconomia = (await db.SavingsGoals
+                .AsNoTracking()
+                .Where(g => g.UserId == UserId)
+                .OrderBy(g => g.CreatedAt)
+                .ToListAsync(ct))
+                .Select(g => new { nome = g.Name, valorAlvo = g.TargetAmount, valorGuardado = g.CurrentAmount, prazo = g.Deadline, criadaEm = g.CreatedAt }),
         };
 
         Response.Headers.Append("Cache-Control", "no-store");
@@ -183,6 +195,10 @@ public class AccountController(
             await disconnectService.MarkAccountResourcesRemovedAsync(UserId, ct);
             // Installment não tem FK pra Users (só UserId solto), então não sai no cascade.
             await db.Installments.Where(i => i.UserId == UserId).ExecuteDeleteAsync(ct);
+            // Reserva e metas também têm cascade de Users, mas saem explicitamente: são dados que o
+            // usuário digitou, e a exclusão deles não pode depender só da FK existir no banco.
+            await db.SavingsGoals.Where(g => g.UserId == UserId).ExecuteDeleteAsync(ct);
+            await db.EmergencyReserves.Where(r => r.UserId == UserId).ExecuteDeleteAsync(ct);
             // O resto (contas, transações, categorias, cartões, decisões de recorrência,
             // integrações e registros de aceite) sai pelo cascade de Users no próprio Postgres.
             await db.Users.Where(u => u.Id == UserId).ExecuteDeleteAsync(ct);

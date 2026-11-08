@@ -4,7 +4,17 @@ import { TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE } from "./chartTheme.js";
 import { readCssVar } from "../../utils/cssVar.js";
 import "./AreaTrendChart.css";
 
-export default function AreaTrendChart({ data, xKey = "month", series, height = 260, formatValue, badge }) {
+const DEFAULT_X_PADDING = { right: 12 };
+
+export default function AreaTrendChart({
+  data,
+  xKey = "month",
+  series,
+  height = 260,
+  formatValue,
+  badge,
+  xAxisPadding = DEFAULT_X_PADDING,
+}) {
   const axisColor = useMemo(() => readCssVar("--color-text-tertiary", "#8b8b8b"), []);
   return (
     <div className="area-trend-chart">
@@ -26,7 +36,7 @@ export default function AreaTrendChart({ data, xKey = "month", series, height = 
             ))}
           </defs>
           <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey={xKey} stroke={axisColor} tick={{ fontSize: 12 }} padding={{ right: 12 }} />
+          <XAxis dataKey={xKey} stroke={axisColor} tick={{ fontSize: 12 }} padding={xAxisPadding} />
           <YAxis stroke={axisColor} tick={{ fontSize: 12 }} tickFormatter={formatValue} width={76} />
           <Tooltip
             formatter={(value) => (formatValue ? formatValue(value) : value)}

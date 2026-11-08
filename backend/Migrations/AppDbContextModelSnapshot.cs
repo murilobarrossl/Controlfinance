@@ -242,6 +242,24 @@ namespace ControlFinance.API.Migrations
                     b.ToTable("CreditCards");
                 });
 
+            modelBuilder.Entity("ControlFinance.API.Models.EmergencyReserve", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurrentAmount")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("CurrentAmountEncrypted");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("EmergencyReserves");
+                });
+
             modelBuilder.Entity("ControlFinance.API.Models.Installment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -508,6 +526,46 @@ namespace ControlFinance.API.Migrations
                     b.ToTable("RevokedTokens");
                 });
 
+            modelBuilder.Entity("ControlFinance.API.Models.SavingsGoal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CurrentAmount")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("CurrentAmountEncrypted");
+
+                    b.Property<DateOnly?>("Deadline")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("NameEncrypted");
+
+                    b.Property<string>("TargetAmount")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("TargetAmountEncrypted");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("SavingsGoals");
+                });
+
             modelBuilder.Entity("ControlFinance.API.Models.Transaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -723,6 +781,17 @@ namespace ControlFinance.API.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ControlFinance.API.Models.EmergencyReserve", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.User", "User")
+                        .WithOne()
+                        .HasForeignKey("ControlFinance.API.Models.EmergencyReserve", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("ControlFinance.API.Models.Installment", b =>
                 {
                     b.HasOne("ControlFinance.API.Models.BankAccount", "BankAccount")
@@ -766,6 +835,17 @@ namespace ControlFinance.API.Migrations
                         .IsRequired();
 
                     b.Navigation("BankAccount");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.SavingsGoal", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("User");
                 });

@@ -1,28 +1,27 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Card from "../../../components/ui/Card/Card.jsx";
 import BankLogo from "../../../components/ui/BankLogo/BankLogo.jsx";
-import { PiggyBankIcon, BoxIcon, CoinsIcon, ChartIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
+import { CoinsIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { getInvestmentModality } from "../../../utils/accountKind.js";
 import { formatCurrency } from "../../../utils/financeMath.js";
 import { poupancaAnnualPct, simulateGrowth } from "../../../utils/investmentMath.js";
-import {
-  REFERENCE_CDI_PCT,
-  REFERENCE_DATE_LABEL,
-  REFERENCE_SELIC_PCT,
-  findBankByName,
-} from "../../../utils/investmentProducts.js";
+import { REFERENCE_SELIC_PCT, findBankByName } from "../../../utils/investmentProducts.js";
+import { poupancaRuleLabel } from "./poupancaRule.js";
 
 const EXAMPLE_AMOUNT = 1000;
+// Só caixinha e porquinho seguem a taxa dos produtos de referência. CDB, Tesouro e fundos
+// ("investimento") têm taxa própria que não conhecemos: somá-los aqui estimaria rendimento errado.
+const REFERENCE_RATE_MODALITIES = new Set(["caixinha", "porquinho"]);
+const RESTATES_RATE = /^(rende |até )?\d+% do cdi/i;
+
+function liquidityLabel(liquidity) {
+  if (liquidity === "Imediata") return "Resgate imediato";
+  return `Resgate ${liquidity.charAt(0).toLowerCase()}${liquidity.slice(1)}`;
+}
 
 function normalizeColor(raw) {
   if (!raw) return undefined;
   return raw.startsWith("#") ? raw : `#${raw}`;
-}
-
-function ProductIcon({ name }) {
-  if (/caixinha/i.test(name)) return <BoxIcon />;
-  if (/porquinho|cofrinho|cofre/i.test(name)) return <PiggyBankIcon />;
-  return <ChartIcon />;
 }
 
 // Rendimento líquido médio por mês numa aplicação de 1 ano, com o IR desse prazo já descontado.
@@ -33,48 +32,37 @@ function monthlyNetYield(amount, annualPct, taxed) {
   return simulateGrowth({ initial: amount, monthly: 0, months: 12, annualPct, taxed }).summary.incomeNet / 12;
 }
 
-function ProductRow({ product, cdiPct, amount, usingOwnBalance, showBasis }) {
+function ProductRow({ product, cdiPct, amount }) {
   const base = monthlyNetYield(amount, (cdiPct * product.pctCdi) / 100, true);
   const max = product.pctCdiMax ? monthlyNetYield(amount, (cdiPct * product.pctCdiMax) / 100, true) : null;
 
   return (
     <li className="yield-card__product">
-      <div className="yield-card__product-top">
-        <span className="yield-card__product-icon" aria-hidden="true">
-          <ProductIcon name={product.name} />
-        </span>
-        <span className="yield-card__product-name">{product.name}</span>
-      </div>
+      <span className="yield-card__product-name">{product.name}</span>
 
       <div className="yield-card__chips">
         <span className="yield-card__chip">{product.pctCdi}% do CDI</span>
-        {product.liquidity === "Imediata" && (
-          <span className="yield-card__chip">Resgate imediato</span>
-        )}
+        {product.liquidity && <span className="yield-card__chip">{liquidityLabel(product.liquidity)}</span>}
       </div>
 
       <div className="yield-card__estimate">
         <span className="yield-card__estimate-value">≈ {formatCurrency(base)}</span>
         <span className="yield-card__estimate-label">por mês, líquido</span>
       </div>
-      {showBasis && (
-        <p className="yield-card__basis">
-          {usingOwnBalance ? `Sobre o seu saldo de ${formatCurrency(amount)} aqui.` : `A cada ${formatCurrency(amount)} guardados.`}
-        </p>
-      )}
 
       {max != null && (
         <p className="yield-card__upgrade">
-          Com as condições do banco, até {product.pctCdiMax}% do CDI: ≈ {formatCurrency(max)} por mês
+          Até {product.pctCdiMax}% do CDI com condições: ≈ {formatCurrency(max)} por mês
         </p>
       )}
-      <p className="yield-card__note">{product.note}</p>
+      {product.note && (max != null || !RESTATES_RATE.test(product.note)) && (
+        <p className="yield-card__note">{product.note}</p>
+      )}
     </li>
   );
 }
 
-export default function BankYieldCards({ accounts, connectors }) {
-  const [cdi, setCdi] = useState(String(REFERENCE_CDI_PCT));
+export default function BankYieldCards({ accounts, connectors, cdi, onCdiChange, isCompany }) {
   const cdiPct = Math.max(0, Number(cdi) || 0);
 
   const { cards, poupancaBalance, uncoveredNames } = useMemo(() => {
@@ -100,7 +88,7 @@ export default function BankYieldCards({ accounts, connectors }) {
         byBank.set(bank.key, { bank, connector, saved: 0, hasSaved: false });
       }
       const entry = byBank.get(bank.key);
-      if (modality && modality.key !== "poupanca" && account.balance != null) {
+      if (modality && REFERENCE_RATE_MODALITIES.has(modality.key) && account.balance != null) {
         entry.saved += account.balance;
         entry.hasSaved = true;
       }
@@ -118,17 +106,11 @@ export default function BankYieldCards({ accounts, connectors }) {
   return (
     <section className="yield-section">
       <header className="yield-section__header">
-        <div>
-          <h3 className="yield-section__title">Quanto rende onde você guarda</h3>
-          <p className="investimentos__section-hint yield-section__hint">
-            Só os bancos que você conectou, com as caixinhas, cofrinhos e porquinhos de cada um. Percentuais de referência
-            de {REFERENCE_DATE_LABEL}: os bancos mudam isso sem aviso, então confirme no app.
-          </p>
-        </div>
+        <h3 className="yield-section__title">Quanto rende onde você guarda</h3>
         <label className="yield-section__cdi">
           <span>CDI considerado</span>
           <span className="yield-section__cdi-input">
-            <input type="number" min="0" step="0.01" value={cdi} onChange={(e) => setCdi(e.target.value)} />% ao ano
+            <input type="number" inputMode="decimal" min="0" step="0.01" value={cdi} onChange={(e) => onCdiChange(e.target.value)} />% ao ano
           </span>
         </label>
       </header>
@@ -136,8 +118,8 @@ export default function BankYieldCards({ accounts, connectors }) {
       {!hasAnything ? (
         <Card>
           <p className="investimentos__hint">
-            Conecte um banco pra ver aqui quanto as caixinhas e cofrinhos dele rendem.
-            {uncoveredNames.length > 0 && ` Ainda não temos dados de rendimento de: ${uncoveredNames.join(", ")}.`}
+            Nenhum banco conectado tem taxas de referência cadastradas.
+            {uncoveredNames.length > 0 && ` Sem dados para: ${uncoveredNames.join(", ")}.`}
           </p>
         </Card>
       ) : (
@@ -147,21 +129,19 @@ export default function BankYieldCards({ accounts, connectors }) {
               <header className="yield-card__header">
                 <BankLogo name={connector?.name ?? bank.bank} logoUrl={connector?.logoUrl} color={normalizeColor(connector?.color)} />
                 <span className="yield-card__bank">{bank.bank}</span>
-                {hasSaved && (
-                  <span className="yield-card__saved">
-                    Guardado aqui <strong>{formatCurrency(saved)}</strong>
-                  </span>
-                )}
               </header>
+              <p className="yield-card__basis">
+                {hasSaved && saved > 0
+                  ? `Cada estimativa considera todo o seu saldo de ${formatCurrency(saved)} em caixinhas e porquinhos aqui.`
+                  : `Cada estimativa considera ${formatCurrency(EXAMPLE_AMOUNT)} guardados.`}
+              </p>
               <ul className="yield-card__products">
-                {bank.products.map((product, index) => (
+                {bank.products.map((product) => (
                   <ProductRow
                     key={product.id}
                     product={product}
                     cdiPct={cdiPct}
                     amount={hasSaved && saved > 0 ? saved : EXAMPLE_AMOUNT}
-                    usingOwnBalance={hasSaved && saved > 0}
-                    showBasis={index === 0}
                   />
                 ))}
               </ul>
@@ -175,31 +155,20 @@ export default function BankYieldCards({ accounts, connectors }) {
                   <CoinsIcon />
                 </span>
                 <span className="yield-card__bank">Poupança</span>
-                <span className="yield-card__saved">
-                  Guardado <strong>{formatCurrency(poupancaBalance)}</strong>
-                </span>
               </header>
               <ul className="yield-card__products">
                 <li className="yield-card__product">
-                  <div className="yield-card__product-top">
-                    <span className="yield-card__product-icon" aria-hidden="true">
-                      <CoinsIcon />
-                    </span>
-                    <span className="yield-card__product-name">Poupança</span>
-                  </div>
                   <div className="yield-card__chips">
-                    <span className="yield-card__chip">
-                      0,5% ao mês
-                    </span>
-                    <span className="yield-card__chip">Sem imposto</span>
+                    <span className="yield-card__chip">{poupancaRuleLabel(REFERENCE_SELIC_PCT)}</span>
+                    <span className="yield-card__chip">{isCompany ? "Tributada para CNPJ" : "Sem IR para pessoa física"}</span>
                   </div>
                   <div className="yield-card__estimate">
                     <span className="yield-card__estimate-value">
                       ≈ {formatCurrency(monthlyNetYield(poupancaBalance, poupancaAnnualPct(REFERENCE_SELIC_PCT), false))}
                     </span>
-                    <span className="yield-card__estimate-label">por mês</span>
+                    <span className="yield-card__estimate-label">{isCompany ? "por mês, antes do imposto" : "por mês"}</span>
                   </div>
-                  <p className="yield-card__basis">Sobre o seu saldo de {formatCurrency(poupancaBalance)}.</p>
+                  <p className="yield-card__basis">Sobre o seu saldo de {formatCurrency(poupancaBalance)}, sem a TR.</p>
                 </li>
               </ul>
             </Card>
@@ -209,11 +178,11 @@ export default function BankYieldCards({ accounts, connectors }) {
 
       {hasAnything && uncoveredNames.length > 0 && (
         <p className="investimentos__fineprint">
-          Ainda não temos dados de rendimento de: {uncoveredNames.join(", ")}. Confira no app do banco.
+          Sem taxas de referência para {uncoveredNames.join(", ")}.
         </p>
       )}
       <p className="investimentos__fineprint">
-        Estimativas, não garantias, e não são recomendação de investimento. Resgates em menos de 30 dias podem ter IOF.
+        Estimativas, não garantias nem recomendação de investimento. Resgates em menos de 30 dias podem ter IOF.
       </p>
     </section>
   );

@@ -9,7 +9,7 @@ import usePageTitle from "../../hooks/usePageTitle.js";
 export default function PoliticaDePrivacidade() {
   usePageTitle("Política de privacidade");
   return (
-    <LegalPageLayout kicker="Legal" title="Política de privacidade" updatedAt={`6 de novembro de 2026 (versão ${PRIVACY_VERSION})`}>
+    <LegalPageLayout kicker="Legal" title="Política de privacidade" updatedAt={`8 de novembro de 2026 (versão ${PRIVACY_VERSION})`}>
       <h2>Resumo</h2>
       <ul>
         <li>Coletamos o mínimo para o painel funcionar. O número do seu CPF/CNPJ não fica guardado, e não pedimos telefone.</li>
@@ -56,6 +56,7 @@ export default function PoliticaDePrivacidade() {
       <p><strong>Dados que você cadastra</strong></p>
       <ul>
         <li>Cartões e parcelamentos cadastrados por você (a descrição do parcelamento é guardada cifrada), categorias e edições de nome/categoria das transações importadas.</li>
+        <li>Reserva de emergência e metas de economia que você registra na aba Investimentos: valor da reserva e, de cada meta, nome, valor alvo, valor guardado e prazo. Ficam na sua conta, nos nossos servidores, com nome e valores cifrados.</li>
       </ul>
 
       <p><strong>Registros de aceite e preferências</strong></p>
@@ -83,7 +84,8 @@ export default function PoliticaDePrivacidade() {
       <p><strong>Neste navegador</strong></p>
       <ul>
         <li>Um cookie de sessão (essencial, não legível por scripts da página), que expira em até 8 horas ou ao sair.</li>
-        <li>No armazenamento local do navegador: identificador interno do usuário, conta selecionada no painel, metas de economia e reserva de emergência que você registra, e uma conexão bancária em andamento. Metas e reserva ficam só neste aparelho e não vão para os nossos servidores.</li>
+        <li>No armazenamento local do navegador: identificador interno do usuário, conta selecionada no painel e uma conexão bancária em andamento.</li>
+        <li>Metas e reserva registradas antes desta versão ficavam só no navegador. No primeiro acesso depois dela, são levadas para a sua conta e apagadas do navegador assim que ficam guardadas. Se o navegador tiver uma reserva diferente da já salva na conta, você escolhe qual manter.</li>
         <li>Não usamos cookies de publicidade nem ferramentas de análise de navegação.</li>
       </ul>
 
@@ -135,7 +137,7 @@ export default function PoliticaDePrivacidade() {
 
       <h2>6. Como protegemos</h2>
       <ul>
-        <li>Saldos, valores, limites, faturas, descrições de transações e de parcelamentos e os dígitos de conta guardados são cifrados (AES-256-GCM) no banco de dados, com chaves que podem ser trocadas periodicamente.</li>
+        <li>Saldos, valores, limites, faturas, descrições de transações e de parcelamentos, nomes e valores das metas, valor da reserva de emergência e os dígitos de conta guardados são cifrados (AES-256-GCM) no banco de dados, com chaves que podem ser trocadas periodicamente.</li>
         <li>Comunicação cifrada (HTTPS) entre o navegador, o Control Finance e os fornecedores.</li>
         <li>Sessão em cookie que scripts da página não conseguem ler, com proteção contra requisições forjadas por outros sites.</li>
         <li>Cada pessoa só acessa os próprios dados; tentativas repetidas de login são bloqueadas temporariamente.</li>
@@ -145,7 +147,7 @@ export default function PoliticaDePrivacidade() {
 
       <h2>7. Por quanto tempo guardamos</h2>
       <ul>
-        <li>Cadastro, cartões e parcelamentos cadastrados por você, edições e preferências: até você excluir a conta (ou remover o item).</li>
+        <li>Cadastro, cartões e parcelamentos cadastrados por você, reserva de emergência, metas de economia, edições e preferências: até você excluir a conta (ou remover o item).</li>
         <li>Dados de um banco conectado: até você desconectar esse banco ou excluir a conta. Ao desconectar, apagamos na hora tudo que veio dele. Um prazo máximo para o histórico importado pode ser configurado; o prazo em vigor aparece em Privacidade e dados, no painel.</li>
         <li>Registros de aceite: enquanto a conta existir; são apagados junto com ela.</li>
         <li>Identificador de sessão encerrada: até o horário em que a sessão expiraria (no máximo 8 horas).</li>

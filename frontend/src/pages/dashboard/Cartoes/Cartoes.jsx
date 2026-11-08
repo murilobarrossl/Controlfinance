@@ -429,7 +429,7 @@ export default function Cartoes() {
             <label className="cartoes__field">
               <span className="cartoes__field-label">Limite de crédito</span>
               <CurrencyInput
-                placeholder="Ex: 5000"
+                placeholder="Ex: 5.000,00"
                 value={detailForm.creditLimit}
                 onChange={(e) => setDetailForm({ ...detailForm, creditLimit: e.target.value })}
                 required
@@ -682,7 +682,7 @@ export default function Cartoes() {
             <label className="cartoes__field">
               <span className="cartoes__field-label">Limite de crédito</span>
               <CurrencyInput
-                placeholder="Ex: 5000"
+                placeholder="Ex: 5.000,00"
                 value={manualForm.creditLimit}
                 onChange={(e) => setManualForm({ ...manualForm, creditLimit: e.target.value })}
                 required
@@ -800,7 +800,7 @@ export default function Cartoes() {
             <label className="cartoes__field">
               <span className="cartoes__field-label">Valor total</span>
               <CurrencyInput
-                placeholder="Ex: 3000"
+                placeholder="Ex: 3.000,00"
                 value={installmentForm.totalAmount}
                 onChange={(e) => setInstallmentForm({ ...installmentForm, totalAmount: e.target.value })}
                 required
@@ -831,7 +831,7 @@ export default function Cartoes() {
             <label className="cartoes__field">
               <span className="cartoes__field-label">Valor da parcela</span>
               <CurrencyInput
-                placeholder="Ex: 250"
+                placeholder="Ex: 250,00"
                 value={installmentForm.installmentAmount}
                 onChange={(e) => setInstallmentForm({ ...installmentForm, installmentAmount: e.target.value })}
                 required

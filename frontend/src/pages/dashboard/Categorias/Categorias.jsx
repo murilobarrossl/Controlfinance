@@ -12,8 +12,7 @@ import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
 import TransactionDetails from "../../../components/dashboard/TransactionDetails/TransactionDetails.jsx";
 import BreakdownRows from "../../../components/dashboard/BreakdownRows/BreakdownRows.jsx";
-import { getGoals } from "../../../utils/investmentStorage.js";
-import { getReserve } from "../../../utils/emergencyReserveStorage.js";
+import { loadPlanning } from "../../../api/planning.js";
 import { calculateCutImpact } from "../../../utils/cutImpact.js";
 import { formatCurrency, formatDate, formatPercentage } from "../../../utils/financeMath.js";
 import { donutSliceColors, resolveCategoryColor } from "../../../utils/categoryColors.js";
@@ -133,8 +132,7 @@ export default function Categorias() {
     }
   }
   const [cutRate, setCutRate] = useState(0.3);
-  const [goals] = useState(() => getGoals());
-  const [reserve] = useState(() => getReserve());
+  const [planning, setPlanning] = useState(null);
   const drilldownRef = useRef(null);
   const skipNextScrollRef = useRef(false);
   // A pré-seleção de categoria (via link ou maior gasto do ano) só deve acontecer uma vez, na
@@ -290,14 +288,22 @@ export default function Categorias() {
   );
 
   const cutImpact = useMemo(() => {
-    if (!selectedCategory || selectedCategoryAmount <= 0) return null;
+    if (!planning || !selectedCategory || selectedCategoryAmount <= 0) return null;
     return calculateCutImpact({
       categoryAmount: selectedCategoryAmount,
       cutRate,
-      reserveAmount: reserve.currentAmount,
-      goals,
+      reserveAmount: planning.reserve?.currentAmount ?? 0,
+      goals: planning.goals ?? [],
     });
-  }, [selectedCategory, selectedCategoryAmount, cutRate, reserve, goals]);
+  }, [selectedCategory, selectedCategoryAmount, cutRate, planning]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    loadPlanning({ signal: controller.signal })
+      .then((result) => setPlanning(result.planning))
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (!selectedCategory || !drilldownRef.current) return;

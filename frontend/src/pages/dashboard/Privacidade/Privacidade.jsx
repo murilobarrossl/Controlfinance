@@ -6,6 +6,7 @@ import { useAccount } from "../../../context/AccountContext.jsx";
 import { logoutAllSessions } from "../../../api/auth.js";
 import { downloadMyData, updateNotificationPreferences, deleteMyAccount, getDataPolicy } from "../../../api/account.js";
 import { clearLocalDataFor, setCurrentUserId } from "../../../utils/authToken.js";
+import { hasLegacyPlanning, loadPlanning } from "../../../api/planning.js";
 import { groupAccounts } from "../../../utils/accountGrouping.js";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
@@ -32,6 +33,8 @@ export default function Privacidade() {
   const [pendingDisconnect, setPendingDisconnect] = useState(null);
   const [confirmClearLocal, setConfirmClearLocal] = useState(false);
   const [localCleared, setLocalCleared] = useState(false);
+  const [clearingLocal, setClearingLocal] = useState(false);
+  const [clearLocalError, setClearLocalError] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -89,7 +92,25 @@ export default function Privacidade() {
     navigate("/loginemail", { replace: true });
   }
 
-  function handleClearLocal() {
+  // Metas e reserva anotadas antes de irem para o servidor ainda podem estar só aqui: leva para a
+  // conta antes de limpar, e não limpa nada se não conseguir, para não perder o que o usuário digitou.
+  async function handleClearLocal() {
+    setClearLocalError("");
+    setLocalCleared(false);
+    if (hasLegacyPlanning()) {
+      setClearingLocal(true);
+      try {
+        await loadPlanning();
+      } catch {
+        setClearingLocal(false);
+        setConfirmClearLocal(false);
+        setClearLocalError(
+          "Nada foi apagado: não foi possível guardar na sua conta as metas e a reserva anotadas neste navegador. Tente de novo.",
+        );
+        return;
+      }
+      setClearingLocal(false);
+    }
     if (user?.id) clearLocalDataFor(user.id);
     setConfirmClearLocal(false);
     setLocalCleared(true);
@@ -140,7 +161,8 @@ export default function Privacidade() {
               {dataPolicy.accessLogRetentionDays} dias e depois apagados automaticamente.
             </li>
           )}
-          <li><strong>Neste navegador:</strong> metas de economia, reserva de emergência e a conta selecionada no painel. Esses dados ficam só aqui, não vão para os nossos servidores.</li>
+          <li><strong>Reserva de emergência e metas de economia:</strong> ficam na sua conta, nos nossos servidores, com nome e valores cifrados, até você removê-las em Investimentos ou excluir a conta.</li>
+          <li><strong>Neste navegador:</strong> a conta selecionada no painel e uma conexão bancária em andamento. Esses dados ficam só aqui.</li>
         </ul>
         <p className="privacidade__text">
           Detalhes, fornecedores envolvidos e prazos estão na{" "}
@@ -239,22 +261,38 @@ export default function Privacidade() {
 
       <Card title="Dados guardados neste navegador">
         <p className="privacidade__text">
-          Metas de economia, reserva de emergência e a conta selecionada ficam só neste navegador. Apagar aqui
-          remove esses dados deste aparelho de forma definitiva (não existe cópia nos nossos servidores).
+          A conta selecionada no painel e uma conexão bancária em andamento ficam só neste navegador. Apagar aqui
+          remove esses dados deste aparelho.
+        </p>
+        <p className="privacidade__hint">
+          Reserva de emergência e metas de economia ficam na sua conta e não são apagadas por este botão. Para apagá-las,
+          remova em Investimentos ou exclua a conta.
         </p>
         <div className="privacidade__actions">
-          <Button as="button" type="button" variant="outline" size="sm" onClick={() => setConfirmClearLocal(true)}>
-            Apagar dados deste navegador
+          <Button
+            as="button"
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirmClearLocal(true)}
+            disabled={clearingLocal}
+          >
+            {clearingLocal ? "Apagando…" : "Apagar dados deste navegador"}
           </Button>
-          {localCleared && <span className="privacidade__status">Dados deste navegador apagados.</span>}
+          {localCleared && <span className="privacidade__status">Dados deste navegador apagados. Sua reserva e suas metas continuam na sua conta.</span>}
+          {clearLocalError && (
+            <span className="privacidade__status" role="alert">
+              {clearLocalError}
+            </span>
+          )}
         </div>
       </Card>
 
       <Card title="Excluir conta" className="privacidade__danger">
         <p className="privacidade__text">
           Apaga de forma definitiva sua conta e tudo que está guardado nos nossos servidores: cadastro, aceites,
-          bancos conectados, contas, lançamentos, cartões, parcelamentos e categorias. Também pedimos à Polp que
-          exclua suas conexões bancárias. Não dá para desfazer.
+          bancos conectados, contas, lançamentos, cartões, parcelamentos, categorias, reserva de emergência e metas de
+          economia. Também pedimos à Polp que exclua suas conexões bancárias. Não dá para desfazer.
         </p>
         <p className="privacidade__hint">
           Cópias de segurança da hospedagem só deixam de conter seus dados quando expiram (o prazo está na Política
@@ -292,7 +330,7 @@ export default function Privacidade() {
       <ConfirmDialog
         open={confirmClearLocal}
         title="Apagar dados deste navegador?"
-        message="Suas metas de economia e a reserva de emergência registradas neste navegador serão apagadas de forma definitiva."
+        message="A conta selecionada e uma conexão bancária em andamento saem deste navegador. Sua reserva de emergência e suas metas continuam na sua conta. Se este navegador tiver uma reserva antiga diferente da salva na conta, ela é descartada."
         confirmLabel="Apagar"
         onConfirm={handleClearLocal}
         onClose={() => setConfirmClearLocal(false)}
