@@ -24,6 +24,7 @@ public static class BankBrandColors
         (Word("sicredi"), "#3FA110"),
         (Word("banrisul"), "#0052A5"),
         (Word("original"), "#00A859"),
+        (Word("xp"), "#000000"),
     ];
 
     public static string? Find(string? institutionName)

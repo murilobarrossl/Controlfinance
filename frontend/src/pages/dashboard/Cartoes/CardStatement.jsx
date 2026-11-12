@@ -68,10 +68,7 @@ export default function CardStatement({ card, getBrand }) {
   if (!activeCard) {
     return (
       <Card title="Extrato do cartão">
-        <p className="cartoes__hint">
-          O extrato aparece aqui pros cartões que vêm de um banco conectado. Cartões cadastrados manualmente só têm
-          limite e fatura digitados por você, sem lançamentos.
-        </p>
+        <p className="cartoes__hint">Cartões cadastrados manualmente não têm extrato.</p>
       </Card>
     );
   }
@@ -80,10 +77,6 @@ export default function CardStatement({ card, getBrand }) {
 
   return (
     <Card title="Extrato do cartão">
-      <p className="cartoes__hint cartoes__statement-intro">
-        Compras e pagamentos do cartão escolhido, mês a mês, como chegaram do banco na última sincronização.
-      </p>
-
       <p className="cartoes__statement-current">
         <BankLogo name={brand.name} logoUrl={brand.logoUrl} color={brand.color} size={28} />
         <span>

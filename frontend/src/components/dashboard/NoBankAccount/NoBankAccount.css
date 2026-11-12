@@ -1,0 +1,11 @@
+.no-bank-account {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  color: var(--color-text-secondary);
+}
+
+.no-bank-account p {
+  margin: 0;
+}

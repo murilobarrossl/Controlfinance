@@ -33,6 +33,16 @@ if (secretErrors.Count > 0)
 // ──────────────────────────────────────────
 //  BANCO DE DADOS
 // ──────────────────────────────────────────
+// Pooler do Supabase em modo sessão limita clientes; sem teto, picos recebem EMAXCONNSESSION.
+if (builder.Configuration.GetValue<int?>("Database:MaxPoolSize") is { } maxPool
+    && builder.Configuration.GetConnectionString("DefaultConnection") is { Length: > 0 } rawConnection)
+{
+    var npgsql = new Npgsql.NpgsqlConnectionStringBuilder(rawConnection) { MaxPoolSize = maxPool };
+    if (builder.Configuration.GetValue<int?>("Database:ConnectionIdleLifetimeSeconds") is { } idle)
+        npgsql.ConnectionIdleLifetime = idle;
+    builder.Configuration["ConnectionStrings:DefaultConnection"] = npgsql.ConnectionString;
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -44,6 +54,11 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenRevocationService, TokenRevocationService>();
 builder.Services.AddScoped<PolpSyncService>();
+builder.Services.AddScoped<PolpConsentMetadataService>();
+builder.Services.AddScoped<ControlFinance.API.Services.Investments.InvestmentImportStore>();
+builder.Services.AddScoped<ControlFinance.API.Services.Investments.InvestmentFinancialService>();
+builder.Services.AddScoped<ControlFinance.API.Services.Investments.PolpInvestmentImportService>();
+builder.Services.AddSingleton<PolpApiCooldownStore>();
 builder.Services.AddScoped<PolpDisconnectService>();
 builder.Services.AddScoped<PolpWebhookProcessor>();
 builder.Services.AddScoped<IPolpEventHandler, PolpWebhookProcessorHandler>();
@@ -60,6 +75,11 @@ builder.Services.AddSingleton<IJobLock, PostgresJobLock>();
 builder.Services.AddSingleton<IIntegrationLock, IntegrationLock>();
 builder.Services.AddHostedService<PolpReconciliationService>();
 builder.Services.AddHttpClient<EmailService>();
+builder.Services.AddHttpClient<ReferenceRatesService>(c =>
+{
+    c.BaseAddress = new Uri("https://api.bcb.gov.br/");
+    c.Timeout = TimeSpan.FromSeconds(10);
+});
 builder.Services.AddHostedService<ScheduledEmailService>();
 builder.Services.AddHostedService<PendingDisconnectRetryService>();
 builder.Services.AddHostedService<DataRetentionService>();

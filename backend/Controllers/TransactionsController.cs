@@ -64,6 +64,21 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             })
             .ToList();
 
+    // O /report soma e decifra o histórico inteiro do filtro para os totais; o dashboard só mostra
+    // as últimas linhas de um cartão a cada abertura, então lê apenas essas, pelo índice
+    // (UserId, BankAccountId, DueDate).
+    [HttpGet("recent")]
+    public async Task<IActionResult> GetRecent([FromQuery] Guid bankAccountId, [FromQuery] int limit = 5, CancellationToken ct = default)
+    {
+        limit = Math.Clamp(limit, 1, 10);
+        var today = await UserTodayAsync(db, ct);
+        var query = FilteredQuery(bankAccountId, null, null, today);
+
+        var items = await ProjectToDto(ApplySort(query, "dueDate", desc: true).Take(limit)).ToListAsync(ct);
+
+        return Ok(WithComputedFields(items, today));
+    }
+
     // Pending "vencido" é calculado na leitura (TransactionDto.EffectiveStatus), não gravado no
     // banco, então o filtro por status precisa enxergar a mesma coisa, senão status=Overdue não
     // acha nada (nenhuma linha guarda literalmente Overdue a não ser quando o usuário seta à mão)

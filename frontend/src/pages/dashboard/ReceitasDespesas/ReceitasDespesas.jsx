@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { getTransactionAggregates } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAccount } from "../../../context/AccountContext.jsx";
+import NoBankAccount from "../../../components/dashboard/NoBankAccount/NoBankAccount.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
@@ -35,38 +36,6 @@ function breakdownFromAggregates(categories, type) {
     .sort((a, b) => b.value - a.value);
 }
 
-// Decide se a frase-resumo destaca só a maior fatia ou a soma das duas maiores: uma única
-// fatia dominante (>=40%) já responde a pergunta sozinha; senão, junta as duas pra não
-// esconder que o gasto/renda está espalhado entre duas fontes parecidas.
-function topConcentration(breakdown) {
-  if (breakdown.length === 0) return null;
-  if (breakdown.length === 1 || breakdown[0].percentage >= 40) {
-    return { top: [breakdown[0]], combinedPercentage: breakdown[0].percentage };
-  }
-  return { top: breakdown.slice(0, 2), combinedPercentage: breakdown[0].percentage + breakdown[1].percentage };
-}
-
-function incomeSummarySentence(breakdown) {
-  const concentration = topConcentration(breakdown);
-  if (!concentration) return null;
-  const [first] = concentration.top;
-  return `Sua renda vem principalmente de ${first.name}, que representa ${formatPercentage(first.percentage)} do total.`;
-}
-
-function expenseSummarySentence(breakdown) {
-  const concentration = topConcentration(breakdown);
-  if (!concentration) return null;
-  if (concentration.top.length === 1) {
-    return `Seus gastos se concentram em ${concentration.top[0].name}, que representa ${formatPercentage(
-      concentration.combinedPercentage
-    )} do total.`;
-  }
-  const [a, b] = concentration.top;
-  return `Seus gastos se concentram em ${a.name} e ${b.name}, que juntas são ${formatPercentage(
-    concentration.combinedPercentage
-  )} do total.`;
-}
-
 function closingSentence(totalIncome, totalExpense) {
   const leftover = roundMoney(totalIncome - totalExpense);
   if (totalIncome === 0 && totalExpense === 0) return "Nenhuma movimentação neste período.";
@@ -84,11 +53,11 @@ function closingSentence(totalIncome, totalExpense) {
 export default function ReceitasDespesas() {
   usePageTitle("Receitas e despesas");
   const navigate = useNavigate();
-  const { effectiveAccountId, dataRefreshKey, accountsStatus } = useAccount();
+  const { scopeKey, scopeQuery, dataRefreshKey, accountsStatus } = useAccount();
   const [aggregateResult, setAggregateResult] = useState(null);
   const [monthOffset, setMonthOffset] = useState(0);
   const [expandedIncomeSources, setExpandedIncomeSources] = useState(() => new Set());
-  const requestKey = `${effectiveAccountId ?? ""}|${dataRefreshKey}`;
+  const requestKey = `${scopeKey}|${dataRefreshKey}`;
   const aggregateKey = `${requestKey}|${monthOffset}`;
   const loading = accountsStatus !== "ready" || aggregateResult?.key !== aggregateKey;
 
@@ -96,15 +65,15 @@ export default function ReceitasDespesas() {
   const previousMonth = useMemo(() => getMonthsWindow(1, monthOffset + 1)[0], [monthOffset]);
 
   useEffect(() => {
-    if (accountsStatus !== "ready") return;
+    if (accountsStatus !== "ready" || !scopeKey) return;
 
     const controller = new AbortController();
     const { signal } = controller;
-    const key = `${effectiveAccountId ?? ""}|${dataRefreshKey}|${monthOffset}`;
+    const key = `${scopeKey}|${dataRefreshKey}|${monthOffset}`;
 
     Promise.all([
-      getTransactionAggregates({ bankAccountId: effectiveAccountId, ...monthRange(currentMonth) }, { signal }),
-      getTransactionAggregates({ bankAccountId: effectiveAccountId, ...monthRange(previousMonth) }, { signal }),
+      getTransactionAggregates({ ...scopeQuery, ...monthRange(currentMonth) }, { signal }),
+      getTransactionAggregates({ ...scopeQuery, ...monthRange(previousMonth) }, { signal }),
     ])
       .then(([current, previous]) => {
         if (signal.aborted) return;
@@ -121,7 +90,7 @@ export default function ReceitasDespesas() {
       });
 
     return () => controller.abort();
-  }, [effectiveAccountId, dataRefreshKey, monthOffset, currentMonth, previousMonth, accountsStatus]);
+  }, [scopeKey, scopeQuery, dataRefreshKey, monthOffset, currentMonth, previousMonth, accountsStatus]);
 
   const current = aggregateResult?.current ?? null;
   const previous = aggregateResult?.previous ?? null;
@@ -153,12 +122,13 @@ export default function ReceitasDespesas() {
   }
 
   if (error) return <p className="receitas-despesas__error">{error}</p>;
+  if (accountsStatus === "ready" && !scopeKey) return <NoBankAccount />;
 
   const leftover = roundMoney(totalIncome - totalExpense);
 
   return (
     <div className="receitas-despesas">
-      <SectionHeading title="Receitas e despesas" level={1}>O mapa do seu dinheiro</SectionHeading>
+      <SectionHeading title="Receitas e despesas" level={1} />
 
       <RangePicker
         label={formatMonthLong(currentMonth)}
@@ -183,34 +153,31 @@ export default function ReceitasDespesas() {
           ) : incomeBreakdown.length === 0 ? (
             <p className="receitas-despesas__hint">Sem receitas neste período.</p>
           ) : (
-            <>
-              <p className="receitas-despesas__sentence">{incomeSummarySentence(incomeBreakdown)}</p>
-              <BreakdownRows
-                data={incomeBreakdown}
-                tone="income"
-                onRowClick={toggleIncomeSource}
-                expandedNames={expandedIncomeSources}
-                renderExpanded={(name) => (
-                  <TransactionDetails
-                    className="rd-transactions"
-                    query={{
-                      bankAccountId: effectiveAccountId,
-                      ...monthRange(currentMonth),
-                      type: "Income",
-                      category: name,
-                      refresh: dataRefreshKey,
-                    }}
-                    renderItem={(t) => (
-                      <li key={t.id} className="rd-transactions__item">
-                        <span className="rd-transactions__name">{t.name}</span>
-                        <span className="rd-transactions__date">{formatDate(t.dueDate)}</span>
-                        <span className="rd-transactions__amount">{formatCurrency(t.amount)}</span>
-                      </li>
-                    )}
-                  />
-                )}
-              />
-            </>
+            <BreakdownRows
+              data={incomeBreakdown}
+              tone="income"
+              onRowClick={toggleIncomeSource}
+              expandedNames={expandedIncomeSources}
+              renderExpanded={(name) => (
+                <TransactionDetails
+                  className="rd-transactions"
+                  query={{
+                    ...scopeQuery,
+                    ...monthRange(currentMonth),
+                    type: "Income",
+                    category: name,
+                    refresh: dataRefreshKey,
+                  }}
+                  renderItem={(t) => (
+                    <li key={t.id} className="rd-transactions__item">
+                      <span className="rd-transactions__name">{t.name}</span>
+                      <span className="rd-transactions__date">{formatDate(t.dueDate)}</span>
+                      <span className="rd-transactions__amount">{formatCurrency(t.amount)}</span>
+                    </li>
+                  )}
+                />
+              )}
+            />
           )}
         </section>
 
@@ -228,10 +195,7 @@ export default function ReceitasDespesas() {
           ) : expenseBreakdown.length === 0 ? (
             <p className="receitas-despesas__hint">Sem despesas neste período.</p>
           ) : (
-            <>
-              <p className="receitas-despesas__sentence">{expenseSummarySentence(expenseBreakdown)}</p>
-              <BreakdownRows data={expenseBreakdown} tone="expense" onRowClick={goToCategory} showLinkHint />
-            </>
+            <BreakdownRows data={expenseBreakdown} tone="expense" onRowClick={goToCategory} showLinkHint />
           )}
         </section>
       </div>

@@ -1,39 +1,39 @@
 import { Component } from "react";
-import Button from "../ui/Button/Button.jsx";
-import "./ErrorBoundary.css";
+import ErrorPage from "../../pages/errors/ErrorPage.jsx";
 
 export default class ErrorBoundary extends Component {
-  state = { hasError: false };
+  state = { errorCode: null };
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error) {
+    const status = Number(error?.status);
+    return { errorCode: [403, 404, 503].includes(status) ? status : 500 };
   }
 
   componentDidCatch(error, info) {
-    console.error("Erro não tratado no dashboard:", error, info);
+    console.error("Erro não tratado na interface:", error, info);
   }
 
+  componentDidUpdate(previousProps) {
+    if (this.state.errorCode && previousProps.resetKey !== this.props.resetKey) {
+      this.resetError();
+    }
+  }
+
+  resetError = () => {
+    this.setState({ errorCode: null });
+  };
+
   handleReload = () => {
-    this.setState({ hasError: false });
     window.location.reload();
   };
 
   render() {
-    if (this.state.hasError) {
+    if (this.state.errorCode) {
       return (
-        <div className="error-boundary">
-          <h2 className="error-boundary__title">Algo deu errado</h2>
-          <p className="error-boundary__text">
-            Não conseguimos carregar esta página. Tente recarregar; se o problema continuar,
-            entre em contato com o suporte.
-          </p>
-          <Button as="button" type="button" variant="outline" size="sm" onClick={this.handleReload}>
-            Recarregar página
-          </Button>
-        </div>
+        <ErrorPage code={this.state.errorCode} embedded={this.props.embedded}
+          onRetry={this.handleReload} onNavigate={this.resetError} />
       );
     }
-
     return this.props.children;
   }
 }

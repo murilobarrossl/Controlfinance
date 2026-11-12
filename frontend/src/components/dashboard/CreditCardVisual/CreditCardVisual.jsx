@@ -1,7 +1,6 @@
-import { useMemo } from "react";
 import { StarIcon } from "../../ui/icons/FeatureIcons.jsx";
 import { formatCurrency, formatDate, formatPercentage } from "../../../utils/financeMath.js";
-import { getCardBase, cardTextColor } from "../../../utils/cardColors.js";
+import CardFace from "../CardFace/CardFace.jsx";
 import { formatDueDay, formatDataAge } from "../../../utils/invoiceDue.js";
 import { cardLimits, isInvoiceOverdue } from "../../../utils/cardLimits.js";
 import LimitBar from "../LimitBar/LimitBar.jsx";
@@ -22,10 +21,6 @@ export default function CreditCardVisual({
 }) {
   const { hasLimit, available: availableLimit, usagePercent, overLimit, overAmount } = cardLimits(card);
   const FaceTag = onClick ? "button" : "div";
-  const faceStyle = useMemo(() => {
-    const base = getCardBase({ name: card.name, productType: card.productType, institutionColor: card.institutionColor });
-    return { "--card-base": base, "--card-text": cardTextColor(base) };
-  }, [card.name, card.productType, card.institutionColor]);
   const pastDue = isInvoiceOverdue(card);
   const dataAge = pastDue ? formatDataAge(card.connectionLastSyncedAt) : null;
 
@@ -46,29 +41,14 @@ export default function CreditCardVisual({
   return (
     <div className="credit-card-visual">
       {showFace && (
-      <FaceTag
-        type={onClick ? "button" : undefined}
-        className={`credit-card-visual__face ${onClick ? "credit-card-visual__face--interactive" : ""}`}
-        style={faceStyle}
-        onClick={onClick}
-      >
-        <div className="credit-card-visual__top">
-          <span className="credit-card-visual__name">{card.name}</span>
-          <div className="credit-card-visual__top-right">
-            <span className="credit-card-visual__brand">
-              {card.brand || (card.isSynced ? "Sincronizado via Polp" : "Cartão de crédito")}
-            </span>
-            {onSetPrimary && primaryButton}
-          </div>
-        </div>
-
-        {card.number && <span className="credit-card-visual__number">{card.number}</span>}
-
-        <div className="credit-card-visual__bottom">
-          <span className="credit-card-visual__holder">{cardholderName || "Titular"}</span>
-          <span className="credit-card-visual__due">{card.dueDay ? `Vence dia ${card.dueDay}` : "Vencimento não informado"}</span>
-        </div>
-      </FaceTag>
+        <FaceTag
+          type={onClick ? "button" : undefined}
+          className={`credit-card-visual__face ${onClick ? "credit-card-visual__face--interactive" : ""}`}
+          onClick={onClick}
+          aria-label={onClick ? `${card.name}: ver detalhes em Cartões` : undefined}
+        >
+          <CardFace card={card} holder={cardholderName} />
+        </FaceTag>
       )}
 
       <div className="credit-card-visual__stats">

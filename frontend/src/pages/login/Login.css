@@ -88,14 +88,6 @@
   letter-spacing: -0.015em;
   color: var(--color-on-image);
   text-wrap: balance;
-  margin: 0 0 1.25rem;
-}
-
-.login__subtitle {
-  color: var(--color-on-image-muted);
-  font-size: 1.05rem;
-  line-height: 1.55;
-  text-wrap: pretty;
   margin: 0;
 }
 
@@ -127,12 +119,6 @@
   color: var(--color-text-secondary);
   font-size: 0.95rem;
   margin: 0;
-}
-
-.login__required-note {
-  margin: 0.75rem 0 0;
-  color: var(--color-text-tertiary);
-  font-size: 0.85rem;
 }
 
 .login__link {
@@ -325,11 +311,6 @@
 
   .login__title {
     font-size: clamp(1.6rem, 6.5vw, 2rem);
-    margin-bottom: 0.75rem;
-  }
-
-  .login__subtitle {
-    font-size: 0.95rem;
   }
 
   .login__panel {

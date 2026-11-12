@@ -19,6 +19,11 @@ export const disconnectIntegration = async (localIntegrationId) =>
 export const getIntegrations = async ({ signal } = {}) =>
   apiFetch("/polp/integrations", { signal });
 
+// Actual consent-backed connections, including banks with no imported accounts yet.
+// Reuses the authenticated read endpoint; this never starts bank authorization or sync.
+export const getBankConnections = ({ cursor, signal } = {}) =>
+  apiFetch(`/investments/connections${cursor ? `?${new URLSearchParams({ cursor })}` : ""}`, { signal });
+
 export const getIntegrationStatus = async (integrationId) =>
   apiFetch(`/polp/integrations/${integrationId}`);
 

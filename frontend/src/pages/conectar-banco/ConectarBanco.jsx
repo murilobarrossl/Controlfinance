@@ -174,7 +174,7 @@ export default function ConnectBankPage() {
         return;
       }
 
-      if (status?.status === "login_error") {
+      if (["login_error", "outdated", "revoked"].includes(status?.status)) {
         authWindow.close();
         setError(status.error || "Não foi possível autenticar com o banco. Tente novamente.");
         return;
@@ -224,16 +224,11 @@ export default function ConnectBankPage() {
         <img src={logo} alt="Control Finance" className="connect-bank__logo" />
 
         <h1 className="connect-bank__title">Conecte sua conta</h1>
-        <p className="connect-bank__subtitle">
-          O Control Finance funciona com os bancos que você conecta: contas, saldos, extratos e cartões
-          chegam automaticamente pelo Open Finance, por meio da Polp. Não é preciso digitar nada.
-        </p>
 
         {connectingStage === "waiting" && (
           <p className="connect-bank__notice">
-            Abrimos a autenticação em outra aba. Conclua por lá: depois de confirmar, o banco
-            ainda precisa sincronizar suas contas, o que pode levar alguns minutos. Você será
-            levado automaticamente para o dashboard aqui assim que terminar.
+            Conclua a autenticação na aba que abrimos. A sincronização pode levar alguns minutos;
+            você será levado ao dashboard assim que terminar.
           </p>
         )}
 
@@ -246,12 +241,12 @@ export default function ConnectBankPage() {
               <dt>O que vamos acessar</dt>
               <dd>
                 Contas, saldos, extrato de transações e, se houver, cartões de crédito (limite, fatura e
-                vencimento) do banco que você escolher.
+                vencimento), além de investimentos disponíveis por Open Finance do banco que você escolher.
               </dd>
 
               <dt>Para quê</dt>
               <dd>
-                Só para montar o seu painel: saldo, receitas e despesas, categorias, cartões e relatórios.
+                Só para montar o seu painel: saldo, receitas e despesas, categorias, cartões, investimentos e relatórios.
                 Não vendemos seus dados e não usamos para publicidade.
               </dd>
 
@@ -266,15 +261,15 @@ export default function ConnectBankPage() {
 
               <dt>O que guardamos</dt>
               <dd>
-                Saldos, extrato, dados de cartão e só os 4 últimos dígitos do número da conta, cifrados no
+                Saldos, extrato, dados de cartão e investimentos disponibilizados pela conexão, e só os 4 últimos dígitos do número da conta, cifrados no
                 nosso banco de dados, enquanto a conexão estiver ativa.
               </dd>
 
               <dt>Como a sincronização funciona</dt>
               <dd>
-                Depois da primeira importação, a Polp atualiza os dados periodicamente, conforme a agenda
-                de cada banco, e nos avisa quando há novidades. Você também pode pedir a atualização do
-                saldo de uma conta no seletor de contas. Não é em tempo real.
+                Depois da primeira importação, os dados são atualizados periodicamente, conforme a agenda
+                de cada banco. Não é em tempo real. Você também pode atualizar o saldo de uma conta no
+                seletor de contas.
               </dd>
 
               <dt>Como desconectar</dt>
@@ -327,7 +322,7 @@ export default function ConnectBankPage() {
                 required
               />
               <span>
-                Li as informações acima e autorizo a conexão com o banco que vou escolher. Detalhes na{" "}
+                Li as informações sobre a conexão. O compartilhamento de contas, cartões e investimentos será autorizado diretamente no banco. Detalhes na{" "}
                 <Link to="/politica-de-privacidade" target="_blank" rel="noopener noreferrer">
                   Política de privacidade
                 </Link>

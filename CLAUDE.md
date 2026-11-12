@@ -25,7 +25,12 @@ dotnet ef database update             # apply migrations manually
 
 Swagger UI is served at `/swagger` in Development.
 
-There is no automated test project in this repo.
+Tests live in `backend.Tests/` (xUnit, EF Core SQLite in-memory, references the API project):
+
+```bash
+dotnet test backend.Tests                                        # run all (from repo root)
+dotnet test backend.Tests --filter "FullyQualifiedName~PolpSync" # run a subset
+```
 
 ### Frontend (`frontend/`, React 19 + Vite)
 
@@ -149,7 +154,10 @@ when a card purchase moves from open to billed. `counterparty` and `category_ref
 webhook) and only fill name/category that were never edited. `category_ref` maps to app categories by
 top-level group (`PolpCategoryMap`). `execution_status` `PARTIAL_SUCCESS` never blocks the user. Card
 closing/due day come from bills (`bill_closing_date`/`due_date`), not from the card resource.
-Loans, financings and investments from Polp are out of scope.
+Investments and reserved balances ("caixinhas") are imported (`Services/Investments`, encrypted JSON
+columns, purged by the history retention, included in the export and listed in the privacy policy);
+loans and financings are out of scope. Any new imported data must also be described in the Privacy
+Policy and the Privacidade e dados screen (bump `PRIVACY_VERSION` in both places).
 
 Disconnecting (`DELETE /api/polp/integrations/{id}`, `PolpDisconnectService`) deletes local data
 of that connection immediately, marks it `DISCONNECT_PENDING` (ignored by every sync path) and revokes the
@@ -187,6 +195,13 @@ Account deletion (`POST /api/account/deletion`) queues failed provider deletions
   leftover browser copy once via `POST /api/planning/import` (never overwrites server data) and only
   then deletes it locally. `utils/investmentStorage.js`/`emergencyReserveStorage.js` only read that
   legacy copy now.
+- Investimentos: one block per product type (`getInvestmentModality`), each application opens its own
+  projection. Polp sends no rate for investments, so projections only use a real rule: poupança's legal
+  rule (Selic meta), Tesouro Selic's indexer (Selic efetiva) or the rate the user typed
+  (`InvestmentRateProfile`, per `BankAccount`). Official rates come from the Banco Central SGS
+  (`ReferenceRatesService`, `GET /api/market/reference-rates`, series 432/1178/4389); if unavailable,
+  no projection, never a hardcoded rate. `EmergencyReserve.BankAccountId` marks one application as the
+  reserve (`SetNull`); the manual reserve amount is kept for when nothing is linked.
 
 ## Conventions
 

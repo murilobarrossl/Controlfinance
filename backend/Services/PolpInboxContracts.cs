@@ -22,6 +22,10 @@ public static class PolpInternalEvents
 {
     public const string Backfill = "internal.backfill";
     public const string Reconcile = "internal.reconcile";
+    public const string ConsentMetadata = "internal.consent-metadata";
+    public const string InvestmentDiscovery = "internal.investment-discovery";
+    public const string InvestmentPage = "internal.investment-page";
+    public const string ReservedBalances = "internal.reserved-balances";
 }
 
 /// <summary>Não adianta tentar de novo: o evento vai para Dead.</summary>

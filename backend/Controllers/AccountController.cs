@@ -22,9 +22,11 @@ public class AccountController(
     IConfiguration config) : ApiControllerBase
 {
     /// <summary>Prazos de retenção em vigor, pra tela de Privacidade e dados mostrar o valor real
-    /// configurado (em vez de um texto fixo que pode não bater com a configuração).</summary>
+    /// configurado (em vez de um texto fixo que pode não bater com a configuração). Público porque a
+    /// Política de Privacidade também mostra esses valores a quem ainda não tem conta; só expõe configuração.</summary>
     /// GET /api/account/data-policy
     [HttpGet("data-policy")]
+    [AllowAnonymous]
     public IActionResult DataPolicy() => Ok(new
     {
         syncedHistoryMonths = DataRetentionPolicy.SyncedHistoryMonths(config),
@@ -58,6 +60,7 @@ public class AccountController(
                 criadoEm = user.CreatedAt,
                 lembretesDeVencimento = user.DueRemindersEnabled,
                 avisoMensal = user.MonthlySummaryEnabled,
+                fusoHorario = user.TimeZone,
                 cartaoPrincipalId = user.PrimaryCardId,
             },
             aceites = await db.ConsentRecords
@@ -126,8 +129,14 @@ public class AccountController(
                 .AsNoTracking()
                 .Where(r => r.UserId == UserId)
                 .ToListAsync(ct))
-                .Select(r => new { valor = r.CurrentAmount, atualizadaEm = r.UpdatedAt })
+                .Select(r => new { valor = r.CurrentAmount, contaVinculadaId = r.BankAccountId,
+                    investimentoVinculadoId = r.ImportedInvestmentId, saldoReservadoVinculadoId = r.ImportedReservedBalanceId, atualizadaEm = r.UpdatedAt })
                 .FirstOrDefault(),
+            regrasDeRendimento = await db.InvestmentRateProfiles
+                .AsNoTracking()
+                .Where(p => p.UserId == UserId)
+                .Select(p => new { contaId = p.BankAccountId, tipo = p.Kind, valor = p.Value, isentoDeIR = p.IncomeTaxExempt, atualizadaEm = p.UpdatedAt })
+                .ToListAsync(ct),
             metasDeEconomia = (await db.SavingsGoals
                 .AsNoTracking()
                 .Where(g => g.UserId == UserId)
@@ -137,10 +146,26 @@ public class AccountController(
         };
 
         Response.Headers.Append("Cache-Control", "no-store");
-        return File(
-            System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(export, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }),
-            "application/json",
-            $"control-finance-meus-dados-{DateTime.UtcNow:yyyy-MM-dd}.json");
+        Response.ContentType = "application/json";
+        Response.Headers.Append("Content-Disposition", $"attachment; filename=\"control-finance-meus-dados-{DateTime.UtcNow:yyyy-MM-dd}.json\"");
+        using var writer = new System.Text.Json.Utf8JsonWriter(Response.BodyWriter, new() { Indented = true });
+        async Task Flush()
+        {
+            writer.Flush();
+            await Response.BodyWriter.FlushAsync(ct);
+        }
+        writer.WriteStartObject();
+        // Preserve existing export keys. Stream new financial histories instead of buffering
+        // every imported position/movement for a large portfolio in a single byte array.
+        foreach (var property in export.GetType().GetProperties())
+        {
+            writer.WritePropertyName(property.Name);
+            System.Text.Json.JsonSerializer.Serialize(writer, property.GetValue(export), property.PropertyType);
+            await Flush();
+        }
+        await new ControlFinance.API.Services.Investments.InvestmentDataExport(db).WriteAsync(writer, UserId, Flush, ct);
+        writer.WriteEndObject(); await Flush();
+        return new EmptyResult();
     }
 
     /// <summary>Liga/desliga os e-mails automáticos.</summary>
@@ -198,6 +223,7 @@ public class AccountController(
             // Reserva e metas também têm cascade de Users, mas saem explicitamente: são dados que o
             // usuário digitou, e a exclusão deles não pode depender só da FK existir no banco.
             await db.SavingsGoals.Where(g => g.UserId == UserId).ExecuteDeleteAsync(ct);
+            await db.InvestmentRateProfiles.Where(p => p.UserId == UserId).ExecuteDeleteAsync(ct);
             await db.EmergencyReserves.Where(r => r.UserId == UserId).ExecuteDeleteAsync(ct);
             // O resto (contas, transações, categorias, cartões, decisões de recorrência,
             // integrações e registros de aceite) sai pelo cascade de Users no próprio Postgres.

@@ -1,0 +1,116 @@
+.error-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: clamp(2rem, 6vh, 4rem);
+  min-height: 100svh;
+  padding: clamp(1.5rem, 5vw, 4rem);
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+  text-align: center;
+}
+
+.error-page__logo {
+  width: 128px;
+  height: auto;
+}
+
+.error-page__content {
+  width: 100%;
+  max-width: 640px;
+}
+
+.error-page__code {
+  margin-bottom: 1.25rem;
+  color: var(--color-accent-soft);
+  font-size: clamp(5rem, 19vw, 9rem);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.075em;
+  line-height: 1;
+}
+
+.error-page__title {
+  margin-bottom: 1rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.error-page__title:focus {
+  outline: none;
+}
+
+.error-page__description {
+  max-width: 480px;
+  margin: 0 auto;
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.error-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.error-page__actions .btn {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.error-page--embedded {
+  min-height: 55vh;
+  padding: 2rem 1rem;
+  background: transparent;
+}
+
+.error-page--embedded .error-page__code {
+  font-size: clamp(4rem, 12vw, 7rem);
+}
+
+.page-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  min-height: 100svh;
+  padding: 2rem;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.page-loading--embedded {
+  min-height: 50vh;
+}
+
+.page-loading__indicator {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--color-border-strong);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: page-loading-spin 0.8s linear infinite;
+}
+
+@keyframes page-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 30em) {
+  .error-page__actions {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-loading__indicator {
+    animation: none;
+  }
+}

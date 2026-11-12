@@ -251,19 +251,7 @@
   }
 }
 
-.cartoes__intro {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 0.88rem;
-  line-height: 1.5;
-  max-width: 60rem;
-}
-
 /* ── Extrato do cartão ── */
-.cartoes__statement-intro {
-  margin: -0.5rem 0 1rem;
-}
-
 .cartoes__statement-toolbar {
   display: flex;
   justify-content: flex-start;
@@ -359,17 +347,6 @@
   font-size: 0.82rem;
 }
 
-.cartoes__scope-title {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-}
-
-.cartoes__scope-title strong {
-  color: var(--color-text-primary);
-  font-weight: 600;
-}
-
 .cartoes__load-error {
   display: flex;
   flex-direction: column;
@@ -432,7 +409,7 @@
 
 .cartoes__tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13.5rem), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
   grid-auto-flow: row dense;
   gap: 1.25rem;
   list-style: none;
@@ -454,83 +431,6 @@
 
 .cartoes__tile-button:focus-visible {
   outline: none;
-}
-
-.cartoes__tile-button:focus-visible .cartoes__tile-face,
-.cartoes__tile--selected .cartoes__tile-face {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 3px;
-}
-
-.cartoes__tile-face {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  aspect-ratio: 1.586 / 1;
-  padding: 0.85rem 0.95rem;
-  border: 1px solid color-mix(in srgb, var(--card-text) 16%, transparent);
-  border-radius: 12px;
-  background-color: var(--card-base);
-  color: var(--card-text);
-  transition: border-color 0.15s ease;
-}
-
-.cartoes__tile-button:hover .cartoes__tile-face {
-  border-color: color-mix(in srgb, var(--card-text) 45%, transparent);
-}
-
-.cartoes__tile-top {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.cartoes__tile-top .bank-logo {
-  flex-shrink: 0;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--card-text) 18%, transparent);
-}
-
-.cartoes__tile-manual {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  background-color: color-mix(in srgb, var(--card-text) 14%, transparent);
-}
-
-.cartoes__tile-manual svg {
-  width: 14px;
-  height: 14px;
-}
-
-.cartoes__tile-bank {
-  overflow: hidden;
-  font-size: 0.8rem;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cartoes__tile-primary {
-  display: inline-flex;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.cartoes__tile-primary svg {
-  width: 16px;
-  height: 16px;
-}
-
-.cartoes__tile-name {
-  font-size: 0.98rem;
-  font-weight: 600;
-  line-height: 1.25;
-  overflow-wrap: break-word;
 }
 
 .cartoes__tile-stats {
@@ -632,21 +532,8 @@
 
 @media (max-width: 30em) {
   .cartoes__tiles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem 0.75rem;
-  }
-
-  .cartoes__tile-face {
-    padding: 0.6rem 0.65rem;
-    border-radius: 9px;
-  }
-
-  .cartoes__tile-bank {
-    font-size: 0.72rem;
-  }
-
-  .cartoes__tile-name {
-    font-size: 0.82rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
   }
 
   .cartoes__tile-stats {
@@ -664,8 +551,27 @@
 
 @media (prefers-reduced-motion: reduce) {
   .cartoes__edit-link,
-  .cartoes__remove,
-  .cartoes__tile-face {
+  .cartoes__remove {
     transition: none;
+  }
+}
+
+.cartoes__tile-button:hover .card-face {
+  transform: translateY(-3px);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent),
+    0 18px 32px -14px rgba(0, 0, 0, 0.7),
+    0 3px 8px rgba(0, 0, 0, 0.35);
+}
+
+.cartoes__tile-button:focus-visible .card-face,
+.cartoes__tile--selected .card-face {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cartoes__tile-button:hover .card-face {
+    transform: none;
   }
 }

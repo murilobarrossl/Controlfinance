@@ -42,7 +42,7 @@ public class DashboardTests
 
         Assert.Equal(3500.50m, s.TotalIncome);
         Assert.Equal(1299.99m, s.TotalExpense);
-        Assert.Equal(4321.09m, s.ActiveAccount.Balance);
+        Assert.Equal(4321.09m, s.Account.Balance);
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public class DashboardTests
 
         var s = await Summary(t);
 
-        Assert.Equal(-1234.56m, s.ActiveAccount.Balance);
+        Assert.Equal(-1234.56m, s.Account.Balance);
     }
 
     [Fact]
@@ -302,8 +302,8 @@ public class DashboardTests
 
         var s = await Summary(t);
 
-        Assert.Equal(0m, s.ActiveAccount.Balance);
-        Assert.NotNull(s.ActiveAccount.Balance);
+        Assert.Equal(0m, s.Account.Balance);
+        Assert.NotNull(s.Account.Balance);
     }
 
     [Fact]
@@ -312,7 +312,7 @@ public class DashboardTests
         using var t = new TestDb();
         t.AddAccount(balance: 321.45m);
 
-        Assert.Equal(321.45m, (await Summary(t)).ActiveAccount.Balance);
+        Assert.Equal(321.45m, (await Summary(t)).Account.Balance);
     }
 
     [Fact]
@@ -321,7 +321,7 @@ public class DashboardTests
         using var t = new TestDb();
         t.AddAccount("Cartao Polp", balance: 0m, type: "CREDIT_CARD", creditLimit: 5000m, polpAccountId: Guid.NewGuid());
 
-        Assert.Null((await Summary(t)).ActiveAccount.Balance);
+        Assert.Null((await Summary(t)).Account.Balance);
     }
 
     [Fact]

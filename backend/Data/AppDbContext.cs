@@ -22,6 +22,17 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<CreditCard> CreditCards => Set<CreditCard>();
     public DbSet<Installment> Installments => Set<Installment>();
     public DbSet<PolpIntegration> PolpIntegrations => Set<PolpIntegration>();
+    public DbSet<PolpApiCooldown> PolpApiCooldowns => Set<PolpApiCooldown>();
+    public DbSet<InvestmentSyncSchedule> InvestmentSyncSchedules => Set<InvestmentSyncSchedule>();
+    public DbSet<PolpInvestmentAuthorization> PolpInvestmentAuthorizations => Set<PolpInvestmentAuthorization>();
+    public DbSet<ImportedInvestment> ImportedInvestments => Set<ImportedInvestment>();
+    public DbSet<InvestmentContract> InvestmentContracts => Set<InvestmentContract>();
+    public DbSet<InvestmentPosition> InvestmentPositions => Set<InvestmentPosition>();
+    public DbSet<InvestmentPositionObservation> InvestmentPositionObservations => Set<InvestmentPositionObservation>();
+    public DbSet<InvestmentMovement> InvestmentMovements => Set<InvestmentMovement>();
+    public DbSet<ImportedReservedBalance> ImportedReservedBalances => Set<ImportedReservedBalance>();
+    public DbSet<ReservedBalanceObservation> ReservedBalanceObservations => Set<ReservedBalanceObservation>();
+    public DbSet<InvestmentSyncState> InvestmentSyncStates => Set<InvestmentSyncState>();
     public DbSet<RevokedToken> RevokedTokens => Set<RevokedToken>();
     public DbSet<RecurrenceDecision> RecurrenceDecisions => Set<RecurrenceDecision>();
     public DbSet<ConsentRecord> ConsentRecords => Set<ConsentRecord>();
@@ -31,6 +42,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<RemovedPolpResource> RemovedPolpResources => Set<RemovedPolpResource>();
     public DbSet<EmergencyReserve> EmergencyReserves => Set<EmergencyReserve>();
     public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
+    public DbSet<InvestmentRateProfile> InvestmentRateProfiles => Set<InvestmentRateProfile>();
     public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -90,6 +102,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             // conversor de User.Document. PolpAccountType/Subtype são só rótulos categóricos
             // ("BANK", "CREDIT"), ficam em texto puro, mesmo tratamento de BankCode.
             e.Property(b => b.Number).HasConversion(nullableTextConverter).HasColumnName("NumberEncrypted");
+            e.Property(b => b.PolpOriginalName).HasConversion(nullableTextConverter).HasColumnName("PolpOriginalNameEncrypted");
             // Campos de cartão (só preenchidos quando esta conta é reconhecida como cartão de
             // crédito): CreditLimit/UsedLimit/CurrentInvoiceAmount são valor monetário, mesmo
             // tratamento de Balance. ClosingDay/DueDay/InvoiceDueDate não são segredo, texto puro.
@@ -199,6 +212,33 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
              .WithOne()
              .HasForeignKey<EmergencyReserve>(r => r.UserId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(r => r.BankAccountId);
+            e.HasIndex(r => r.ImportedInvestmentId);
+            e.HasIndex(r => r.ImportedReservedBalanceId);
+            e.HasOne<ImportedInvestment>().WithMany().HasForeignKey(r => r.ImportedInvestmentId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("FK_Reserve_ImportedInvestment");
+            e.HasOne<ImportedReservedBalance>().WithMany().HasForeignKey(r => r.ImportedReservedBalanceId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("FK_Reserve_ImportedBalance");
+            e.ToTable(t => t.HasCheckConstraint("CK_EmergencyReserve_OneResource",
+                "(\"BankAccountId\" IS NULL OR \"ImportedInvestmentId\" IS NULL) AND (\"BankAccountId\" IS NULL OR \"ImportedReservedBalanceId\" IS NULL) AND (\"ImportedInvestmentId\" IS NULL OR \"ImportedReservedBalanceId\" IS NULL)"));
+            e.HasOne<BankAccount>()
+             .WithMany()
+             .HasForeignKey(r => r.BankAccountId)
+             .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<InvestmentRateProfile>(e =>
+        {
+            e.HasKey(p => p.BankAccountId);
+            e.HasIndex(p => p.UserId);
+            e.Property(p => p.Kind).IsRequired().HasMaxLength(20);
+            e.Property(p => p.Value).HasPrecision(9, 4);
+            e.HasOne<BankAccount>()
+             .WithMany()
+             .HasForeignKey(p => p.BankAccountId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>()
+             .WithMany()
+             .HasForeignKey(p => p.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Nome da meta é digitado pelo usuário e pode revelar planos pessoais ("Tratamento", "Divórcio"…):
@@ -241,6 +281,24 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<PolpIntegration>(e =>
         {
             e.HasIndex(p => p.PolpIntegrationId).IsUnique();
+            e.HasAlternateKey(p => new { p.UserId, p.Id });
+        });
+        InvestmentModelConfiguration.Configure(modelBuilder, textConverter, nullableTextConverter);
+        modelBuilder.Entity<PolpApiCooldown>(e =>
+        {
+            e.HasKey(x => x.ClientKey);
+            e.Property(x => x.ClientKey).HasMaxLength(64);
+        });
+        modelBuilder.Entity<PolpInvestmentAuthorization>(e =>
+        {
+            e.HasKey(a => a.Id);
+            e.HasIndex(a => a.IntegrationId).IsUnique();
+            e.HasIndex(a => a.PolpConsentId).IsUnique();
+            e.HasOne<PolpIntegration>().WithMany().HasForeignKey(a => a.IntegrationId).OnDelete(DeleteBehavior.SetNull);
+            e.Property(a => a.State).HasMaxLength(24);
+            e.Property(a => a.ProviderStatus).HasMaxLength(40);
+            e.Property(a => a.ExecutionStatus).HasMaxLength(40);
+            e.Property(a => a.RecoveryCursor).HasConversion(nullableTextConverter).HasColumnName("RecoveryCursorEncrypted");
         });
         modelBuilder.Entity<BankAccount>(e =>
         {

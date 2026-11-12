@@ -36,7 +36,7 @@ export async function watchPolpConnection(integrationId, { isCancelled = () => f
         return "active";
       }
 
-      if (status?.status === "login_error") {
+      if (["login_error", "outdated", "revoked"].includes(status?.status)) {
         clearPendingIntegrationId();
         return "login_error";
       }

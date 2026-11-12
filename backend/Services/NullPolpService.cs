@@ -9,6 +9,12 @@ namespace ControlFinance.API.Services;
 // classe só entra em jogo pra ações que exigiriam uma chamada de rede nova.
 public class NullPolpService : IPolpService
 {
+    public Task<ControlFinance.API.Services.Investments.PolpInvestmentPage> GetInvestmentSchedulePageAsync(Guid consentId, string? cursor, CancellationToken ct = default) =>
+        throw new HttpRequestException(DisabledMessage);
+    public Task<Investments.PolpInvestmentPage> GetInvestmentPageAsync(string family, string parentId, bool transactions,
+        string? cursor, PolpQueryWindow? window, CancellationToken ct = default) => throw new HttpRequestException(DisabledMessage);
+    public Task<System.Text.Json.JsonElement> GetInvestmentDetailAsync(string family, string externalId, CancellationToken ct = default) =>
+        throw new HttpRequestException(DisabledMessage);
     private const string DisabledMessage =
         "A integração com bancos está temporariamente indisponível. Tente novamente mais tarde.";
 
@@ -19,6 +25,12 @@ public class NullPolpService : IPolpService
         throw new HttpRequestException(DisabledMessage);
 
     public Task<PolpConsentDto> GetConsentAsync(Guid consentId, CancellationToken ct = default) =>
+        throw new HttpRequestException(DisabledMessage);
+
+    public Task<List<PolpConsentResourceDto>> GetConsentResourcesAsync(Guid consentId, CancellationToken ct = default) =>
+        throw new HttpRequestException(DisabledMessage);
+
+    public Task<PolpListEnvelope<PolpConsentDto>> GetConsentPageAsync(string? cursor, CancellationToken ct = default) =>
         throw new HttpRequestException(DisabledMessage);
 
     public Task<List<PolpAccountDto>> GetAccountsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default) =>

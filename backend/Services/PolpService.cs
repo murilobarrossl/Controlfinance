@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ControlFinance.API.Services.Investments;
 
 namespace ControlFinance.API.Services;
 
@@ -53,6 +54,10 @@ public class PolpConsentInstitutionDto
 
 public class PolpConsentDto
 {
+    [JsonPropertyName("cliente_user_id")] public string? ClientUserId { get; set; }
+    [JsonPropertyName("products")] public List<string>? Products { get; set; }
+    [JsonPropertyName("updated_at")] public DateTime? UpdatedAt { get; set; }
+    [JsonPropertyName("created_at")] public DateTime? CreatedAt { get; set; }
     [JsonPropertyName("id")] public Guid Id { get; set; }
     [JsonPropertyName("institution_id")] public Guid InstitutionId { get; set; }
     [JsonPropertyName("institution")] public PolpConsentInstitutionDto? Institution { get; set; }
@@ -91,7 +96,7 @@ public class PolpConsentDto
 public class PolpBalanceDto
 {
     [JsonPropertyName("available_amount")] public PolpMoney? AvailableAmount { get; set; }
-    [JsonPropertyName("has_reserved_balance")] public bool HasReservedBalance { get; set; }
+    [JsonPropertyName("has_reserved_balance")] public bool? HasReservedBalance { get; set; }
 }
 
 public class PolpAccountDto
@@ -196,6 +201,13 @@ public class PolpCardTransactionDto
 // OperatorCpf: só em conexão de empresa (Document = CNPJ); a Polp exige o CPF de quem opera a conta.
 public record CreatePolpConsentRequest(Guid InstitutionId, string Document, Guid ClientUserId, string? OperatorCpf = null);
 
+public class PolpConsentResourceDto
+{
+    [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
+    [JsonPropertyName("status")] public string Status { get; set; } = string.Empty;
+    [JsonPropertyName("resource_id")] public string? ResourceId { get; set; }
+}
+
 /// <summary>
 /// Janela de sincronização que a Polp manda no webhook (query_parameters). O texto vem de uma
 /// requisição pública (o webhook só é protegido por um token na URL), então nunca é repassado cru
@@ -252,8 +264,17 @@ public sealed record PolpQueryWindow(string Query)
 
 public interface IPolpService
 {
+    Task<PolpInvestmentPage> GetInvestmentSchedulePageAsync(Guid consentId, string? cursor, CancellationToken ct = default) => throw new NotSupportedException();
+    Task<PolpInvestmentPage> GetInvestmentPageAsync(string family, string parentId, bool transactions,
+        string? cursor, PolpQueryWindow? window, CancellationToken ct = default) => throw new NotSupportedException();
+    Task<JsonElement> GetInvestmentDetailAsync(string family, string externalId, CancellationToken ct = default) => throw new NotSupportedException();
+    Task<PolpListEnvelope<PolpConsentDto>> GetConsentPageAsync(string? cursor, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+    Task<List<PolpConsentResourceDto>> GetConsentResourcesAsync(Guid consentId, CancellationToken ct = default) =>
+        throw new NotSupportedException();
     Task<List<PolpInstitutionDto>> GetInstitutionsAsync(CancellationToken ct = default);
     Task<PolpConsentDto> CreateConsentAsync(CreatePolpConsentRequest request, CancellationToken ct = default);
+    Task<PolpConsentDto> RecreateConsentAsync(Guid consentId, CancellationToken ct = default) => throw new NotSupportedException();
     Task<PolpConsentDto> GetConsentAsync(Guid consentId, CancellationToken ct = default);
     Task<List<PolpAccountDto>> GetAccountsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default);
     Task<List<PolpCreditCardDto>> GetCreditCardsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default);
@@ -276,7 +297,7 @@ public class PolpService : IPolpService
     // 25 mil lançamentos; evita um laço indefinido se a Polp devolver um cursor que não termina.
     internal const int MaxPages = 50;
 
-    private static readonly string[] DefaultProducts = ["ACCOUNT", "CREDIT_CARD_ACCOUNT"];
+    private static readonly string[] DefaultProducts = ["ACCOUNT", "CREDIT_CARD_ACCOUNT", "INVESTMENTS"];
 
     private readonly HttpClient _http;
     private readonly Uri _institutionsUri;
@@ -337,6 +358,8 @@ public class PolpService : IPolpService
             ["products"] = DefaultProducts,
             // Reconectar o mesmo CPF consome o teto mensal regulatório de consultas: reaproveita
             // um consentimento ativo da mesma instituição em vez de criar outro.
+            // Reusing a consent never expands its permissions. All new bank journeys request
+            // the complete product set; there is no investment-only creation path.
             ["avoidDuplicates"] = true
         };
         if (isCnpj)
@@ -355,11 +378,102 @@ public class PolpService : IPolpService
         return await ReadResourceAsync<PolpConsentDto>(resp, "criar consentimento", ct);
     }
 
+    public async Task<PolpConsentDto> RecreateConsentAsync(Guid consentId, CancellationToken ct = default)
+    {
+        var body = new Dictionary<string, object?> { ["products"] = DefaultProducts };
+        if (!string.IsNullOrWhiteSpace(_redirectUrl)) body["redirectUrl"] = _redirectUrl;
+        var resp = await _http.PostAsJsonAsync($"consents/{consentId:D}/recreate", body, ct);
+        await EnsureSuccess(resp, "recriar consentimento");
+        return await ReadResourceAsync<PolpConsentDto>(resp, "recriar consentimento", ct);
+    }
+
+    public static bool HasAllRequestedProducts(IEnumerable<string>? products) =>
+        products is not null && DefaultProducts.All(products.Contains);
+
     public async Task<PolpConsentDto> GetConsentAsync(Guid consentId, CancellationToken ct = default)
     {
         var resp = await _http.GetAsync($"consents/{consentId}", ct);
         await EnsureSuccess(resp, "consultar consentimento");
         return await ReadResourceAsync<PolpConsentDto>(resp, "consultar consentimento", ct);
+    }
+
+    public async Task<PolpListEnvelope<PolpConsentDto>> GetConsentPageAsync(string? cursor, CancellationToken ct = default)
+    {
+        var path = cursor is null ? "consents" : $"consents?cursor={Uri.EscapeDataString(cursor)}";
+        var resp = await _http.GetAsync(path, ct);
+        await EnsureSuccess(resp, "recuperar confirmação de autorização");
+        return await resp.Content.ReadFromJsonAsync<PolpListEnvelope<PolpConsentDto>>(JsonOptions, ct)
+            ?? throw new JsonException("Resposta de consentimentos ausente.");
+    }
+
+    public async Task<List<PolpConsentResourceDto>> GetConsentResourcesAsync(Guid consentId, CancellationToken ct = default)
+    {
+        // Unlike other lists, /resources returns the complete data array (no cursors).
+        var resp = await _http.GetAsync($"consents/{consentId}/resources", ct);
+        await EnsureSuccess(resp, "consultar disponibilidade dos investimentos");
+        using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        if (doc.RootElement.ValueKind != JsonValueKind.Object || !doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+            throw new JsonException("Resposta de recursos ausente.");
+        var result = data.Deserialize<List<PolpConsentResourceDto>>(JsonOptions)
+            ?? throw new JsonException("Resposta de recursos ausente.");
+        if (result.Any(r => string.IsNullOrWhiteSpace(r.Type) || string.IsNullOrWhiteSpace(r.Status)))
+            throw new JsonException("Estado de recurso ausente.");
+        return result;
+    }
+
+    public async Task<PolpInvestmentPage> GetInvestmentPageAsync(string family, string parentId, bool transactions,
+        string? cursor, PolpQueryWindow? window, CancellationToken ct = default)
+    {
+        var parent = Uri.EscapeDataString(PolpInvestmentContracts.ValidateIdentifier(parentId));
+        string path;
+        if (family == "reserved-balances" && !transactions) path = $"accounts/{parent}/reserved-balances";
+        else
+        {
+            var spec = PolpInvestmentContracts.Family(family);
+            path = transactions ? $"{spec.Path}/{parent}/transactions" : $"consents/{parent}/{spec.Path}";
+        }
+        var query = new List<string>();
+        if (window is not null) query.Add(window.Query);
+        if (cursor is not null) query.Add($"cursor={Uri.EscapeDataString(cursor)}");
+        if (query.Count > 0) path += "?" + string.Join('&', query);
+        return await InvestmentPageAsync(path, transactions ? 500 : 15, ct);
+    }
+
+    public Task<PolpInvestmentPage> GetInvestmentSchedulePageAsync(Guid consentId, string? cursor, CancellationToken ct = default)
+    {
+        var path = $"consents/{consentId:D}/sync-schedules";
+        if (cursor is not null) path += "?cursor=" + Uri.EscapeDataString(cursor);
+        return InvestmentPageAsync(path, 50, ct);
+    }
+
+    private async Task<PolpInvestmentPage> InvestmentPageAsync(string path, int pageSize, CancellationToken ct)
+    {
+        using var response = await _http.GetAsync(path, ct);
+        await EnsureSuccess(response, "consultar página de investimentos");
+        using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array
+            || !root.TryGetProperty("meta", out var meta) || meta.ValueKind != JsonValueKind.Object || !meta.TryGetProperty("next_cursor", out var next))
+            throw new JsonException("Página de investimentos incompleta.");
+        if (next.ValueKind is not (JsonValueKind.Null or JsonValueKind.String)) throw new JsonException("Cursor inválido.");
+        if (data.GetArrayLength() > pageSize) throw new JsonException("Página de investimentos excede o contrato.");
+        if (data.EnumerateArray().Any(x => x.ValueKind != JsonValueKind.Object)) throw new JsonException("Registro de investimento inválido.");
+        var nextCursor = next.ValueKind == JsonValueKind.String ? next.GetString() : null;
+        if (nextCursor?.Length > 4096 || (data.GetArrayLength() == 0 && !string.IsNullOrEmpty(nextCursor)))
+            throw new JsonException("Paginação de investimentos inconsistente.");
+        return new(data.EnumerateArray().Select(x => x.Clone()).ToList(), string.IsNullOrEmpty(nextCursor) ? null : nextCursor);
+    }
+
+    public async Task<JsonElement> GetInvestmentDetailAsync(string family, string externalId, CancellationToken ct = default)
+    {
+        var spec = PolpInvestmentContracts.Family(family);
+        var id = Uri.EscapeDataString(PolpInvestmentContracts.ValidateIdentifier(externalId));
+        using var response = await _http.GetAsync($"{spec.Path}/{id}", ct);
+        await EnsureSuccess(response, "consultar identificação do investimento");
+        using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object) throw new JsonException("Investimento ausente.");
+        return root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object ? data.Clone() : root.Clone();
     }
 
     public Task<List<PolpAccountDto>> GetAccountsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default) =>

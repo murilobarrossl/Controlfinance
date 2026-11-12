@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import Card from "../../../components/ui/Card/Card.jsx";
 import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
+import { HistoryIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE } from "../../../components/charts/chartTheme.js";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import { buildPriceSchedule, compareTerms } from "../../../utils/investmentMath.js";
@@ -76,137 +76,155 @@ export default function FinancingSimulator() {
 
   return (
     <section className="investimentos__group" aria-labelledby="investimentos-financing-title">
-      <header className="investimentos__group-header">
-        <h2 id="investimentos-financing-title" className="investimentos__group-title">
-          Simulador de financiamento
-        </h2>
-      </header>
-      <Card>
-        <div className="investimentos__form">
-          <label className="investimentos__field">
-            <span className="investimentos__field-label">Valor total do bem</span>
-            <CurrencyInput placeholder="Ex: 40.000,00" value={form.totalValue} onChange={set("totalValue")} />
-          </label>
-          <label className="investimentos__field">
-            <span className="investimentos__field-label">Entrada</span>
-            <CurrencyInput placeholder="Ex: 8.000,00" value={form.downPayment} onChange={set("downPayment")} />
-          </label>
-          <label className="investimentos__field">
-            <span className="investimentos__field-label">Juros ao mês (%)</span>
-            <input type="number" inputMode="decimal" placeholder="Ex: 1,5" min="0" step="0.01" value={form.monthlyRate} onChange={set("monthlyRate")} />
-            <span className="investimentos__field-help">Taxa anual ÷ 12 dá uma aproximação.</span>
-          </label>
-          <label className="investimentos__field">
-            <span className="investimentos__field-label">Número de parcelas</span>
-            <input type="number" inputMode="numeric" placeholder="Ex: 36" min="1" max="480" step="1" value={form.installmentsCount} onChange={set("installmentsCount")} />
-          </label>
+      <h2 id="investimentos-financing-title" className="investimentos__group-title">
+        Simulador de financiamento
+      </h2>
+
+      <div className="inv-group card fin-sim" style={{ "--modality-color": colors.principal, "--modality-text": colors.principal }}>
+        <header className="inv-group__header">
+          <span className="inv-group__icon" aria-hidden="true">
+            <HistoryIcon />
+          </span>
+          <h3 className="inv-group__title">Financiamento ou consórcio</h3>
+          <span className="inv-group__count">Tabela Price, parcelas fixas</span>
+        </header>
+
+        <div className="fin-sim__layout">
+          <div className="investimentos__form fin-sim__inputs">
+            <label className="investimentos__field">
+              <span className="investimentos__field-label">Valor total do bem</span>
+              <CurrencyInput placeholder="Ex: 40.000,00" value={form.totalValue} onChange={set("totalValue")} />
+            </label>
+            <label className="investimentos__field">
+              <span className="investimentos__field-label">Entrada</span>
+              <CurrencyInput placeholder="Ex: 8.000,00" value={form.downPayment} onChange={set("downPayment")} />
+            </label>
+            <label className="investimentos__field">
+              <span className="investimentos__field-label">Juros ao mês (%)</span>
+              <input type="number" inputMode="decimal" placeholder="Ex: 1,5" min="0" step="0.01" value={form.monthlyRate} onChange={set("monthlyRate")} />
+              <span className="investimentos__field-help">Use a taxa mensal da proposta. Taxa anual ÷ 12 dá só uma aproximação.</span>
+            </label>
+            <label className="investimentos__field">
+              <span className="investimentos__field-label">Número de parcelas</span>
+              <input type="number" inputMode="numeric" placeholder="Ex: 36" min="1" max="480" step="1" value={form.installmentsCount} onChange={set("installmentsCount")} />
+            </label>
+          </div>
+
+          <div className="fin-sim__results">
+            {downPaymentTooBig && (
+              <p className="investimentos__hint investimentos__hint--warn">
+                A entrada cobre o valor todo, então não há nada a financiar.
+              </p>
+            )}
+
+            {!analysis ? (
+              !downPaymentTooBig && (
+                <p className="investimentos__hint">Informe o valor total e o número de parcelas pra ver a simulação.</p>
+              )
+            ) : (
+              <>
+                <dl className="inv-projection__stats">
+                  <div className="inv-projection__stat inv-projection__stat--main">
+                    <dt>Parcela mensal</dt>
+                    <dd>{formatCurrency(analysis.payment)}</dd>
+                    <span className="inv-projection__note">{installmentsCount} parcelas</span>
+                  </div>
+                  <div className="inv-projection__stat">
+                    <dt>Valor financiado</dt>
+                    <dd>{formatCurrency(financedAmount)}</dd>
+                  </div>
+                  <div className="inv-projection__stat">
+                    <dt>Total pago nas parcelas</dt>
+                    <dd>{formatCurrency(analysis.totalPaid)}</dd>
+                  </div>
+                  <div className="inv-projection__stat inv-projection__stat--bad">
+                    <dt>Só de juros</dt>
+                    <dd>{formatCurrency(analysis.totalInterest)}</dd>
+                    <span className="inv-projection__note">{formatPercentage(analysis.interestShare)} do que você paga</span>
+                  </div>
+                </dl>
+
+                <p className="investimentos__verdict">
+                  Pra cada <strong>R$ 100</strong> financiados, você paga <strong>{formatCurrency(analysis.costPer100)}</strong>.
+                  {downPayment > 0 && <> Com a entrada, o custo total é de {formatCurrency(analysis.totalPaid + downPayment)}.</>}
+                </p>
+              </>
+            )}
+          </div>
         </div>
 
-        {downPaymentTooBig && (
-          <p className="investimentos__hint investimentos__hint--warn">
-            A entrada cobre o valor todo, então não há nada a financiar.
-          </p>
-        )}
-
-        {!analysis ? (
-          !downPaymentTooBig && (
-            <p className="investimentos__hint">Informe o valor total e o número de parcelas pra ver a simulação.</p>
-          )
-        ) : (
+        {analysis && (
           <>
-            <div className="investimentos__stats">
-              <div className="investimentos__stat">
-                <span className="investimentos__stat-label">Valor financiado</span>
-                <strong>{formatCurrency(financedAmount)}</strong>
+            <div className="inv-detail__section">
+              <h4 className="inv-detail__title">Composição de cada parcela</h4>
+              <div ref={chartRef} role="img" aria-label="Gráfico da composição de cada parcela entre juros e dívida abatida">
+                <ResponsiveContainer width="100%" height={narrowChart ? 220 : 240}>
+                  <AreaChart data={analysis.chartData} margin={{ top: 8, right: 16, left: 4, bottom: 8 }}>
+                    <CartesianGrid stroke={colors.grid} strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="month" stroke={colors.axis} tick={{ fontSize: 12 }} />
+                    <YAxis
+                      stroke={colors.axis}
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(v) => (narrowChart ? formatAxisCurrency(v) : formatCurrency(v))}
+                      width={narrowChart ? 62 : 76}
+                    />
+                    <Tooltip
+                      formatter={(value) => formatCurrency(value)}
+                      contentStyle={TOOLTIP_STYLE}
+                      labelStyle={{ color: colors.label }}
+                      itemStyle={TOOLTIP_ITEM_STYLE}
+                      cursor={{ stroke: colors.cursor, strokeWidth: 1 }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12, color: colors.label }} />
+                    <Area type="monotone" stackId="1" dataKey="amortization" name="Abate a dívida" stroke={colors.principal} fill={colors.principal} fillOpacity={0.45} />
+                    <Area type="monotone" stackId="1" dataKey="interest" name="Juros" stroke={colors.interest} fill={colors.interest} fillOpacity={0.55} />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
-              <div className="investimentos__stat investimentos__stat--main">
-                <span className="investimentos__stat-label">Parcela mensal</span>
-                <strong>{formatCurrency(analysis.payment)}</strong>
-              </div>
-              <div className="investimentos__stat">
-                <span className="investimentos__stat-label">Total pago nas parcelas</span>
-                <strong>{formatCurrency(analysis.totalPaid)}</strong>
-              </div>
-              <div className="investimentos__stat investimentos__stat--bad">
-                <span className="investimentos__stat-label">Só de juros</span>
-                <strong>{formatCurrency(analysis.totalInterest)}</strong>
-              </div>
+              <p className="investimentos__chart-takeaway">
+                Na 1ª parcela, <strong>{formatCurrency(analysis.firstInterest)}</strong> (
+                {formatPercentage((analysis.firstInterest / analysis.payment) * 100)}) são juros.
+              </p>
             </div>
 
-            <p className="investimentos__verdict">
-              Pra cada <strong>R$ 100</strong> financiados, você paga <strong>{formatCurrency(analysis.costPer100)}</strong>.{" "}
-              {formatPercentage(analysis.interestShare)} do que você paga nas parcelas é juro.
-              {downPayment > 0 && <> Com a entrada, o custo total é de {formatCurrency(analysis.totalPaid + downPayment)}.</>}
-            </p>
-
-
-            <h3 className="investimentos__subtitle">Composição de cada parcela</h3>
-            <div ref={chartRef} role="img" aria-label="Gráfico da composição de cada parcela entre juros e dívida abatida">
-              <ResponsiveContainer width="100%" height={narrowChart ? 220 : 240}>
-                <AreaChart data={analysis.chartData} margin={{ top: 8, right: 16, left: 4, bottom: 8 }}>
-                  <CartesianGrid stroke={colors.grid} strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" stroke={colors.axis} tick={{ fontSize: 12 }} />
-                  <YAxis
-                    stroke={colors.axis}
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(v) => (narrowChart ? formatAxisCurrency(v) : formatCurrency(v))}
-                    width={narrowChart ? 62 : 76}
-                  />
-                  <Tooltip
-                    formatter={(value) => formatCurrency(value)}
-                    contentStyle={TOOLTIP_STYLE}
-                    labelStyle={{ color: colors.label }}
-                    itemStyle={TOOLTIP_ITEM_STYLE}
-                    cursor={{ stroke: colors.cursor, strokeWidth: 1 }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12, color: colors.label }} />
-                  <Area type="monotone" stackId="1" dataKey="amortization" name="Abate a dívida" stroke={colors.principal} fill={colors.principal} fillOpacity={0.45} />
-                  <Area type="monotone" stackId="1" dataKey="interest" name="Juros" stroke={colors.interest} fill={colors.interest} fillOpacity={0.55} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            <p className="investimentos__chart-takeaway">
-              Na 1ª parcela, <strong>{formatCurrency(analysis.firstInterest)}</strong> (
-              {formatPercentage((analysis.firstInterest / analysis.payment) * 100)}) são juros.
-            </p>
-
-            <h3 className="investimentos__subtitle">Mesmos valores em outros prazos</h3>
-            <div className="investimentos__table-wrap">
-              <table className="investimentos__table">
-                <thead>
-                  <tr>
-                    <th>Prazo</th>
-                    <th className="investimentos__num">Parcela</th>
-                    <th className="investimentos__num">Total de juros</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {analysis.terms.map((term) => (
-                    <tr key={term.count} className={term.count === installmentsCount ? "investimentos__row--current" : undefined}>
-                      <td className="investimentos__term">
-                        {term.count} meses
-                        {term.count === installmentsCount && <span className="investimentos__badge">Sua simulação</span>}
-                      </td>
-                      <td className="investimentos__num" data-label="Parcela">
-                        {formatCurrency(term.payment)}
-                      </td>
-                      <td className="investimentos__num" data-label="Total de juros">
-                        {formatCurrency(term.totalInterest)}
-                      </td>
+            <div className="inv-detail__section">
+              <h4 className="inv-detail__title">Mesmos valores em outros prazos</h4>
+              <div className="investimentos__table-wrap">
+                <table className="investimentos__table investimentos__table--wide">
+                  <thead>
+                    <tr>
+                      <th>Prazo</th>
+                      <th className="investimentos__num">Parcela</th>
+                      <th className="investimentos__num">Total de juros</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {analysis.terms.map((term) => (
+                      <tr key={term.count} className={term.count === installmentsCount ? "investimentos__row--current" : undefined}>
+                        <td className="investimentos__term">
+                          {term.count} meses
+                          {term.count === installmentsCount && <span className="investimentos__badge">Sua simulação</span>}
+                        </td>
+                        <td className="investimentos__num" data-label="Parcela">
+                          {formatCurrency(term.payment)}
+                        </td>
+                        <td className="investimentos__num" data-label="Total de juros">
+                          {formatCurrency(term.totalInterest)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}
 
-        <p className="investimentos__fineprint investimentos__fineprint--end">
+        <p className="investimentos__fineprint">
           Tabela Price, com parcelas fixas. Não inclui IOF, tarifas nem seguros: o custo efetivo total (CET) da instituição
           pode ser maior.
         </p>
-      </Card>
+      </div>
     </section>
   );
 }

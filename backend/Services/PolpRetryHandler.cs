@@ -17,10 +17,12 @@ public sealed class PolpRetryHandler : DelegatingHandler
     private readonly TimeSpan _attemptTimeout;
     private readonly TimeProvider _time;
     private readonly ILogger<PolpRetryHandler>? _logger;
+    private readonly PolpApiCooldownStore? _cooldown;
 
-    public PolpRetryHandler(ILogger<PolpRetryHandler> logger)
+    public PolpRetryHandler(ILogger<PolpRetryHandler> logger, PolpApiCooldownStore? cooldown = null)
         : this(Task.Delay, Random.Shared.NextDouble, AttemptTimeout, TimeProvider.System, logger)
     {
+        _cooldown = cooldown;
     }
 
     internal PolpRetryHandler(Func<TimeSpan, CancellationToken, Task> delay, Func<double> random,
@@ -39,6 +41,7 @@ public sealed class PolpRetryHandler : DelegatingHandler
 
         for (var attempt = 1; ; attempt++)
         {
+            if (_cooldown is not null) await _cooldown.CheckAsync(cancellationToken);
             var isLast = !retryable || attempt >= MaxAttempts;
             HttpResponseMessage response;
 
@@ -60,6 +63,13 @@ public sealed class PolpRetryHandler : DelegatingHandler
                 }
             }
 
+            if (response.StatusCode == HttpStatusCode.TooManyRequests && _cooldown is not null)
+            {
+                var retryAt = _time.GetUtcNow().UtcDateTime + (RetryAfter(response) ?? TimeSpan.FromSeconds(30));
+                await _cooldown.DeferAsync(retryAt, cancellationToken);
+                response.Dispose();
+                throw new PolpRateLimitedException(retryAt, requestWasSent: true);
+            }
             if (isLast || !IsTransient(response.StatusCode))
                 return response;
 

@@ -4,10 +4,10 @@ import { getCategories } from "../../../api/categories.js";
 import { getTransactionAggregates } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAccount } from "../../../context/AccountContext.jsx";
+import NoBankAccount from "../../../components/dashboard/NoBankAccount/NoBankAccount.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
-import { getAccountKindLabel, isCreditCardAccount } from "../../../utils/accountKind.js";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
 import TransactionDetails from "../../../components/dashboard/TransactionDetails/TransactionDetails.jsx";
@@ -59,21 +59,9 @@ function resolvePeriod({ mode, offset }) {
 }
 
 function cutImpactSentence(categoryName, categoryAmount, cutRate, impact) {
-  const destinations = [
-    `sua reserva de emergência, que iria de ${formatCurrency(impact.reserveImpact.current)} para ${formatCurrency(
-      impact.reserveImpact.afterCut
-    )}`,
-  ];
-  if (impact.goalImpact) {
-    destinations.push(
-      `aproximar a meta "${impact.goalImpact.name}" (faltariam ${formatCurrency(
-        impact.goalImpact.remainingAfter
-      )} em vez de ${formatCurrency(impact.goalImpact.remainingBefore)})`
-    );
-  }
-  return `Você gastou ${formatCurrency(categoryAmount)} em ${categoryName} neste período. Se cortar ${formatPercentage(
+  return `Você gastou ${formatCurrency(categoryAmount)} em ${categoryName} neste período. Cortar ${formatPercentage(
     cutRate * 100
-  )} (${formatCurrency(impact.cutAmount)}), esse valor poderia ir para ${destinations.join(" ou ")}.`;
+  )} libera ${formatCurrency(impact.cutAmount)}.`;
 }
 
 function topExpenseCategoryName(categories) {
@@ -104,13 +92,13 @@ export default function Categorias() {
   usePageTitle("Categorias");
   const [searchParams] = useSearchParams();
   const [categoryFromLink] = useState(() => searchParams.get("categoria"));
-  const { accounts, connectors, effectiveAccountId, dataRefreshKey, accountsStatus } = useAccount();
+  const { effectiveScope, scopeKey, scopeQuery, dataRefreshKey, accountsStatus } = useAccount();
   const [result, setResult] = useState(null);
   const [aggregateResult, setAggregateResult] = useState(null);
   // Período mostrado: um mês, um ano ou tudo. offset 0 = o atual, 1 = o anterior, e assim por diante.
-  const [period, setPeriod] = useState({ mode: "year", offset: 0 });
+  const [period, setPeriod] = useState(() => ({ mode: searchParams.get("periodo") === "mes" ? "month" : "year", offset: 0 }));
   const range = useMemo(() => resolvePeriod(period), [period]);
-  const requestKey = `${effectiveAccountId ?? ""}|${dataRefreshKey}`;
+  const requestKey = `${scopeKey}|${dataRefreshKey}`;
   const aggregateKey = `${requestKey}|${range.key}`;
   const loading = accountsStatus !== "ready" || result?.key !== requestKey || aggregateResult?.key !== aggregateKey;
   const categories = result?.categories ?? EMPTY_LIST;
@@ -123,10 +111,10 @@ export default function Categorias() {
   const [categorySort, setCategorySort] = useState("value-desc");
   const [categoryPage, setCategoryPage] = useState(1);
   const [expandedEstablishments, setExpandedEstablishments] = useState(() => new Set());
-  const [scopedAccountId, setScopedAccountId] = useState(effectiveAccountId);
-  if (scopedAccountId !== effectiveAccountId) {
-    setScopedAccountId(effectiveAccountId);
-    if (scopedAccountId != null) {
+  const [renderedScopeKey, setRenderedScopeKey] = useState(scopeKey);
+  if (renderedScopeKey !== scopeKey) {
+    setRenderedScopeKey(scopeKey);
+    if (renderedScopeKey) {
       setSelectedCategory(null);
       setCategoryPage(1);
     }
@@ -141,11 +129,11 @@ export default function Categorias() {
   const hasAppliedInitialSelectionRef = useRef(false);
 
   useEffect(() => {
-    if (accountsStatus !== "ready") return;
+    if (accountsStatus !== "ready" || !scopeKey) return;
 
     const controller = new AbortController();
     const { signal } = controller;
-    const key = `${effectiveAccountId ?? ""}|${dataRefreshKey}`;
+    const key = `${scopeKey}|${dataRefreshKey}`;
 
     getCategories({ signal })
       .then((categoriesData) => {
@@ -162,18 +150,18 @@ export default function Categorias() {
       });
 
     return () => controller.abort();
-  }, [effectiveAccountId, dataRefreshKey, accountsStatus]);
+  }, [scopeKey, dataRefreshKey, accountsStatus]);
 
   useEffect(() => {
-    if (accountsStatus !== "ready") return;
+    if (accountsStatus !== "ready" || !scopeKey) return;
 
     const controller = new AbortController();
     const { signal } = controller;
-    const key = `${effectiveAccountId ?? ""}|${dataRefreshKey}|${range.key}`;
+    const key = `${scopeKey}|${dataRefreshKey}|${range.key}`;
 
     getTransactionAggregates(
       {
-        bankAccountId: effectiveAccountId,
+        ...scopeQuery,
         from: range.from,
         to: range.to,
       },
@@ -212,7 +200,7 @@ export default function Categorias() {
       });
 
     return () => controller.abort();
-  }, [effectiveAccountId, dataRefreshKey, range, categoryFromLink, accountsStatus]);
+  }, [scopeKey, scopeQuery, dataRefreshKey, range, categoryFromLink, accountsStatus]);
 
   const breakdown = useMemo(() => {
     const totals = new Map();
@@ -317,38 +305,6 @@ export default function Categorias() {
     drilldownRef.current.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
   }, [selectedCategory]);
 
-  const connectorsById = useMemo(() => new Map(connectors.map((c) => [c.id, c])), [connectors]);
-  const accountOptions = useMemo(
-    () =>
-      [...accounts]
-        .map((account) => {
-          const connector = connectorsById.get(account.bankCode);
-          const bankName = connector?.name ?? "Banco não identificado";
-          const kind = getAccountKindLabel(account);
-          const seen = new Set([bankName.toLowerCase(), "banco"]);
-          const detail = [...String(account.name ?? "").split(" · "), kind].filter((part) => {
-            const key = part.trim().toLowerCase();
-            if (!key || seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-          return {
-            account,
-            bankName,
-            detail: detail.join(" · ") || kind,
-            logoUrl: connector?.logoUrl,
-            color: connector?.color ? (connector.color.startsWith("#") ? connector.color : `#${connector.color}`) : undefined,
-            kind,
-            isCard: isCreditCardAccount(account),
-          };
-        })
-        .sort(
-          (a, b) =>
-            Number(a.isCard) - Number(b.isCard) || a.bankName.localeCompare(b.bankName, "pt-BR"),
-        ),
-    [accounts, connectorsById],
-  );
-  const activeOption = accountOptions.find((o) => o.account.id === effectiveAccountId) ?? null;
 
   function toggleCategory(name) {
     setSelectedCategory((prev) => (prev === name ? null : name));
@@ -365,10 +321,11 @@ export default function Categorias() {
   }
 
   if (error) return <p className="categorias__error">{error}</p>;
+  if (accountsStatus === "ready" && !scopeKey) return <NoBankAccount />;
 
   return (
     <div className="categorias">
-      <SectionHeading title="Categorias" level={1}>Onde seu dinheiro vai</SectionHeading>
+      <SectionHeading title="Categorias" level={1} />
 
       <div className="categorias__period">
         <div className="categorias__period-modes" role="radiogroup" aria-label="Período">
@@ -395,17 +352,11 @@ export default function Categorias() {
         )}
       </div>
 
-      {activeOption && (
+      {effectiveScope && (
         <p className="categorias__scope-title">
-          Mostrando as despesas de:{" "}
-          <strong>
-            {activeOption.bankName} · {activeOption.detail}
-          </strong>
+          Mostrando as despesas de: <strong>{effectiveScope.label}</strong>
         </p>
       )}
-
-      <p className="categorias__section-hint">Só despesas. Receitas ficam em Receitas e despesas.</p>
-
 
       <div className="categorias__grid">
         <Card title="Despesas por categoria">
@@ -519,7 +470,7 @@ export default function Categorias() {
                   <TransactionDetails
                     className="categorias__visits"
                     query={{
-                      bankAccountId: effectiveAccountId,
+                      ...scopeQuery,
                       from: range.from,
                       to: range.to,
                       type: "Expense",

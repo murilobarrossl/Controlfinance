@@ -1,6 +1,7 @@
 using ControlFinance.API.Data;
 using ControlFinance.API.Models;
 using Microsoft.EntityFrameworkCore;
+using ControlFinance.API.Services.Investments;
 
 namespace ControlFinance.API.Services;
 
@@ -11,19 +12,37 @@ namespace ControlFinance.API.Services;
 // descartado (PolpResourceNotReadyException ⇒ nova tentativa); só o que o usuário desconectou ou
 // apagou (RemovedPolpResources) termina sem fazer nada.
 public class PolpWebhookProcessor(
-    AppDbContext db, PolpSyncService sync, IPolpService polp, IPolpInbox inbox, ILogger<PolpWebhookProcessor> logger)
+    AppDbContext db, PolpSyncService sync, IPolpService polp, IPolpInbox inbox, ILogger<PolpWebhookProcessor> logger,
+    PolpConsentMetadataService? consentMetadata = null, PolpInvestmentImportService? investmentImports = null)
 {
     public async Task ProcessAsync(PolpInboxEvent evt, CancellationToken ct)
     {
         var window = PolpQueryWindow.TryParse(evt.QueryParameters);
 
+        var investmentFamily = PolpInvestmentContracts.EventFamily(evt.Event);
+        if (investmentFamily is not null && investmentImports is not null)
+        {
+            EnsureEnabled();
+            if (Guid.TryParse(evt.ResourceId, out var removedId) && await RemovedPolpResources.IsRemovedAsync(db, removedId, ct)) return;
+            await investmentImports.HandleEventAsync(investmentFamily, evt.ResourceId ?? "", evt.Event.EndsWith(".transactions"), window, ct);
+            return;
+        }
+
         switch (evt.Event)
         {
             case "consents":
             {
+                var remoteId = ResourceId(evt);
+                if (await RemovedPolpResources.IsRemovedAsync(db, remoteId, ct)) return;
+                var isPrimary = await db.PolpIntegrations.AnyAsync(p => p.PolpIntegrationId == remoteId, ct);
+                if (!isPrimary && consentMetadata is not null && await consentMetadata.HandleConsentEventAsync(remoteId, ct)) return;
                 var local = await IntegrationAsync(evt, ct);
                 if (local is not null && await sync.RefreshConsentAsync(local, ct))
                     await inbox.EnqueueAsync(new PolpInboxEvent(PolpInternalEvents.Backfill, "consents", local.PolpIntegrationId.ToString(), null), ct);
+                if (local is not null && consentMetadata is not null)
+                    await inbox.EnqueueAsync(new(PolpInternalEvents.ConsentMetadata, "consents", local.PolpIntegrationId.ToString(), null), ct);
+                if (local is not null && investmentImports is not null)
+                    await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", local.Id.ToString(), null), ct);
                 break;
             }
 
@@ -32,6 +51,8 @@ public class PolpWebhookProcessor(
             {
                 var local = await IntegrationAsync(evt, ct);
                 if (local is not null) await sync.SyncAccountsAndCardsAsync(local, window, ct);
+                if (local is not null && investmentImports is not null)
+                    await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", local.Id.ToString(), null), ct);
                 break;
             }
 
@@ -47,7 +68,14 @@ public class PolpWebhookProcessor(
             case PolpInternalEvents.Backfill:
             {
                 var local = await IntegrationAsync(evt, ct);
+                if (local is not null && consentMetadata is not null)
+                    await inbox.EnqueueAsync(new(PolpInternalEvents.ConsentMetadata, "consents", local.PolpIntegrationId.ToString(), null), ct);
+                if (local is not null && investmentImports is not null)
+                    await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", local.Id.ToString(), null), ct);
                 if (local is not null) await sync.BackfillAsync(local, ct);
+                // Discover newly imported accounts even when an earlier catalog scan completed.
+                if (local is not null && investmentImports is not null)
+                    await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", local.Id.ToString(), null), ct);
                 break;
             }
 
@@ -55,10 +83,46 @@ public class PolpWebhookProcessor(
             {
                 var local = await IntegrationAsync(evt, ct);
                 if (local is not null) await sync.ReconcileAsync(local, ct);
+                if (local is not null && consentMetadata is not null)
+                    await inbox.EnqueueAsync(new(PolpInternalEvents.ConsentMetadata, "consents", local.PolpIntegrationId.ToString(), null), ct);
                 break;
             }
 
-            // Empréstimos, financiamentos, investimentos e eventos desconhecidos: fora do escopo.
+            case "internal.investment-authorization": // Previously queued metadata reads only.
+            case PolpInternalEvents.ConsentMetadata:
+            {
+                var local = await IntegrationAsync(evt, ct);
+                if (local is not null && consentMetadata is not null)
+                    await consentMetadata.RefreshAsync(local, ct);
+                break;
+            }
+
+            case PolpInternalEvents.InvestmentDiscovery:
+                if (investmentImports is not null) { EnsureEnabled(); await investmentImports.DiscoverAsync(ResourceId(evt), ct); }
+                break;
+            case PolpInternalEvents.InvestmentPage:
+                if (investmentImports is not null)
+                {
+                    EnsureEnabled();
+                    var parts = (evt.QueryParameters ?? "").Split('&');
+                    if (parts.Length != 2 || !parts[0].StartsWith("run=", StringComparison.Ordinal)
+                        || !Guid.TryParseExact(parts[0][4..], "D", out var run)
+                        || !parts[1].StartsWith("page=", StringComparison.Ordinal)
+                        || !int.TryParse(parts[1][5..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var page) || page < 0)
+                        throw new PolpPermanentException("Geração da página de investimentos inválida.");
+                    await investmentImports.ProcessPageAsync(ResourceId(evt), ct, run, page);
+                }
+                break;
+            case PolpInternalEvents.ReservedBalances:
+                if (investmentImports is not null)
+                {
+                    EnsureEnabled();
+                    if (await RemovedPolpResources.IsRemovedAsync(db, ResourceId(evt), ct)) return;
+                    await investmentImports.HandleReservedAsync(evt.ResourceId ?? "", window, ct);
+                }
+                break;
+
+            // Empréstimos, financiamentos e eventos desconhecidos: fora do escopo.
         }
     }
 

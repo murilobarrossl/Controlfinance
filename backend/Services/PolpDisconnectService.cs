@@ -18,7 +18,8 @@ public enum RemoteDeletionOutcome
 // Desconectar um banco = parar de sincronizar + apagar tudo que veio daquela conexão + pedir à
 // Polp que exclua a integração. Antes, "Sair" só marcava a conta como inativa: as transações
 // ficavam guardadas e o sync automático continuava buscando dados dessa conexão na Polp.
-public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrationLock integrationLock, ILogger<PolpDisconnectService> logger)
+public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrationLock integrationLock, ILogger<PolpDisconnectService> logger,
+    PolpConsentMetadataService? consentMetadata = null)
 {
     /// <summary>Status local de uma integração cuja exclusão na Polp ainda não foi aceita. Toda
     /// rota de sincronização ignora integrações nesse status.</summary>
@@ -37,15 +38,18 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
 
         // Sob o lock: um sync que já tinha passado da checagem termina de gravar antes, e o que
         // ele gravou é apagado aqui.
-        await DeleteConnectionDataLockedAsync(local, ct);
-
-        return await TryRemoteDeleteAsync(local, ct);
+        var authorizationIds = await DeleteConnectionDataLockedAsync(local, ct);
+        await CleanupStoredConsentMetadataAsync(ct, authorizationIds);
+        var supplementalPending = await db.PolpInvestmentAuthorizations.AnyAsync(a => authorizationIds.Contains(a.Id) && a.IsSupplemental, ct);
+        var outcome = await TryRemoteDeleteAsync(local, ct);
+        return supplementalPending ? RemoteDeletionOutcome.Pending : outcome;
     }
 
     // Refaz pedidos de exclusão que não chegaram na Polp (ex.: integração desativada por falta de
     // credenciais na hora em que o usuário desconectou ou excluiu a conta).
     public async Task RetryPendingAsync(CancellationToken ct)
     {
+        await CleanupStoredConsentMetadataAsync(ct);
         var pending = await db.PolpIntegrations.Where(p => p.Status == PendingStatus).ToListAsync(ct);
         foreach (var local in pending)
         {
@@ -69,12 +73,27 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
         if (orphaned.Count > 0) await db.SaveChangesAsync(ct);
     }
 
-    private Task<int> DeleteConnectionDataLockedAsync(PolpIntegration local, CancellationToken ct) =>
+    private Task<List<Guid>> DeleteConnectionDataLockedAsync(PolpIntegration local, CancellationToken ct) =>
         integrationLock.RunAsync(db, local.Id, async () =>
         {
+            var authorizationIds = await CancelStoredConsentMetadataAsync(local.Id, ct);
+            await db.InvestmentSyncStates.Where(x => x.UserId == local.UserId && x.IntegrationId == local.Id).ExecuteDeleteAsync(ct);
+            await db.InvestmentSyncSchedules.Where(x => x.UserId == local.UserId && x.IntegrationId == local.Id).ExecuteDeleteAsync(ct);
+            await db.ImportedInvestments.Where(x => x.UserId == local.UserId && x.IntegrationId == local.Id).ExecuteDeleteAsync(ct);
+            await db.ImportedReservedBalances.Where(x => x.UserId == local.UserId && x.IntegrationId == local.Id).ExecuteDeleteAsync(ct);
             await DeleteConnectionDataAsync(local.UserId, local.PolpIntegrationId, ct);
-            return 0;
+            return authorizationIds;
         }, ct);
+
+    private async Task<List<Guid>> CancelStoredConsentMetadataAsync(Guid integrationId, CancellationToken ct)
+    {
+        var ids = await db.PolpInvestmentAuthorizations.Where(a => a.IntegrationId == integrationId).Select(a => a.Id).ToListAsync(ct);
+        await db.PolpInvestmentAuthorizations.Where(a => a.IntegrationId == integrationId && a.State == "Deferred" && a.PolpConsentId == null).ExecuteDeleteAsync(ct);
+        await db.PolpInvestmentAuthorizations.Where(a => a.IntegrationId == integrationId)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.State, "Cancelled")
+                .SetProperty(a => a.ResourcesJson, (string?)null), ct);
+        return ids;
+    }
 
     /// <summary>
     /// Usado na exclusão da conta: tenta pedir a exclusão de todas as integrações na Polp na hora;
@@ -83,6 +102,15 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
     /// </summary>
     public async Task<int> RequestProviderDeletionForAccountAsync(Guid userId, CancellationToken ct)
     {
+        // Stop new authorization requests and in-flight sync before calling the provider.
+        await db.PolpIntegrations.Where(p => p.UserId == userId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.Status, PendingStatus), ct);
+        var parentIds = await db.PolpIntegrations.Where(p => p.UserId == userId).Select(p => p.Id).ToListAsync(ct);
+        var authorizationIds = new List<Guid>();
+        foreach (var parentId in parentIds)
+            authorizationIds.AddRange(await integrationLock.RunAsync(db, parentId,
+                () => CancelStoredConsentMetadataAsync(parentId, ct), ct));
+        await CleanupStoredConsentMetadataAsync(ct, authorizationIds);
         var integrations = await db.PolpIntegrations.Where(p => p.UserId == userId).ToListAsync(ct);
         var pendingCount = 0;
 
@@ -100,7 +128,39 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
         }
 
         if (pendingCount > 0) await db.SaveChangesAsync(ct);
-        return pendingCount;
+        return pendingCount + await db.PolpInvestmentAuthorizations.CountAsync(a => a.IsSupplemental && authorizationIds.Contains(a.Id), ct);
+    }
+
+    // Also handles technical orphan rows retained by ON DELETE SET NULL. An unknown POST
+    // outcome is recovered by correlation before revocation; it is never silently discarded.
+    public async Task CleanupStoredConsentMetadataAsync(CancellationToken ct, List<Guid>? authorizationIds = null)
+    {
+        var rows = await db.PolpInvestmentAuthorizations.AsNoTracking()
+            .Where(a => (a.State == "Cancelled" || a.IntegrationId == null)
+                && (authorizationIds == null || authorizationIds.Contains(a.Id)))
+            .ToListAsync(ct);
+        foreach (var row in rows)
+        {
+            if (!row.IsSupplemental || (row.PolpConsentId is null && row.ProviderStatus == "REJECTED"))
+            {
+                await db.PolpInvestmentAuthorizations.Where(a => a.Id == row.Id).ExecuteDeleteAsync(ct);
+                continue;
+            }
+            try
+            {
+                if (row.PolpConsentId is null && consentMetadata is not null)
+                    await consentMetadata.RecoverAsync(row, ct);
+                var remoteId = await db.PolpInvestmentAuthorizations.Where(a => a.Id == row.Id).Select(a => a.PolpConsentId).SingleOrDefaultAsync(ct);
+                if (remoteId is null) continue;
+                await RemovedPolpResources.MarkAsync(db, [remoteId.Value], DateTime.UtcNow, ct);
+                await polp.DeleteConsentAsync(remoteId.Value, ct);
+                await db.PolpInvestmentAuthorizations.Where(a => a.Id == row.Id).ExecuteDeleteAsync(ct);
+            }
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
+            {
+                logger.LogWarning("Revogação de autorização complementar pendente ({ErrorType})", ex.GetType().Name);
+            }
+        }
     }
 
     private async Task<RemoteDeletionOutcome> TryRemoteDeleteAsync(PolpIntegration local, CancellationToken ct)
@@ -167,6 +227,10 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
         // avulsa) abre a própria.
         await using var tx = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
 
+        var remoteAccounts = (await db.BankAccounts.Where(b => b.UserId == userId && accountIds.Contains(b.Id) && b.PolpAccountId != null)
+            .Select(b => b.PolpAccountId!.Value).ToListAsync(ct)).Select(x => x.ToString()).ToList();
+        await db.InvestmentSyncStates.Where(s => s.UserId == userId && s.Kind == "reserved" && remoteAccounts.Contains(s.ParentExternalId)).ExecuteDeleteAsync(ct);
+        await db.InvestmentSyncSchedules.Where(s => s.UserId == userId && s.Resource == "account.reserved_balances" && remoteAccounts.Contains(s.ExternalId)).ExecuteDeleteAsync(ct);
         await db.RecurrenceDecisions
             .Where(r => r.UserId == userId && accountIds.Contains(r.BankAccountId))
             .ExecuteDeleteAsync(ct);
@@ -176,6 +240,12 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
         await db.Transactions
             .Where(t => t.UserId == userId && t.BankAccountId != null && accountIds.Contains(t.BankAccountId.Value))
             .ExecuteDeleteAsync(ct);
+        await db.InvestmentRateProfiles
+            .Where(p => p.UserId == userId && accountIds.Contains(p.BankAccountId))
+            .ExecuteDeleteAsync(ct);
+        await db.EmergencyReserves
+            .Where(r => r.UserId == userId && r.BankAccountId != null && accountIds.Contains(r.BankAccountId.Value))
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.BankAccountId, (Guid?)null), ct);
         await db.BankAccounts
             .Where(b => b.UserId == userId && accountIds.Contains(b.Id))
             .ExecuteDeleteAsync(ct);

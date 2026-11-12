@@ -1,12 +1,14 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import usePolpConnectionWatcher from "./hooks/usePolpConnectionWatcher.js";
 import HomePage from "./pages/home/HomePage.jsx";
+import ErrorBoundary from "./components/ErrorBoundary/ErrorBoundary.jsx";
+import ErrorPage, { PageLoading } from "./pages/errors/ErrorPage.jsx";
 
-// Só a home entra no bundle inicial: o resto (auth, dashboard, páginas legais) é code-split
-// por rota, então quem só visita a landing page não baixa o dashboard inteiro.
+// Home and error recovery are immediately available; auth, dashboard and legal pages
+// are split by route so public visitors do not download the dashboard.
 const LoginPage = lazy(() => import("./pages/login/Login.jsx"));
 const RegisterPage = lazy(() => import("./pages/cadastro/Cadastro.jsx"));
 const ConnectBankPage = lazy(() => import("./pages/conectar-banco/ConectarBanco.jsx"));
@@ -26,46 +28,60 @@ function PolpConnectionWatcher() {
   return null;
 }
 
+function AppRoutes() {
+  const { pathname, search } = useLocation();
+  return (
+    <ErrorBoundary resetKey={`${pathname}${search}`}>
+      <PolpConnectionWatcher />
+      <Suspense fallback={<PageLoading />}>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/loginemail" element={<LoginPage mode="email" />} />
+          <Route path="/logincpf-cnpj" element={<LoginPage mode="cpf" />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/conectar-banco"
+            element={
+              <ProtectedRoute>
+                <ConnectBankPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/termos-de-uso" element={<TermosDeUso />} />
+          <Route path="/politica-de-privacidade" element={<PoliticaDePrivacidade />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<DashboardHome />} />
+            <Route path="cartoes" element={<Cartoes />} />
+            <Route path="receitas-despesas" element={<ReceitasDespesas />} />
+            <Route path="relatorios" element={<Relatorios />} />
+            <Route path="categorias" element={<Categorias />} />
+            <Route path="investimentos" element={<Investimentos />} />
+            <Route path="privacidade" element={<Privacidade />} />
+            <Route path="*" element={<ErrorPage code={404} embedded />} />
+          </Route>
+          <Route path="/403" element={<ErrorPage code={403} />} />
+          <Route path="/404" element={<ErrorPage code={404} />} />
+          <Route path="/500" element={<ErrorPage code={500} />} />
+          <Route path="/503" element={<ErrorPage code={503} />} />
+          <Route path="*" element={<ErrorPage code={404} />} />
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <PolpConnectionWatcher />
-        <Suspense fallback={null}>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/loginemail" element={<LoginPage mode="email" />} />
-            <Route path="/logincpf-cnpj" element={<LoginPage mode="cpf" />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route
-              path="/conectar-banco"
-              element={
-                <ProtectedRoute>
-                  <ConnectBankPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/termos-de-uso" element={<TermosDeUso />} />
-            <Route path="/politica-de-privacidade" element={<PoliticaDePrivacidade />} />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<DashboardHome />} />
-              <Route path="cartoes" element={<Cartoes />} />
-              <Route path="receitas-despesas" element={<ReceitasDespesas />} />
-              <Route path="relatorios" element={<Relatorios />} />
-              <Route path="categorias" element={<Categorias />} />
-              <Route path="investimentos" element={<Investimentos />} />
-              <Route path="privacidade" element={<Privacidade />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
+        <AppRoutes />
       </BrowserRouter>
     </AuthProvider>
   );

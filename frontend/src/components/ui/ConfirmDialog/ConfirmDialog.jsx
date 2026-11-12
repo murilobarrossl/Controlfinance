@@ -35,7 +35,7 @@ export default function ConfirmDialog({
         <h3 id="confirm-dialog-title" className="confirm-dialog__title">
           {title}
         </h3>
-        <p className="confirm-dialog__message">{message}</p>
+        {message && <p className="confirm-dialog__message">{message}</p>}
 
         <div className="confirm-dialog__actions">
           <Button as="button" type="button" variant="outline" size="sm" onClick={onClose}>

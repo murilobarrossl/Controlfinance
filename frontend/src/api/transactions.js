@@ -61,3 +61,9 @@ export const getTransactionDetails = async (
   if (establishment) params.set("establishment", establishment);
   return apiFetch(`/transactions/details?${params.toString()}`, { signal });
 };
+
+export const getRecentTransactions = async ({ bankAccountId, limit }, { signal } = {}) => {
+  const params = new URLSearchParams({ bankAccountId });
+  if (limit) params.set("limit", limit);
+  return apiFetch(`/transactions/recent?${params.toString()}`, { signal });
+};

@@ -21,6 +21,22 @@ export function setCurrentUserId(id) {
   }
 }
 
+// Ao sair, só some o que é preferência de tela; metas/reserva antigas ainda não levadas para a conta
+// ficam, senão se perderiam antes de serem importadas.
+export function clearSessionLocalData(userId) {
+  try {
+    if (userId) {
+      localStorage.removeItem(`selectedScope:${userId}`);
+      localStorage.removeItem(`selectedAccountId:${userId}`);
+      localStorage.removeItem(`investmentsSyncNoteDismissed:${userId}`);
+    }
+    localStorage.removeItem("pendingPolpIntegrationId");
+    localStorage.removeItem(CURRENT_USER_ID_KEY);
+  } catch {
+    // nada a limpar se o localStorage não estiver disponível
+  }
+}
+
 // Apaga tudo que o Control Finance guardou neste navegador para o usuário informado (metas,
 // reserva de emergência, conta selecionada) e a conexão bancária pendente.
 export function clearLocalDataFor(userId) {

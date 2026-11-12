@@ -1,28 +1,28 @@
-const PRODUCT_RULES = [{ match: /\bultravioleta\b/, base: "#8A05BE" }];
+// Illustrative application templates, never bank/product artwork or physical card colors.
+// Only the structured category selects a family; editable names and bank colors do not.
+const FAMILY_PALETTES = {
+  BLACK: { family: "black", label: "Black", base: "#181D26", detail: "#9BAABD", finish: "satin" },
+  PLATINUM: { family: "platinum", label: "Platinum", base: "#434B59", detail: "#D0DBED", finish: "brushed" },
+  GOLD: { family: "gold", label: "Gold", base: "#51432F", detail: "#E4C58A", finish: "brushed" },
+  INFINITE: { family: "infinite", label: "Infinite", base: "#272D49", detail: "#B0BFE9", finish: "satin" },
+  GRAFITE: { family: "grafite", label: "Grafite", base: "#343D43", detail: "#B4C5CE", finish: "woven" },
+  NANQUIM: { family: "nanquim", label: "Nanquim", base: "#233436", detail: "#A2C6C1", finish: "woven" },
+  MAIS: { family: "mais", label: "Mais", base: "#2C3B4A", detail: "#A5C8E1", finish: "woven" },
+  SIGNATURE: { family: "signature", label: "Signature", base: "#383247", detail: "#C9BADF", finish: "woven" },
+  WORLD_LEGEND: { family: "world-legend", label: "World Legend", base: "#302D40", detail: "#C8C2E2", finish: "satin" },
+};
 
-const CATEGORY_KEYWORDS = [
-  { category: "BLACK", match: /\b(black|infinite)\b/ },
-  { category: "PLATINUM", match: /\bplatinum\b/ },
-  { category: "GOLD", match: /\bgold\b/ },
-];
+const GENERIC_PALETTE = { family: null, label: null, base: "#202936", detail: "#A8BED6", finish: "matte" };
 
-export const BLACK_BASE = "#2B2D31";
-export const CATEGORY_DEFAULTS = { PLATINUM: "#9AA3AD", GOLD: "#C9A44A" };
-export const NEUTRAL_BASE = "#3A3F47";
-export const PRODUCT_BASES = PRODUCT_RULES.map((rule) => rule.base);
+export function cardPalette({ productType } = {}) {
+  if (typeof productType !== "string") return GENERIC_PALETTE;
+  const category = productType.trim().toUpperCase().replace(/[\s-]+/g, "_");
+  return Object.hasOwn(FAMILY_PALETTES, category) ? FAMILY_PALETTES[category] : GENERIC_PALETTE;
+}
 
+// Contrast helper also used by institution initials in BankLogo.
 const LIGHT_TEXT = "#FFFFFF";
 const DARK_TEXT = "#000000";
-
-export function getCardBase({ name, productType, institutionColor }) {
-  const normalizedName = normalize(name);
-  const product = PRODUCT_RULES.find((rule) => rule.match.test(normalizedName));
-  if (product) return product.base;
-
-  const category = normalizeCategory(productType) ?? CATEGORY_KEYWORDS.find((rule) => rule.match.test(normalizedName))?.category;
-  if (category === "BLACK" || category === "INFINITE") return BLACK_BASE;
-  return toHex(institutionColor) ?? CATEGORY_DEFAULTS[category] ?? NEUTRAL_BASE;
-}
 
 export function cardTextColor(baseHex) {
   const l = relativeLuminance(baseHex);
@@ -37,16 +37,3 @@ function relativeLuminance(hex) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-function normalize(value) {
-  return (value ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-}
-
-function normalizeCategory(productType) {
-  return productType ? productType.trim().toUpperCase() : null;
-}
-
-function toHex(color) {
-  if (!color) return null;
-  const hex = color.startsWith("#") ? color : `#${color}`;
-  return /^#[0-9a-f]{6}$/i.test(hex) ? hex.toUpperCase() : null;
-}

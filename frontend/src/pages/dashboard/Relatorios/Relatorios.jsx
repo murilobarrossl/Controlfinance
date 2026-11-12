@@ -3,6 +3,7 @@ import { getTransactionsReport, setTransactionDetails } from "../../../api/trans
 import { getCategories } from "../../../api/categories.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAccount } from "../../../context/AccountContext.jsx";
+import NoBankAccount from "../../../components/dashboard/NoBankAccount/NoBankAccount.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
@@ -11,7 +12,7 @@ import { CloseIcon, ChevronDownIcon } from "../../../components/ui/icons/Feature
 import { formatCurrency, roundMoney } from "../../../utils/financeMath.js";
 import { formatMonthLong } from "../../../utils/monthLabel.js";
 import { getMonthsWindow } from "../../../utils/monthlyTrend.js";
-import { resolveCategoryColor, categoryInitials } from "../../../utils/categoryColors.js";
+import MerchantLogo from "../../../components/ui/MerchantLogo/MerchantLogo.jsx";
 import "./Relatorios.css";
 import usePageTitle from "../../../hooks/usePageTitle.js";
 
@@ -75,25 +76,12 @@ const SORT_OPTIONS = [
   { value: "bankAccountName:desc", label: "Conta: Z–A" },
 ];
 
-const PERIOD_HINTS = {
-  all: "Todos os lançamentos desde a primeira sincronização da conta selecionada.",
-  month: "Só os lançamentos do mês escolhido. Use as setas para trocar de mês.",
-};
-
-// Etiqueta colorida por categoria: mesma cor da categoria no Dashboard e em Categorias, com as
-// iniciais pra continuar distinguível mesmo entre duas cores parecidas.
-function CategoryTag({ name, categories }) {
-  if (!name) return <span className="relatorios__category relatorios__category--empty">Sem categoria</span>;
-  const color = resolveCategoryColor(name, categories);
+function CategoryTag({ transaction }) {
+  const name = transaction.categoryName;
   return (
-    <span
-      className="relatorios__category"
-      style={{ "--category-color": color }}
-    >
-      <span className="relatorios__category-badge" aria-hidden="true">
-        {categoryInitials(name)}
-      </span>
-      <span className="relatorios__category-name">{name}</span>
+    <span className={`relatorios__category${name ? "" : " relatorios__category--empty"}`}>
+      <MerchantLogo name={transaction.name} isTransfer={transaction.isTransfer} />
+      <span className="relatorios__category-name">{name || "Sem categoria"}</span>
     </span>
   );
 }
@@ -148,7 +136,7 @@ function groupByDate(items, dayTotals) {
 
 export default function Relatorios() {
   usePageTitle("Relatórios");
-  const { accounts, effectiveAccountId, dataRefreshKey, accountsStatus, bumpDataRefresh } = useAccount();
+  const { effectiveScope, scopeKey, scopeQuery, dataRefreshKey, accountsStatus, bumpDataRefresh } = useAccount();
   const [result, setResult] = useState(null);
   const [categories, setCategories] = useState([]);
   const [categoriesStatus, setCategoriesStatus] = useState("loading");
@@ -206,7 +194,7 @@ export default function Relatorios() {
       status: statusFilter === "all" ? undefined : statusFilter,
       type: typeFilter === "all" ? undefined : typeFilter,
       search: search || undefined,
-      bankAccountId: effectiveAccountId,
+      ...scopeQuery,
       year: periodMode === "month" ? currentMonth.getUTCFullYear() : undefined,
       month: periodMode === "month" ? currentMonth.getUTCMonth() + 1 : undefined,
       sortBy: sort.key,
@@ -214,14 +202,14 @@ export default function Relatorios() {
       page,
       pageSize: PAGE_SIZE,
     }),
-    [statusFilter, typeFilter, search, effectiveAccountId, periodMode, currentMonth, sort, page]
+    [statusFilter, typeFilter, search, scopeQuery, periodMode, currentMonth, sort, page]
   );
   const baseKey = `${JSON.stringify(filters)}|${dataRefreshKey}`;
   const requestKey = `${baseKey}|${reloadKey}`;
   const loading = accountsStatus !== "ready" || result?.key !== requestKey;
 
   useEffect(() => {
-    if (accountsStatus !== "ready") return;
+    if (accountsStatus !== "ready" || !scopeKey) return;
 
     const controller = new AbortController();
     const { signal } = controller;
@@ -237,7 +225,7 @@ export default function Relatorios() {
       });
 
     return () => controller.abort();
-  }, [filters, baseKey, requestKey, accountsStatus]);
+  }, [filters, baseKey, requestKey, accountsStatus, scopeKey]);
 
   function startEdit(t) {
     if (categoriesStatus !== "ready") return;
@@ -388,7 +376,6 @@ export default function Relatorios() {
     return (
       <div className="relatorios__failure" role="alert">
         <p className="relatorios__error">{message}</p>
-        <p className="relatorios__failure-hint">Verifique sua conexão com a internet e tente de novo.</p>
         <button type="button" className="relatorios__retry" onClick={onRetry}>
           Tentar de novo
         </button>
@@ -397,6 +384,7 @@ export default function Relatorios() {
   }
 
   if (accountsStatus === "error") return renderFailure("Não foi possível carregar suas contas.", bumpDataRefresh);
+  if (accountsStatus === "ready" && !scopeKey) return <NoBankAccount />;
   // Falha do extrato fica no lugar da tabela, não da página: o seletor de período continua à mão
   // pra sair de um mês que falhou sem precisar recarregar tudo.
   const reportError = result?.key === requestKey ? result.error : "";
@@ -410,14 +398,16 @@ export default function Relatorios() {
     hasFilters ? "Somas só dos lançamentos que aparecem com a busca e os filtros atuais." : null,
     statusFilter === "all" ? "Lançamentos pendentes e atrasados entram nas somas." : null,
     "Transferências entre suas próprias contas não entram.",
+    effectiveScope?.enrichmentPending
+      ? "O banco ainda está classificando parte das transações: até terminar, uma transferência entre suas contas pode aparecer como entrada e saída."
+      : null,
   ]
     .filter(Boolean)
     .join(" ");
-  const account = accounts.find((a) => a.id === effectiveAccountId);
-  const syncNote = !account?.polpIntegrationId
+  const syncNote = !effectiveScope?.connectionId
     ? null
-    : account.lastSyncedAt
-      ? `Dados do banco atualizados em ${formatSyncedAt(account.lastSyncedAt)}.`
+    : effectiveScope.lastSyncedAt
+      ? `Dados do banco atualizados em ${formatSyncedAt(effectiveScope.lastSyncedAt)}.`
       : "Aguardando a primeira sincronização com o banco.";
 
   const report = loading ? null : result.report;
@@ -439,7 +429,7 @@ export default function Relatorios() {
 
   return (
     <div className="relatorios">
-      <SectionHeading title="Relatórios" level={1}>O extrato da sua conta, lançamento por lançamento.</SectionHeading>
+      <SectionHeading title="Relatórios" level={1} />
 
       <div className="relatorios__scope">
         <div className="relatorios__period-filter">
@@ -449,7 +439,6 @@ export default function Relatorios() {
               className={`relatorios__segment ${periodMode === "all" ? "relatorios__segment--active" : ""}`}
               aria-pressed={periodMode === "all"}
               onClick={() => handlePeriodModeChange("all")}
-              aria-describedby="relatorios-period-hint"
             >
               Todo o período
             </button>
@@ -458,7 +447,6 @@ export default function Relatorios() {
               className={`relatorios__segment ${periodMode === "month" ? "relatorios__segment--active" : ""}`}
               aria-pressed={periodMode === "month"}
               onClick={() => handlePeriodModeChange("month")}
-              aria-describedby="relatorios-period-hint"
             >
               Por mês
             </button>
@@ -478,10 +466,7 @@ export default function Relatorios() {
             />
           )}
         </div>
-        <p id="relatorios-period-hint" className="relatorios__period-hint">
-          {PERIOD_HINTS[periodMode]}
-          {syncNote && ` ${syncNote}`}
-        </p>
+        {syncNote && <p className="relatorios__period-hint">{syncNote}</p>}
       </div>
 
       {reportError ? (
@@ -758,7 +743,7 @@ export default function Relatorios() {
                               ))}
                             </select>
                           ) : (
-                            <CategoryTag name={t.categoryName} categories={categories} />
+                            <CategoryTag transaction={t} />
                           )}
                         </td>
                         <td

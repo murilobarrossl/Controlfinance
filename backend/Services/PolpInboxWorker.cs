@@ -132,7 +132,10 @@ public sealed class PolpInboxWorker(
             }
             else
             {
-                owned = await PolpInboxStore.RetryAsync(db, claim, lockedUntil, attempts, now + RetryDelay(attempts), error, ct);
+                var nextAttempt = now + RetryDelay(attempts);
+                if (failure is PolpRateLimitedException limited && limited.RetryAt > nextAttempt) nextAttempt = limited.RetryAt;
+                if (failure is ControlFinance.API.Services.Investments.InvestmentSyncDeferredException pending && pending.RetryAt > nextAttempt) nextAttempt = pending.RetryAt;
+                owned = await PolpInboxStore.RetryAsync(db, claim, lockedUntil, attempts, nextAttempt, error, ct);
                 logger.LogWarning("Evento {EventId} da Polp ({Event}) falhou na tentativa {Attempts}: {Error}",
                     claim.Id, claim.Event.Event, attempts, error);
             }

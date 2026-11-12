@@ -5,62 +5,35 @@
 }
 
 .credit-card-visual__face {
-  position: relative;
+  display: block;
   width: 100%;
   max-width: 380px;
-  aspect-ratio: 1.586 / 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 1.25rem 1.375rem;
-  border: 1px solid color-mix(in srgb, var(--card-text) 16%, transparent);
+  padding: 0;
+  border: none;
   border-radius: 14px;
-  background-color: var(--card-base);
-  color: var(--card-text);
-  font-family: inherit;
+  background: none;
+  color: inherit;
+  font: inherit;
   text-align: left;
-  cursor: default;
-  transition: border-color 0.15s ease;
 }
 
 .credit-card-visual__face--interactive {
   cursor: pointer;
 }
 
-.credit-card-visual__face--interactive:hover {
-  border-color: color-mix(in srgb, var(--card-text) 45%, transparent);
+.credit-card-visual__face--interactive .card-face {
+  transition:
+    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.credit-card-visual__face--interactive:hover .card-face {
+  transform: translateY(-3px);
 }
 
 .credit-card-visual__face--interactive:focus-visible {
   outline: 2px solid var(--color-accent);
-  outline-offset: 3px;
-}
-
-.credit-card-visual__top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.credit-card-visual__name {
-  min-width: 0;
-  font-size: 1.15rem;
-  font-weight: 600;
-  line-height: 1.25;
-  overflow-wrap: break-word;
-}
-
-.credit-card-visual__top-right {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  flex-shrink: 0;
-}
-
-.credit-card-visual__brand {
-  font-size: 0.85rem;
-  font-weight: 500;
+  outline-offset: 4px;
 }
 
 .credit-card-visual__star {
@@ -104,26 +77,6 @@
 .credit-card-visual__star--active:hover {
   background-color: transparent;
   cursor: default;
-}
-
-.credit-card-visual__number {
-  font-size: 1.05rem;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  font-variant-numeric: tabular-nums;
-}
-
-.credit-card-visual__bottom {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.75rem;
-  font-size: 0.82rem;
-}
-
-.credit-card-visual__due {
-  flex-shrink: 0;
-  font-weight: 500;
 }
 
 .credit-card-visual__stats {
@@ -222,15 +175,13 @@
 }
 
 @media (max-width: 30em) {
-  .credit-card-visual__face {
-    padding: 1rem 1.125rem;
-  }
-
-  .credit-card-visual__name {
-    font-size: 1rem;
-  }
-
   .credit-card-visual__stat-value {
     font-size: 1.125rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .credit-card-visual__face--interactive:hover .card-face {
+    transform: none;
   }
 }

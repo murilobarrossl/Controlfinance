@@ -75,19 +75,42 @@ public class PolpReconciliationService(
             using var scope = scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var inbox = scope.ServiceProvider.GetRequiredService<IPolpInbox>();
-            var round = Schedule.Round(clock.GetUtcNow());
-
-            var integrations = (await db.PolpIntegrations.AsNoTracking()
-                    .Where(p => p.Status == PolpSyncService.AuthorisedStatus)
-                    .Select(p => new { p.Id, p.PolpIntegrationId, p.SyncedLocally })
-                    .ToListAsync(ct))
-                .Where(p => Schedule.Bucket(p.Id) == round);
-
-            foreach (var integration in integrations)
+            var now = clock.GetUtcNow();
+            var round = Schedule.Round(now);
+            var recoveryBefore = now.UtcDateTime.AddMinutes(-15);
+            Guid? after = null;
+            while (true)
             {
-                var evt = integration.SyncedLocally ? PolpInternalEvents.Reconcile : PolpInternalEvents.Backfill;
-                await inbox.EnqueueAsync(new PolpInboxEvent(
-                    evt, "consents", integration.PolpIntegrationId.ToString(), null, PolpInboxPriority.Low), ct);
+                var query = db.PolpIntegrations.AsNoTracking().Where(p => p.Status == PolpSyncService.AuthorisedStatus);
+                if (after is { } last) query = query.Where(p => p.Id.CompareTo(last) > 0);
+                var integrations = await query.OrderBy(p => p.Id).Select(p => new
+                {
+                    p.Id, p.PolpIntegrationId, p.SyncedLocally,
+                    // Upgrade/startup recovery must not wait for this connection's daily bucket.
+                    NeedsInvestmentRecovery = !db.InvestmentSyncStates.Any(s => s.UserId == p.UserId
+                        && s.IntegrationId == p.Id && s.Kind == "discovery")
+                        || db.InvestmentSyncStates.Any(s => s.UserId == p.UserId && s.IntegrationId == p.Id
+                            && ((s.Kind == "discovery" && s.Status != "Complete" && s.StartedAt < recoveryBefore)
+                                || ((s.Status == "Error" || s.Status == "Pending" || s.Status == "Reading" || s.Status == "Running")
+                                    && s.Kind != "discovery" && (s.LastAttemptAt ?? s.StartedAt) < recoveryBefore)))
+                }).Take(200).ToListAsync(ct);
+                if (integrations.Count == 0) break;
+                foreach (var integration in integrations)
+                {
+                    var scheduled = Schedule.Bucket(integration.Id) == round;
+                    if (!scheduled && !integration.NeedsInvestmentRecovery) continue;
+                    if (scheduled)
+                    {
+                        var evt = integration.SyncedLocally ? PolpInternalEvents.Reconcile : PolpInternalEvents.Backfill;
+                        await inbox.EnqueueAsync(new PolpInboxEvent(
+                            evt, "consents", integration.PolpIntegrationId.ToString(), null, PolpInboxPriority.Low), ct);
+                    }
+                    await inbox.EnqueueAsync(new PolpInboxEvent(
+                        PolpInternalEvents.ConsentMetadata, "consents", integration.PolpIntegrationId.ToString(), null, PolpInboxPriority.Low), ct);
+                    await inbox.EnqueueAsync(new PolpInboxEvent(
+                        PolpInternalEvents.InvestmentDiscovery, "integrations", integration.Id.ToString(), null, PolpInboxPriority.Low), ct);
+                }
+                after = integrations[^1].Id;
             }
         }, ct);
 }
