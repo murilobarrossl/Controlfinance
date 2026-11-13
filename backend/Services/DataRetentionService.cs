@@ -27,6 +27,16 @@ public static class DataRetentionPolicy
         return months.HasValue ? now.AddMonths(-months.Value) : null;
     }
 
+    // Quais transações a retenção pode apagar, num só lugar pra poder ser testado: só histórico
+    // importado (Description = id da Polp, numa conta sincronizada), já resolvido e anterior ao
+    // corte. Lançamento que o usuário digitou tem Description nulo e nunca entra aqui.
+    public static System.Linq.Expressions.Expression<Func<Transaction, bool>> PurgeableSyncedHistory(DateTime cutoff) =>
+        t => t.DueDate < cutoff
+          && t.Status != TransactionStatus.Pending
+          && t.Description != null
+          && t.BankAccount != null
+          && t.BankAccount.PolpAccountId != null;
+
     public static int AccessLogRetentionDays(IConfiguration config)
     {
         var days = config.GetValue<int?>("AccessLog:RetentionDays");
@@ -55,10 +65,7 @@ public class DataRetentionService(IServiceScopeFactory scopeFactory, IJobLock jo
                     if (cutoff.HasValue)
                     {
                         transactions = await db.Transactions
-                            .Where(t => t.DueDate < cutoff.Value
-                                     && t.Status != TransactionStatus.Pending
-                                     && t.BankAccount != null
-                                     && t.BankAccount.PolpAccountId != null)
+                            .Where(DataRetentionPolicy.PurgeableSyncedHistory(cutoff.Value))
                             .ExecuteDeleteAsync(stoppingToken);
                     }
 

@@ -44,6 +44,7 @@ function DashboardLayoutContent() {
     setSelectedAccountId,
     disconnectConnection,
     removeManualAccount,
+    bumpDataRefresh,
     notice,
     dismissNotice,
   } = useAccount();
@@ -226,6 +227,7 @@ function DashboardLayoutContent() {
                 onSelect={setSelectedAccountId}
                 onDisconnect={disconnectConnection}
                 onRemoveManual={removeManualAccount}
+                onAccountCreated={bumpDataRefresh}
               />
             )}
             <BalanceSyncButton />

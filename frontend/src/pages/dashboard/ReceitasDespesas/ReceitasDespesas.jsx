@@ -8,6 +8,8 @@ import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
+import Button from "../../../components/ui/Button/Button.jsx";
+import TransactionFormDialog from "../../../components/dashboard/TransactionFormDialog/TransactionFormDialog.jsx";
 import BreakdownRows from "../../../components/dashboard/BreakdownRows/BreakdownRows.jsx";
 import TransactionDetails from "../../../components/dashboard/TransactionDetails/TransactionDetails.jsx";
 import { TrendUpIcon, TrendDownIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
@@ -84,8 +86,9 @@ function closingSentence(totalIncome, totalExpense) {
 export default function ReceitasDespesas() {
   usePageTitle("Receitas e despesas");
   const navigate = useNavigate();
-  const { effectiveAccountId, dataRefreshKey, accountsStatus } = useAccount();
+  const { accounts, effectiveAccountId, dataRefreshKey, bumpDataRefresh, accountsStatus } = useAccount();
   const [aggregateResult, setAggregateResult] = useState(null);
+  const [newEntryOpen, setNewEntryOpen] = useState(false);
   const [monthOffset, setMonthOffset] = useState(0);
   const [expandedIncomeSources, setExpandedIncomeSources] = useState(() => new Set());
   const requestKey = `${effectiveAccountId ?? ""}|${dataRefreshKey}`;
@@ -160,11 +163,24 @@ export default function ReceitasDespesas() {
     <div className="receitas-despesas">
       <SectionHeading title="Receitas e despesas" level={1}>O mapa do seu dinheiro</SectionHeading>
 
-      <RangePicker
-        label={formatMonthLong(currentMonth)}
-        onPrev={() => setMonthOffset((prev) => prev + 1)}
-        onNext={() => setMonthOffset((prev) => Math.max(0, prev - 1))}
-        nextDisabled={monthOffset === 0}
+      <div className="receitas-despesas__toolbar">
+        <RangePicker
+          label={formatMonthLong(currentMonth)}
+          onPrev={() => setMonthOffset((prev) => prev + 1)}
+          onNext={() => setMonthOffset((prev) => Math.max(0, prev - 1))}
+          nextDisabled={monthOffset === 0}
+        />
+        <Button as="button" type="button" variant="primary" size="sm" onClick={() => setNewEntryOpen(true)}>
+          + Novo lançamento
+        </Button>
+      </div>
+
+      <TransactionFormDialog
+        open={newEntryOpen}
+        accounts={accounts}
+        defaultAccountId={effectiveAccountId}
+        onClose={() => setNewEntryOpen(false)}
+        onCreated={bumpDataRefresh}
       />
 
 

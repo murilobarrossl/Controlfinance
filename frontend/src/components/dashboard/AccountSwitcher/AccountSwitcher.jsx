@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ChevronDownIcon, CardIcon, MoreIcon } from "../../ui/icons/FeatureIcons.jsx";
 import ConfirmDialog from "../../ui/ConfirmDialog/ConfirmDialog.jsx";
+import ManualAccountDialog from "../ManualAccountDialog/ManualAccountDialog.jsx";
 import { groupAccounts } from "../../../utils/accountGrouping.js";
 import { isCreditCardAccount, getAccountKindLabel } from "../../../utils/accountKind.js";
 import "./AccountSwitcher.css";
@@ -44,11 +45,12 @@ function sortGroupAccounts(accounts) {
   return [...accounts].sort((a, b) => Number(isCreditCardAccount(a)) - Number(isCreditCardAccount(b)));
 }
 
-export default function AccountSwitcher({ accounts, activeAccountId, connectors, onSelect, onDisconnect, onRemoveManual }) {
+export default function AccountSwitcher({ accounts, activeAccountId, connectors, onSelect, onDisconnect, onRemoveManual, onAccountCreated }) {
   const [open, setOpen] = useState(false);
   const [actionsFor, setActionsFor] = useState(null);
   // { kind: "connection", id, label } | { kind: "manual", id, label } | null
   const [pendingRemoval, setPendingRemoval] = useState(null);
+  const [manualAccountOpen, setManualAccountOpen] = useState(false);
   const rootRef = useRef(null);
 
   useEffect(() => {
@@ -186,8 +188,24 @@ export default function AccountSwitcher({ accounts, activeAccountId, connectors,
           <Link to="/conectar-banco" className="account-switcher__option account-switcher__option--add">
             + Conectar outro banco
           </Link>
+          <button
+            type="button"
+            className="account-switcher__option account-switcher__option--add"
+            onClick={() => {
+              setManualAccountOpen(true);
+              setOpen(false);
+            }}
+          >
+            + Cadastrar conta manual
+          </button>
         </div>
       )}
+
+      <ManualAccountDialog
+        open={manualAccountOpen}
+        onClose={() => setManualAccountOpen(false)}
+        onCreated={onAccountCreated}
+      />
 
       <ConfirmDialog
         open={pendingRemoval !== null}

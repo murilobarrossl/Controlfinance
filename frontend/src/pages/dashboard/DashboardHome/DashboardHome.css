@@ -108,3 +108,16 @@
 .dashboard-home__card-switch:hover {
   color: var(--color-text-primary);
 }
+
+.dashboard-home__empty-hint {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.dashboard-home__empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
