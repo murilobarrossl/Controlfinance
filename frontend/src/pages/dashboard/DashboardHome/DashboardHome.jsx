@@ -7,6 +7,7 @@ import { getCreditCardsSummary, setPrimaryCard } from "../../../api/creditCards.
 import { isAbortError } from "../../../api/client.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
+import NoBankAccount from "../../../components/dashboard/NoBankAccount/NoBankAccount.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
@@ -16,11 +17,9 @@ import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.js
 import ManualAccountDialog from "../../../components/dashboard/ManualAccountDialog/ManualAccountDialog.jsx";
 import AreaTrendChart from "../../../components/charts/AreaTrendChart.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
-import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import CardPicker from "../../../components/dashboard/CardPicker/CardPicker.jsx";
-import { cardBrand, cardPickerOption, connectorsByName } from "../../../utils/cardBrand.js";
+import { cardBrand, cardNetwork, cardPickerOption, connectorsByName } from "../../../utils/cardBrand.js";
 import { groupCards } from "../../../utils/cardGroups.js";
-import { isCreditCardAccount } from "../../../utils/accountKind.js";
 import { resolveCategoryColor, OTHERS_COLOR } from "../../../utils/categoryColors.js";
 import { WalletIcon, TrendUpIcon, TrendDownIcon, TargetIcon, CardIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency, formatPercentage, roundMoney } from "../../../utils/financeMath.js";
@@ -31,6 +30,7 @@ import {
   previousMonthSamePeriodRange,
 } from "../../../utils/monthlyTrend.js";
 import { computeTrend } from "../../../utils/trend.js";
+import CardOverview from "./CardOverview.jsx";
 import "./DashboardHome.css";
 import usePageTitle from "../../../hooks/usePageTitle.js";
 
@@ -51,7 +51,7 @@ function buildDonutData(categoryExpenses, categories) {
     value: c.amount,
     color: resolveCategoryColor(c.categoryName, categories),
   }));
-  if (restTotal > 0) data.push({ name: "Outros", value: restTotal, color: OTHERS_COLOR });
+  if (restTotal > 0) data.push({ name: "Outros", value: restTotal, color: OTHERS_COLOR, isRest: true });
 
   return data;
 }
@@ -60,9 +60,7 @@ function DashboardHomeSkeleton({ firstName }) {
   return (
     <div className="dashboard-home" aria-busy="true">
       <div className="dashboard-home__header">
-        <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"} level={1}>
-          Visão geral
-        </SectionHeading>
+        <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"} level={1} />
       </div>
 
       <div className="dashboard-home__stats">
@@ -112,14 +110,7 @@ export default function DashboardHome() {
   usePageTitle("Dashboard inteligente");
   const { user } = useAuth();
   const navigate = useNavigate();
-  const {
-    accounts,
-    connectors,
-    accountsStatus,
-    effectiveAccountId,
-    dataRefreshKey,
-    bumpDataRefresh,
-  } = useAccount();
+  const { connectors, accountsStatus, effectiveScope, scopeKey, scopeQuery, dataRefreshKey, bumpDataRefresh } = useAccount();
   const [categories, setCategories] = useState([]);
   const [manualAccountOpen, setManualAccountOpen] = useState(false);
   const [allCards, setAllCards] = useState([]);
@@ -143,7 +134,7 @@ export default function DashboardHome() {
     }
   }
   const [result, setResult] = useState(null);
-  const requestKey = `${effectiveAccountId ?? ""}|${dataRefreshKey}`;
+  const requestKey = `${scopeKey}|${dataRefreshKey}`;
   const loading = accountsStatus !== "ready" || result?.key !== requestKey;
   const [cardConfirmOpen, setCardConfirmOpen] = useState(false);
 
@@ -156,31 +147,24 @@ export default function DashboardHome() {
   }, []);
 
   useEffect(() => {
-    if (accountsStatus !== "ready") return;
+    if (accountsStatus !== "ready" || !scopeKey) return;
 
     const controller = new AbortController();
     const { signal } = controller;
-    const key = `${effectiveAccountId ?? ""}|${dataRefreshKey}`;
+    const key = `${scopeKey}|${dataRefreshKey}`;
 
     const months = getMonthsWindow(TREND_MONTHS);
     const trendRange = monthRange(months[0], months[months.length - 1]);
     const previousRange = previousMonthSamePeriodRange();
-    const loadAggregates = (bankAccountId) =>
-      Promise.all([
-        getTransactionAggregates({ bankAccountId, ...trendRange }, { signal }),
-        getTransactionAggregates({ bankAccountId, ...previousRange }, { signal }),
-      ]);
+    const aggregates = Promise.all([
+      getTransactionAggregates({ ...scopeQuery, ...trendRange }, { signal }),
+      getTransactionAggregates({ ...scopeQuery, ...previousRange }, { signal }),
+    ]);
+    aggregates.catch(() => {});
 
-    const speculativeAggregates = effectiveAccountId ? loadAggregates(effectiveAccountId) : null;
-    speculativeAggregates?.catch(() => {});
-
-    getDashboardSummary(effectiveAccountId, { signal })
+    getDashboardSummary(scopeQuery.bankAccountId, { signal })
       .then(async (summaryData) => {
-        const accountId = summaryData?.activeAccount?.id;
-        let aggregatesData = null;
-        if (accountId) {
-          aggregatesData = await (accountId === effectiveAccountId ? speculativeAggregates : loadAggregates(accountId));
-        }
+        const aggregatesData = summaryData?.account ? await aggregates : null;
         if (signal.aborted) return;
         setResult({
           key,
@@ -196,7 +180,7 @@ export default function DashboardHome() {
       });
 
     return () => controller.abort();
-  }, [effectiveAccountId, dataRefreshKey, accountsStatus]);
+  }, [scopeKey, scopeQuery, dataRefreshKey, accountsStatus]);
 
   const summary = result?.summary ?? null;
   const trend = result?.trend ?? null;
@@ -218,9 +202,11 @@ export default function DashboardHome() {
 
   if (error) return <p className="dashboard-home__error">{error}</p>;
 
+  if (accountsStatus === "ready" && !scopeKey) return <NoBankAccount />;
+
   if (loading) return <DashboardHomeSkeleton firstName={user?.name?.split(" ")[0]} />;
 
-  if (!summary?.activeAccount) {
+  if (!summary?.account) {
     return (
       <>
         <Card className="dashboard-home__empty">
@@ -248,7 +234,7 @@ export default function DashboardHome() {
     );
   }
 
-  const { activeAccount, totalIncome, totalExpense, categoryExpenses, activeCard } = summary;
+  const { account, totalIncome, totalExpense, categoryExpenses, activeCard } = summary;
   const monthlyBalance = roundMoney(totalIncome - totalExpense);
   const percentageSpent = totalIncome > 0 ? (totalExpense / totalIncome) * 100 : null;
   const savingsRate =
@@ -256,6 +242,11 @@ export default function DashboardHome() {
       ? ((currentMonthTrend.Receitas - currentMonthTrend.Despesas) / currentMonthTrend.Receitas) * 100
       : null;
   const donutData = buildDonutData(categoryExpenses, categories);
+  const openCategory = (name, entry) => {
+    const params = new URLSearchParams({ periodo: "mes" });
+    if (!entry?.isRest) params.set("categoria", name);
+    navigate(`/dashboard/categorias?${params}`);
+  };
   const firstName = user?.name?.split(" ")[0];
 
   const incomeTrend = computeTrend(currentMonthTrend?.Receitas, previousMonthSamePeriod?.Receitas, {
@@ -266,39 +257,26 @@ export default function DashboardHome() {
     label: "vs mesmo período",
   });
 
-  // Não existe um saldo histórico salvo (activeAccount.balance é sempre o saldo ao vivo da
-  // Polp), então a única comparação honesta é reconstruir o saldo do início do mês a partir
-  // do saldo atual menos o que já entrou/saiu neste mês, por isso o rótulo é "início do mês",
-  // não "mês anterior" como nos outros cards.
-  const startOfMonthBalance = activeAccount.balance - monthlyBalance;
+  const isCardView = account.kind === "CreditCard";
+
+  // Não existe saldo histórico salvo, então o saldo do início do mês é reconstruído a partir do
+  // atual menos o resultado do mês. Poupança não entra no saldo principal, então fica sem tendência.
   const balanceTrend =
-    typeof activeAccount.balance === "number"
-      ? computeTrend(activeAccount.balance, startOfMonthBalance, { label: "vs início do mês" })
+    !isCardView && !account.balanceIncomplete && typeof account.balance === "number" && account.kind !== "Savings"
+      ? computeTrend(account.balance, account.balance - monthlyBalance, { label: "vs início do mês" })
       : null;
 
-  // A conta selecionada agora é a mesma que o sistema reconheceu automaticamente como cartão
-  // (ver CreditCardAccountDetector) — fecha o ciclo apontando de volta pra Cartões, já que
-  // fatura/limite/parcelas dessa conta só aparecem naquela tela.
-  const isActiveAccountLinkedCard = activeCard?.isSynced && activeCard.id === activeAccount.id;
-  // O seletor também sabe (pelo tipo que a Polp manda) quando a conta ativa é um cartão, mesmo que
-  // não seja o cartão mostrado em "Seu cartão". Nesse caso o "saldo" que o banco manda é do cartão,
-  // não dinheiro disponível em conta, e o card de saldo precisa dizer isso.
   const connectorsMap = connectorsByName(connectors);
   const cardOptions = groupCards(allCards)
     .groups.flatMap((group) => group.cards)
     .map((card) => cardPickerOption(card, cardBrand(card, connectorsMap)));
 
-  const isActiveAccountCard =
-    isActiveAccountLinkedCard || isCreditCardAccount(accounts.find((a) => a.id === activeAccount.id));
-
   return (
     <div className="dashboard-home">
       <div className="dashboard-home__header">
-        <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"} level={1}>
-          Visão geral
-        </SectionHeading>
+        <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"} level={1} />
 
-        {isActiveAccountCard && (
+        {isCardView && (
           <div className="dashboard-home__account-controls">
             <span className="dashboard-home__account-hint">
               Você está vendo um cartão de crédito, não uma conta bancária: veja fatura, limite e parcelas em{" "}
@@ -306,14 +284,23 @@ export default function DashboardHome() {
             </span>
           </div>
         )}
+        {effectiveScope?.enrichmentPending && (
+          <div className="dashboard-home__account-controls">
+            <span className="dashboard-home__account-hint">
+              O banco ainda está classificando parte das transações. Até terminar, uma transferência entre suas
+              contas pode aparecer como entrada e saída.
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="dashboard-home__stats">
         <StatCard
-          icon={isActiveAccountCard ? <CardIcon /> : <WalletIcon />}
-          label={isActiveAccountCard ? "Saldo do cartão (informado pelo banco)" : "Saldo em conta"}
-          value={formatCurrency(activeAccount.balance)}
-          trend={isActiveAccountCard ? undefined : balanceTrend}
+          icon={isCardView ? <CardIcon /> : <WalletIcon />}
+          label={isCardView ? "Saldo do cartão (informado pelo banco)" : "Saldo em conta"}
+          value={formatCurrency(account.balance)}
+          trend={balanceTrend ?? undefined}
+          secondaryLines={account.balanceIncomplete ? [{ label: "Saldo", value: "Aguardando sincronização" }] : []}
         />
         <StatCard
           icon={<TrendUpIcon />}
@@ -339,7 +326,7 @@ export default function DashboardHome() {
         <StatCard
           icon={<CardIcon />}
           label="Cartão"
-          value={activeCard ? `Crédito${activeCard.brand ? ` · ${activeCard.brand}` : ""}` : "Nenhum cartão"}
+          value={activeCard ? ["Crédito", cardNetwork(activeCard.brand)?.label].filter(Boolean).join(" · ") : "Nenhum cartão"}
           secondaryLines={
             activeCard
               ? [{ label: "Cartão", value: activeCard.name }]
@@ -386,7 +373,8 @@ export default function DashboardHome() {
               // Soma das próprias fatias, não totalExpense: despesas sem categoria não entram em
               // categoryExpenses, e o centro mostrava um total maior do que a rosca representava.
               centerLabel={formatCurrency(donutData.reduce((sum, d) => sum + d.value, 0))}
-              centerCaption="Categorizado"
+              centerCaption={null}
+              onSliceClick={openCategory}
             />
           )}
         </Card>
@@ -395,6 +383,7 @@ export default function DashboardHome() {
       <div className="dashboard-home__grid">
         {activeCard && (
           <Card
+            className="dashboard-home__card-block"
             title="Seu cartão"
             action={
               allCards.length > 1 ? (
@@ -413,10 +402,11 @@ export default function DashboardHome() {
               )
             }
           >
-            <CreditCardVisual
+            <CardOverview
               card={activeCard}
               cardholderName={user?.name}
-              onClick={() => setCardConfirmOpen(true)}
+              onOpenCards={() => setCardConfirmOpen(true)}
+              refreshKey={dataRefreshKey}
             />
             {cardSwitchError && (
               <p className="dashboard-home__error" role="alert">
@@ -430,7 +420,6 @@ export default function DashboardHome() {
       <ConfirmDialog
         open={cardConfirmOpen}
         title="Ir para a área de Cartões"
-        message="Você vai ser levado pra área de Cartões, onde pode ver fatura, limite, parcelamentos e vencimentos de cada cartão com mais detalhe. Continuar?"
         confirmLabel="Ir para Cartões"
         cancelLabel="Cancelar"
         onConfirm={() => {

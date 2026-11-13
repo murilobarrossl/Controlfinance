@@ -23,8 +23,6 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
         if (account is null)
             return Ok(new { message = "Nenhum banco conectado ainda." });
 
-        var accountDto = BankAccountDto.FromEntity(account);
-
         var today = await UserTodayAsync(db, ct);
         var startOfMonth = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var endOfMonth = startOfMonth.AddMonths(1);
@@ -97,7 +95,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
         var cardDto = recognizedCards.FirstOrDefault(c => c.IsPrimary);
 
         var summary = new DashboardSummaryDto(
-            accountDto,
+            DashboardAccountDto.FromEntity(account),
             totalIncome,
             totalExpense,
             pending,

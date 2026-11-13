@@ -30,18 +30,26 @@ export function poupancaAnnualPct(selicPct) {
 }
 
 // Evolução mês a mês de um valor inicial mais aportes mensais (feitos no fim de cada mês).
-// "net" desconta o imposto de renda do rendimento acumulado até aquele mês, como se o dinheiro
-// fosse resgatado ali; sem imposto (poupança), net = gross.
-export function simulateGrowth({ initial, monthly, months, annualPct, taxed = true }) {
+// "net" desconta o IR estimado do rendimento futuro de cada lote, como num resgate naquele mês.
+// Sem datas originais, o saldo inicial é tratado como um lote novo. Meses aproximados de 30 dias.
+export function simulateGrowth({ initial, monthly, months, annualPct, taxed = true, source, importedInvestment }) {
+  if (source === "imported_contract" || importedInvestment != null) {
+    throw new Error("Investimentos importados exigem um motor decimal e regras contratuais confirmadas.");
+  }
   const rate = annualToMonthlyRate(annualPct);
   const series = [{ month: 0, invested: initial, gross: initial, net: initial }];
 
   let balance = initial;
+  const lots = [{ principal: initial, balance: initial, month: 0 }];
   for (let month = 1; month <= months; month += 1) {
     balance = balance * (1 + rate) + monthly;
     const invested = initial + monthly * month;
-    const income = balance - invested;
-    const tax = taxed && income > 0 ? income * incomeTaxRate(month * 30) : 0;
+    let tax = 0;
+    for (const lot of lots) {
+      lot.balance *= 1 + rate;
+      if (taxed) tax += Math.max(0, lot.balance - lot.principal) * incomeTaxRate((month - lot.month) * 30);
+    }
+    if (monthly > 0) lots.push({ principal: monthly, balance: monthly, month });
     series.push({ month, invested, gross: balance, net: balance - tax });
   }
 

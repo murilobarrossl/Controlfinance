@@ -6,8 +6,6 @@ import { useAccount } from "../../../context/AccountContext.jsx";
 import { logoutAllSessions } from "../../../api/auth.js";
 import { downloadMyData, updateNotificationPreferences, deleteMyAccount, getDataPolicy } from "../../../api/account.js";
 import { clearLocalDataFor, setCurrentUserId } from "../../../utils/authToken.js";
-import { hasLegacyPlanning, loadPlanning } from "../../../api/planning.js";
-import { groupAccounts } from "../../../utils/accountGrouping.js";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
@@ -22,7 +20,7 @@ export default function Privacidade() {
   usePageTitle("Privacidade e dados");
   const navigate = useNavigate();
   const { user, logout, updateUser } = useAuth();
-  const { accounts, connectors, accountsStatus, disconnectConnection } = useAccount();
+  const { accounts, connections: bankConnections, connectionsStatus, disconnectConnection } = useAccount();
 
   const [prefs, setPrefs] = useState({
     dueRemindersEnabled: user?.dueRemindersEnabled ?? true,
@@ -31,10 +29,6 @@ export default function Privacidade() {
   const [prefsStatus, setPrefsStatus] = useState("");
   const [exportStatus, setExportStatus] = useState("");
   const [pendingDisconnect, setPendingDisconnect] = useState(null);
-  const [confirmClearLocal, setConfirmClearLocal] = useState(false);
-  const [localCleared, setLocalCleared] = useState(false);
-  const [clearingLocal, setClearingLocal] = useState(false);
-  const [clearLocalError, setClearLocalError] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -49,16 +43,13 @@ export default function Privacidade() {
   }, []);
 
   const connections = useMemo(() => {
-    const connectorsById = new Map(connectors.map((c) => [c.id, c]));
-    return groupAccounts(accounts, connectorsById)
-      .filter((g) => g.accounts[0].localIntegrationId)
-      .map((g) => ({
-        id: g.accounts[0].localIntegrationId,
-        label: g.label ?? g.accounts[0].name,
-        accountNames: g.accounts.map((a) => a.name),
-        lastSyncedAt: g.accounts[0].lastSyncedAt,
+    return bankConnections.map((c) => ({
+        id: c.id,
+        label: c.institutionName || "Instituição conectada",
+        accountNames: accounts.filter((a) => a.localIntegrationId === c.id).map((a) => a.name),
+        lastSyncedAt: c.lastSyncedAt,
       }));
-  }, [accounts, connectors]);
+  }, [accounts, bankConnections]);
 
   async function handleSavePrefs(e) {
     e.preventDefault();
@@ -92,30 +83,6 @@ export default function Privacidade() {
     navigate("/loginemail", { replace: true });
   }
 
-  // Metas e reserva anotadas antes de irem para o servidor ainda podem estar só aqui: leva para a
-  // conta antes de limpar, e não limpa nada se não conseguir, para não perder o que o usuário digitou.
-  async function handleClearLocal() {
-    setClearLocalError("");
-    setLocalCleared(false);
-    if (hasLegacyPlanning()) {
-      setClearingLocal(true);
-      try {
-        await loadPlanning();
-      } catch {
-        setClearingLocal(false);
-        setConfirmClearLocal(false);
-        setClearLocalError(
-          "Nada foi apagado: não foi possível guardar na sua conta as metas e a reserva anotadas neste navegador. Tente de novo.",
-        );
-        return;
-      }
-      setClearingLocal(false);
-    }
-    if (user?.id) clearLocalDataFor(user.id);
-    setConfirmClearLocal(false);
-    setLocalCleared(true);
-  }
-
   const closeDelete = useCallback(() => {
     if (deleting) return;
     setDeleteOpen(false);
@@ -139,12 +106,12 @@ export default function Privacidade() {
 
   return (
     <div className="privacidade">
-      <SectionHeading title="Privacidade e dados" level={1}>Seus dados, suas escolhas</SectionHeading>
+      <SectionHeading title="Privacidade e dados" level={1} />
 
       <Card title="O que guardamos sobre você">
         <ul className="privacidade__list">
-          <li><strong>Cadastro:</strong> nome, e-mail, senha (só em forma irreversível) e o tipo de documento. O número do CPF/CNPJ não fica guardado, só um código de verificação gerado a partir dele.</li>
-          <li><strong>Bancos conectados:</strong> contas, saldos, extrato, dados de cartão e os 4 últimos dígitos do número da conta, cifrados, enquanto a conexão existir.</li>
+          <li><strong>Cadastro:</strong> nome, e-mail, senha (só em forma irreversível), fuso horário e o tipo de documento. O número do CPF/CNPJ não fica guardado, só um código de verificação gerado a partir dele.</li>
+          <li><strong>Bancos conectados:</strong> contas, saldos, extrato, dados de cartão, investimentos, caixinhas e os 4 últimos dígitos do número da conta, cifrados, enquanto a conexão existir.</li>
           <li><strong>O que você cadastra:</strong> cartões e parcelamentos que não vieram de um banco, categorias e edições de nome/categoria das transações importadas.</li>
           <li><strong>Aceites:</strong> qual versão dos Termos e da Política você aceitou e quando, e cada autorização de conexão bancária.</li>
           <li>
@@ -152,17 +119,18 @@ export default function Privacidade() {
             {dataPolicy === null
               ? <Skeleton width="60%" />
               : dataPolicy.syncedHistoryMonths
-              ? `transações importadas dos bancos com mais de ${dataPolicy.syncedHistoryMonths} meses não são importadas e são apagadas automaticamente (cartões e parcelamentos cadastrados por você não são afetados).`
+              ? `extrato, movimentações de investimento e histórico de posições e de caixinhas com mais de ${dataPolicy.syncedHistoryMonths} meses não são importados e são apagados automaticamente. A posição atual dos investimentos e o que você cadastrou não são afetados.`
               : "sem prazo máximo definido: o histórico importado fica guardado enquanto o banco estiver conectado."}
           </li>
           {dataPolicy?.accessLogEnabled && (
             <li>
               <strong>Registros de acesso:</strong> data, hora e IP (cifrado) de cada login, guardados por{" "}
-              {dataPolicy.accessLogRetentionDays} dias e depois apagados automaticamente.
+              {dataPolicy.accessLogRetentionDays} dias por obrigação legal (Marco Civil da Internet) e depois apagados
+              automaticamente, mesmo que você exclua a conta antes.
             </li>
           )}
-          <li><strong>Reserva de emergência e metas de economia:</strong> ficam na sua conta, nos nossos servidores, com nome e valores cifrados, até você removê-las em Investimentos ou excluir a conta.</li>
-          <li><strong>Neste navegador:</strong> a conta selecionada no painel e uma conexão bancária em andamento. Esses dados ficam só aqui.</li>
+          <li><strong>Reserva de emergência e metas de economia:</strong> ficam na sua conta, nos nossos servidores, com nome e valores cifrados, até você removê-las em Investimentos ou excluir a conta. Se você marca uma aplicação como reserva ou informa quanto ela rende, guardamos só essa marcação e a regra informada, apagadas junto com a conexão bancária ou a conta.</li>
+          <li><strong>Neste navegador:</strong> a conta selecionada no painel e uma conexão bancária em andamento, só para facilitar o uso. São apagados ao sair da conta.</li>
         </ul>
         <p className="privacidade__text">
           Detalhes, fornecedores envolvidos e prazos estão na{" "}
@@ -171,10 +139,10 @@ export default function Privacidade() {
       </Card>
 
       <Card title="Bancos conectados">
-        {accountsStatus === "loading" ? (
+        {connectionsStatus === "loading" ? (
           <Skeleton width="100%" height="4rem" />
-        ) : accountsStatus === "error" ? (
-          <p className="privacidade__text">Não foi possível carregar as contas.</p>
+        ) : connectionsStatus === "error" ? (
+          <p className="privacidade__text">Não foi possível carregar as conexões bancárias.</p>
         ) : connections.length === 0 ? (
           <p className="privacidade__text">Nenhum banco conectado.</p>
         ) : (
@@ -196,7 +164,8 @@ export default function Privacidade() {
           </ul>
         )}
         <p className="privacidade__hint">
-          Desconectar apaga do Control Finance tudo que veio daquele banco e pede à Polp que exclua a conexão.
+          Desconectar apaga do Control Finance tudo que veio daquele banco, inclusive investimentos e caixinhas, e pede à
+          Polp que exclua a conexão.
           Sua conta no Control Finance continua existindo.
         </p>
       </Card>
@@ -240,7 +209,8 @@ export default function Privacidade() {
       <Card title="Cópia dos seus dados">
         <p className="privacidade__text">
           Baixe um arquivo com tudo que guardamos sobre você no servidor: cadastro, aceites, contas, lançamentos,
-          cartões, parcelamentos e categorias.
+          cartões, parcelamentos, categorias, investimentos e caixinhas, reserva de emergência, metas, regras de
+          rendimento e, se existirem, registros de acesso.
         </p>
         <div className="privacidade__actions">
           <Button as="button" type="button" variant="outline" size="sm" onClick={handleExport}>
@@ -259,44 +229,18 @@ export default function Privacidade() {
         </Button>
       </Card>
 
-      <Card title="Dados guardados neste navegador">
-        <p className="privacidade__text">
-          A conta selecionada no painel e uma conexão bancária em andamento ficam só neste navegador. Apagar aqui
-          remove esses dados deste aparelho.
-        </p>
-        <p className="privacidade__hint">
-          Reserva de emergência e metas de economia ficam na sua conta e não são apagadas por este botão. Para apagá-las,
-          remova em Investimentos ou exclua a conta.
-        </p>
-        <div className="privacidade__actions">
-          <Button
-            as="button"
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setConfirmClearLocal(true)}
-            disabled={clearingLocal}
-          >
-            {clearingLocal ? "Apagando…" : "Apagar dados deste navegador"}
-          </Button>
-          {localCleared && <span className="privacidade__status">Dados deste navegador apagados. Sua reserva e suas metas continuam na sua conta.</span>}
-          {clearLocalError && (
-            <span className="privacidade__status" role="alert">
-              {clearLocalError}
-            </span>
-          )}
-        </div>
-      </Card>
-
       <Card title="Excluir conta" className="privacidade__danger">
         <p className="privacidade__text">
           Apaga de forma definitiva sua conta e tudo que está guardado nos nossos servidores: cadastro, aceites,
-          bancos conectados, contas, lançamentos, cartões, parcelamentos, categorias, reserva de emergência e metas de
-          economia. Também pedimos à Polp que exclua suas conexões bancárias. Não dá para desfazer.
+          bancos conectados, contas, lançamentos, cartões, parcelamentos, categorias, investimentos e caixinhas importados,
+          reserva de emergência, metas de economia e regras de rendimento informadas. Também pedimos à Polp que exclua suas
+          conexões bancárias. Não dá para desfazer.
         </p>
         <p className="privacidade__hint">
           Cópias de segurança da hospedagem só deixam de conter seus dados quando expiram (o prazo está na Política
-          de Privacidade). Se quiser uma cópia dos seus dados, baixe antes de excluir.
+          de Privacidade).{" "}
+          {dataPolicy?.accessLogEnabled && "Os registros de acesso ficam até o fim do prazo legal. "}
+          Se quiser uma cópia dos seus dados, baixe antes de excluir.
         </p>
         <div className="privacidade__actions privacidade__delete-actions">
           <Button as="button" type="button" variant="primary" size="sm" onClick={() => setDeleteOpen(true)}>
@@ -317,7 +261,7 @@ export default function Privacidade() {
       <ConfirmDialog
         open={pendingDisconnect !== null}
         title={`Desconectar ${pendingDisconnect?.label}?`}
-        message="Todas as contas e cartões desta conexão saem do Control Finance, e apagamos na hora o saldo, o extrato e os parcelamentos que vieram desse banco. Também pedimos à Polp que exclua a conexão."
+        message="Todas as contas e cartões desta conexão saem do Control Finance, e apagamos na hora o saldo, o extrato, os parcelamentos, os investimentos e as caixinhas que vieram desse banco. Também pedimos à Polp que exclua a conexão."
         confirmLabel="Desconectar e apagar dados"
         onConfirm={() => {
           const target = pendingDisconnect;
@@ -325,15 +269,6 @@ export default function Privacidade() {
           disconnectConnection(target.id);
         }}
         onClose={() => setPendingDisconnect(null)}
-      />
-
-      <ConfirmDialog
-        open={confirmClearLocal}
-        title="Apagar dados deste navegador?"
-        message="A conta selecionada e uma conexão bancária em andamento saem deste navegador. Sua reserva de emergência e suas metas continuam na sua conta. Se este navegador tiver uma reserva antiga diferente da salva na conta, ela é descartada."
-        confirmLabel="Apagar"
-        onConfirm={handleClearLocal}
-        onClose={() => setConfirmClearLocal(false)}
       />
     </div>
   );

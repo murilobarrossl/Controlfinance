@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { getCurrentUser } from "../api/auth.js";
 import { setCsrfToken } from "../api/client.js";
-import { setCurrentUserId } from "../utils/authToken.js";
+import { clearSessionLocalData, getCurrentUserId, setCurrentUserId } from "../utils/authToken.js";
 
 const AuthContext = createContext(null);
 
@@ -10,9 +10,11 @@ const AuthContext = createContext(null);
 // não chega, status fica "loading" e as rotas protegidas esperam em vez de mandar pro login.
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [status, setStatus] = useState("loading"); // "loading" | "authenticated" | "anonymous"
+  const [status, setStatus] = useState("loading"); // loading | authenticated | anonymous | error
+  const [sessionError, setSessionError] = useState(null);
 
   const applySession = useCallback((data) => {
+    setSessionError(null);
     setCsrfToken(data?.csrfToken);
     setUser(data?.user ?? null);
     setCurrentUserId(data?.user?.id ?? null);
@@ -26,10 +28,18 @@ export function AuthProvider({ children }) {
         if (cancelled) return;
         applySession(data);
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
         setCsrfToken(null);
-        setStatus("anonymous");
+        if (err.status === 401) {
+          setSessionError(null);
+          setStatus("anonymous");
+        } else {
+          // A failed session lookup does not prove the user is logged out.
+          const unavailable = !err.status || err.status >= 500 || [408, 429].includes(err.status);
+          setSessionError(err.status === 403 ? 403 : unavailable ? 503 : 500);
+          setStatus("error");
+        }
       });
 
     return () => {
@@ -46,14 +56,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
+    clearSessionLocalData(getCurrentUserId());
+    setSessionError(null);
     setCsrfToken(null);
     setUser(null);
     setStatus("anonymous");
   }, []);
 
   const value = useMemo(
-    () => ({ user, status, isAuthenticated: status === "authenticated", login, logout, updateUser }),
-    [user, status, login, logout, updateUser],
+    () => ({ user, status, sessionError, isAuthenticated: status === "authenticated", login, logout, updateUser }),
+    [user, status, sessionError, login, logout, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

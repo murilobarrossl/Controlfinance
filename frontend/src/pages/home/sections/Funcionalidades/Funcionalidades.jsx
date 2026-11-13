@@ -21,7 +21,7 @@ const GRUPOS = [
     itens: [
       {
         titulo: "Sincronização bancária",
-        descricao: "Conexão via Open Finance com suas contas e cartões, atualizada automaticamente quando o banco tem dados novos",
+        descricao: "Conexão via Open Finance com suas contas e cartões",
         Icon: SyncIcon,
       },
       {

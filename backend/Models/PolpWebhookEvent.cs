@@ -19,7 +19,7 @@ public class PolpWebhookEvent
 {
     public const int EventMaxLength = 64;
     public const int ResourceMaxLength = 64;
-    public const int ResourceIdMaxLength = 64;
+    public const int ResourceIdMaxLength = 160;
     public const int QueryParametersMaxLength = 1024;
     public const int DedupKeyMaxLength = 64;
     public const int LastErrorMaxLength = 500;

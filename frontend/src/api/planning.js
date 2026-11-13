@@ -51,3 +51,17 @@ export const updateGoalProgress = (id, currentAmount) =>
   apiFetch(`/planning/goals/${id}/progress`, { method: "PUT", body: JSON.stringify({ currentAmount }) });
 
 export const deleteGoal = (id) => apiFetch(`/planning/goals/${id}`, { method: "DELETE" });
+
+export const setReserveAccount = (bankAccountId) =>
+  apiFetch("/planning/reserve/account", { method: "PUT", body: JSON.stringify({ bankAccountId }) });
+
+export const setInvestmentRate = (accountId, { kind, value, incomeTaxExempt }) =>
+  apiFetch(`/planning/investments/${accountId}/rate`, {
+    method: "PUT",
+    body: JSON.stringify({ kind, value, incomeTaxExempt }),
+  });
+
+export const deleteInvestmentRate = (accountId) =>
+  apiFetch(`/planning/investments/${accountId}/rate`, { method: "DELETE" });
+
+export const getReferenceRates = ({ signal } = {}) => apiFetch("/market/reference-rates", { signal });

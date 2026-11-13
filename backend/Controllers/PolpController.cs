@@ -157,6 +157,12 @@ public class PolpController(
             return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível iniciar a conexão com o banco." });
         }
 
+        if (created.Id == Guid.Empty || created.InstitutionId != institutionId ||
+            (created.ClientUserId is not null && created.ClientUserId != UserId.ToString()))
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível validar a conexão com o banco." });
+        if (await RemovedPolpResources.IsRemovedAsync(db, created.Id, ct))
+            return Conflict(new { message = "A autorização anterior está sendo revogada. Aguarde antes de conectar novamente." });
+
         // avoidDuplicates pode devolver um consentimento que já temos (mesmo id): reaproveita a
         // linha local em vez de violar o índice único.
         var localIntegration = await db.PolpIntegrations
@@ -164,8 +170,29 @@ public class PolpController(
         // Linha em DISCONNECT_PENDING está sendo apagada e o consentimento revogado: reativá-la
         // traria de volta uma conexão que o usuário mandou desfazer.
         if (localIntegration is not null
-            && (localIntegration.UserId != UserId || localIntegration.Status == PolpDisconnectService.PendingStatus))
+            && (localIntegration.UserId != UserId || localIntegration.InstitutionId != institutionId ||
+                localIntegration.Status is "DISCONNECT_PENDING" or "REVOKED" or "REJECTED" or "EXPIRED"))
             return Conflict(new { message = "Não foi possível iniciar a conexão com o banco." });
+
+        // avoidDuplicates devolve o consentimento antigo mesmo sem todos os produtos.
+        if (!PolpService.HasAllRequestedProducts(created.Products)
+            && created.Status is "AUTHORISED" or "AWAITING_AUTHORIZATION"
+            && created.CreatedAt is { } consentCreatedAt && consentCreatedAt.ToUniversalTime() < DateTime.UtcNow.AddMinutes(-5))
+        {
+            if (created.ClientUserId != UserId.ToString())
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível validar a conexão com o banco." });
+            try
+            {
+                var recreated = await polp.RecreateConsentAsync(created.Id, ct);
+                if (recreated.Id != created.Id || recreated.InstitutionId != institutionId || recreated.ClientUserId != UserId.ToString())
+                    return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível validar a conexão com o banco." });
+                created = recreated;
+            }
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
+            {
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível iniciar a conexão com o banco." });
+            }
+        }
 
         var institutionName = created.Institution?.Name ?? localIntegration?.InstitutionName
             ?? await institutionNames.FindAsync(institutionId, ct);
@@ -181,6 +208,7 @@ public class PolpController(
                 Status = created.Status,
                 ExecutionStatus = created.ExecutionStatus,
                 InstitutionName = institutionName,
+                ConsentProductsJson = PolpConsentMetadataService.SerializeProducts(created.Products),
                 UpdatedAt = DateTime.UtcNow
             };
             db.PolpIntegrations.Add(localIntegration);
@@ -197,28 +225,41 @@ public class PolpController(
             Version = LegalDocuments.BankConnectionNoticeVersion,
             Reference = institutionId.ToString()
         });
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException) when (!reused)
+        {
+            // avoidDuplicates can return the same remote id to concurrent requests on
+            // different nodes. The unique index wins; never create a second local binding.
+            db.ChangeTracker.Clear();
+            var existing = await db.PolpIntegrations.AsNoTracking()
+                .SingleOrDefaultAsync(p => p.PolpIntegrationId == created.Id && p.UserId == UserId && p.InstitutionId == institutionId, ct);
+            if (existing is null) throw;
+            return Conflict(new { message = "Esta conexão já está em andamento. Acompanhe a autorização existente.", integrationId = existing.Id, status = existing.Status });
+        }
 
         if (reused)
         {
             var now = DateTime.UtcNow;
             var updated = await db.PolpIntegrations
-                .Where(p => p.Id == localIntegration.Id && p.Status != PolpDisconnectService.PendingStatus)
+                .Where(p => p.Id == localIntegration.Id && p.UserId == UserId && p.InstitutionId == institutionId
+                    && p.Status == localIntegration.Status && p.UpdatedAt == localIntegration.UpdatedAt)
                 .ExecuteUpdateAsync(u => u
                     .SetProperty(p => p.Status, created.Status)
                     .SetProperty(p => p.ExecutionStatus, created.ExecutionStatus)
+                    .SetProperty(p => p.ConsentProductsJson, PolpConsentMetadataService.SerializeProducts(created.Products))
                     .SetProperty(p => p.InstitutionName, institutionName)
                     .SetProperty(p => p.UpdatedAt, now), ct);
             if (updated == 0)
                 return Conflict(new { message = "Não foi possível iniciar a conexão com o banco." });
         }
 
-        // avoidDuplicates pode devolver um consentimento já desconectado: sem limpar a marca, os
-        // avisos da nova conexão seriam ignorados como restos da anterior.
-        await RemovedPolpResources.ClearAsync(db, [created.Id], ct);
+        // A tombstoned provider id is never reused; delayed events must remain discarded.
 
         if (created.Status == "AUTHORISED" && !localIntegration.SyncedLocally)
-            await EnqueueBackfillAsync(created.Id, ct);
+            await EnqueueBackfillAsync(created.Id, localIntegration.Id, ct);
 
         return Ok(new
         {
@@ -237,7 +278,7 @@ public class PolpController(
         // conta continua com sua própria visão de dados, nada é somado entre elas.
         var accounts = await db.BankAccounts
             .Where(b => b.UserId == UserId && b.IsActive)
-            .Select(b => new { b.Id, b.Name, b.Balance, b.BankCode, b.PolpIntegrationId, b.PolpAccountId, b.PolpAccountType, b.PolpAccountSubtype })
+            .Select(b => new { b.Id, b.Name, b.Balance, b.BankCode, b.PolpIntegrationId, b.PolpAccountId, b.PolpAccountType, b.PolpAccountSubtype, b.Number })
             .ToListAsync(ct);
 
         // BankAccount.PolpIntegrationId guarda o id do consentimento na Polp, mas o frontend
@@ -245,7 +286,7 @@ public class PolpController(
         // vez em vez de uma query por conta.
         var localByRemoteId = await db.PolpIntegrations
             .Where(p => p.UserId == UserId)
-            .ToDictionaryAsync(p => p.PolpIntegrationId, p => new { p.Id, p.LastSyncedAt, p.EnrichmentPending }, ct);
+            .ToDictionaryAsync(p => p.PolpIntegrationId, p => new { p.Id, p.LastSyncedAt, p.EnrichmentPending, p.Status, p.CreatedAt }, ct);
 
         var result = accounts.Select(a =>
         {
@@ -259,12 +300,15 @@ public class PolpController(
             {
                 a.Id,
                 a.Name,
+                a.Number,
                 Balance = a.PolpAccountId.HasValue && isCreditCard ? (decimal?)null : a.Balance,
                 a.BankCode,
                 a.PolpIntegrationId,
                 localIntegrationId = local?.Id,
                 lastSyncedAt = local?.LastSyncedAt,
                 enrichmentPending = local?.EnrichmentPending == true,
+                connectionStatus = local?.Status,
+                connectedAt = local?.CreatedAt,
                 // Só contas (não cartões) têm saldo que a Polp consegue consultar na hora.
                 canSyncBalance = a.PolpAccountId.HasValue && !isCreditCard,
                 // Tipo cru da Polp + a mesma decisão de "é cartão" que Cartões/Dashboard já usam
@@ -303,10 +347,11 @@ public class PolpController(
             try
             {
                 remote = await polp.GetConsentAsync(local.PolpIntegrationId, ct);
+                PolpConsentMetadataService.ValidatePrimary(local, remote);
                 institutionName = remote.Institution?.Name ?? local.InstitutionName
                     ?? await institutionNames.FindAsync(local.InstitutionId, ct);
             }
-            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct) || ex is PolpPermanentException)
             {
                 return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível consultar o status da conexão." });
             }
@@ -316,10 +361,11 @@ public class PolpController(
             var enrichmentPending = PolpSyncService.HasEnrichmentPending(remote.Flags);
             var now = DateTime.UtcNow;
             var updated = await db.PolpIntegrations
-                .Where(p => p.Id == local.Id && p.Status != PolpDisconnectService.PendingStatus)
+                .Where(p => p.Id == local.Id && p.UserId == UserId && p.Status == "AWAITING_AUTHORIZATION" && p.UpdatedAt == local.UpdatedAt)
                 .ExecuteUpdateAsync(u => u
                     .SetProperty(p => p.Status, remote.Status)
                     .SetProperty(p => p.ExecutionStatus, remote.ExecutionStatus)
+                    .SetProperty(p => p.ConsentProductsJson, PolpConsentMetadataService.SerializeProducts(remote.Products))
                     .SetProperty(p => p.EnrichmentPending, enrichmentPending)
                     .SetProperty(p => p.InstitutionName, institutionName)
                     .SetProperty(p => p.UpdatedAt, now), ct);
@@ -328,10 +374,15 @@ public class PolpController(
             local.Status = remote.Status;
             local.ExecutionStatus = remote.ExecutionStatus;
             urlToAuthenticate = remote.UrlToAuthenticate;
-            error = remote.ErrorMessage;
+            error = remote.Status == "REJECTED" ? "A autorização foi recusada pelo banco." : null;
 
             if (local.Status == "AUTHORISED" && !local.SyncedLocally)
-                await EnqueueBackfillAsync(local.PolpIntegrationId, ct);
+                await EnqueueBackfillAsync(local.PolpIntegrationId, local.Id, ct);
+            else if (local.Status == "AUTHORISED")
+            {
+                await inbox.EnqueueAsync(new(PolpInternalEvents.ConsentMetadata, "consents", local.PolpIntegrationId.ToString("D"), null), ct);
+                await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", local.Id.ToString("D"), null), ct);
+            }
         }
 
         // Mapeia os status da Polp para os estados que o frontend já conhece.
@@ -343,6 +394,7 @@ public class PolpController(
             "AUTHORISED" => "active",
             "REJECTED" => "login_error",
             "EXPIRED" => "outdated",
+            "REVOKED" => "revoked",
             _ => "unknown"
         };
 
@@ -370,6 +422,8 @@ public class PolpController(
 
         if (account?.PolpAccountId is not Guid remoteId || CreditCardAccountDetector.LooksLikeCreditCard(account))
             return NotFound();
+        if (!await db.PolpIntegrations.AnyAsync(p => p.UserId == UserId && p.PolpIntegrationId == account.PolpIntegrationId && p.Status == "AUTHORISED", ct))
+            return NotFound();
 
         if (!TryReserveBalanceSync(account.Id, out var retryAfter))
             return BalanceSyncTooSoon(retryAfter);
@@ -386,8 +440,24 @@ public class PolpController(
 
         if (remote.Balance?.AvailableAmount?.Value is { } balance)
         {
+            if (remote.Id != remoteId || remote.ConsentId != account.PolpIntegrationId)
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível validar o saldo recebido." });
+            var updated = await db.BankAccounts.Where(b => b.Id == account.Id && b.UserId == UserId
+                && b.PolpAccountId == remoteId && b.PolpIntegrationId == account.PolpIntegrationId
+                && db.PolpIntegrations.Any(p => p.UserId == UserId && p.PolpIntegrationId == b.PolpIntegrationId && p.Status == "AUTHORISED"))
+                .ExecuteUpdateAsync(s => s.SetProperty(b => b.Balance, balance), ct);
+            if (updated == 0) return NotFound();
             account.Balance = balance;
-            await db.SaveChangesAsync(ct);
+        }
+        if (remote.Balance?.HasReservedBalance is { } hasReserved)
+        {
+            if (remote.Id != remoteId || remote.ConsentId != account.PolpIntegrationId)
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível validar o saldo recebido." });
+            var updated = await db.BankAccounts.Where(b => b.Id == account.Id && b.UserId == UserId
+                && db.PolpIntegrations.Any(p => p.UserId == UserId && p.PolpIntegrationId == b.PolpIntegrationId && p.Status == "AUTHORISED"))
+                .ExecuteUpdateAsync(s => s.SetProperty(b => b.HasReservedBalance, hasReserved), ct);
+            if (updated > 0 && hasReserved)
+                await inbox.EnqueueAsync(new(PolpInternalEvents.ReservedBalances, "accounts", remoteId.ToString(), null, PolpInboxPriority.Low), ct);
         }
 
         return Ok(new { balance = account.Balance });
@@ -400,7 +470,7 @@ public class PolpController(
     {
         var integration = await db.PolpIntegrations
             .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus, ct);
+            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == UserId && p.Status == "AUTHORISED", ct);
         if (integration is null) return NotFound();
 
         var accounts = (await db.BankAccounts
@@ -425,7 +495,27 @@ public class PolpController(
             try
             {
                 var remote = await polp.SyncBalanceAsync(account.PolpAccountId!.Value, ct);
-                if (remote.Balance?.AvailableAmount?.Value is { } balance) account.Balance = balance;
+                if (remote.Id != account.PolpAccountId || remote.ConsentId != integration.PolpIntegrationId)
+                {
+                    failed++;
+                    continue;
+                }
+                if (remote.Balance?.AvailableAmount?.Value is { } balance)
+                {
+                    var updated = await db.BankAccounts.Where(b => b.Id == account.Id && b.UserId == UserId
+                        && b.PolpIntegrationId == integration.PolpIntegrationId && b.PolpAccountId == remote.Id
+                        && db.PolpIntegrations.Any(p => p.Id == integration.Id && p.UserId == UserId && p.Status == "AUTHORISED"))
+                        .ExecuteUpdateAsync(s => s.SetProperty(b => b.Balance, balance), ct);
+                    if (updated == 0) failed++;
+                }
+                if (remote.Balance?.HasReservedBalance is { } hasReserved)
+                {
+                    var updated = await db.BankAccounts.Where(b => b.Id == account.Id && b.UserId == UserId
+                        && db.PolpIntegrations.Any(p => p.Id == integration.Id && p.UserId == UserId && p.Status == "AUTHORISED"))
+                        .ExecuteUpdateAsync(s => s.SetProperty(b => b.HasReservedBalance, hasReserved), ct);
+                    if (updated > 0 && hasReserved)
+                        await inbox.EnqueueAsync(new(PolpInternalEvents.ReservedBalances, "accounts", remote.Id.ToString(), null, PolpInboxPriority.Low), ct);
+                }
             }
             catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
             {
@@ -436,7 +526,6 @@ public class PolpController(
         if (failed == due.Count)
             return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível atualizar o saldo agora." });
 
-        await db.SaveChangesAsync(ct);
         return Ok(new { updated = due.Count - failed, failed, skipped = accounts.Count - due.Count });
     }
 
@@ -488,8 +577,13 @@ public class PolpController(
 
     // Sandbox (e consentimento reaproveitado) já nasce AUTHORISED e a Polp pode não mandar o
     // webhook "consents": o backfill vai para a inbox e o worker tenta até as contas existirem.
-    private Task EnqueueBackfillAsync(Guid consentId, CancellationToken ct) =>
-        inbox.EnqueueAsync(new PolpInboxEvent(PolpInternalEvents.Backfill, "consents", consentId.ToString("D"), null), ct);
+    private async Task EnqueueBackfillAsync(Guid consentId, Guid integrationId, CancellationToken ct)
+    {
+        await inbox.EnqueueAsync(new(PolpInternalEvents.Backfill, "consents", consentId.ToString("D"), null), ct);
+        // Independent inbox items: an account/card failure must not prevent investment discovery.
+        await inbox.EnqueueAsync(new(PolpInternalEvents.ConsentMetadata, "consents", consentId.ToString("D"), null), ct);
+        await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", integrationId.ToString("D"), null), ct);
+    }
 
     private static string ResolveTextColor(string? hexColor)
     {

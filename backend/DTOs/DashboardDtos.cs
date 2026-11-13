@@ -186,13 +186,26 @@ public record InstallmentDto(
 
 // ── DASHBOARD ─────────────────────────────────────────
 public record DashboardSummaryDto(
-    BankAccountDto ActiveAccount,
+    DashboardAccountDto Account,
     decimal TotalIncome,
     decimal TotalExpense,
     IEnumerable<TransactionDto> PendingTransactions,
     IEnumerable<CategoryExpenseDto> CategoryExpenses,
     RecognizedCardDto? ActiveCard
 );
+
+// Kind: Checking | Payment | Savings | CreditCard. BalanceIncomplete: conta sincronizada (não
+// cartão) cujo saldo a Polp ainda não mandou.
+public record DashboardAccountDto(Guid Id, string Name, string Kind, decimal? Balance, bool BalanceIncomplete)
+{
+    public static DashboardAccountDto FromEntity(BankAccount b)
+    {
+        var kind = AccountScope.KindOf(b);
+        var balance = BankAccountDto.FromEntity(b).Balance;
+        return new(b.Id, b.Name, kind.ToString(), balance,
+            b.PolpAccountId.HasValue && kind != AccountScopeKind.CreditCard && balance is null);
+    }
+}
 
 public record CategoryExpenseDto(string CategoryName, decimal Amount, decimal Percentage);
 
@@ -223,4 +236,7 @@ public record RecognizedCardDto(
 )
 {
     public string? InvoiceStatus { get; init; }
+    // Identity of the connected institution, not the local connection/account ID.
+    public Guid? IssuerInstitutionId { get; init; }
+    public string? OriginalProductName { get; init; }
 }

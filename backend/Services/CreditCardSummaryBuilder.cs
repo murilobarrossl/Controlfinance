@@ -28,7 +28,7 @@ public static class CreditCardSummaryBuilder
 
         var connections = (await db.PolpIntegrations
                 .Where(p => p.UserId == userId)
-                .Select(p => new { p.Id, p.PolpIntegrationId, p.InstitutionName, p.LastSyncedAt })
+                .Select(p => new { p.Id, p.PolpIntegrationId, p.InstitutionId, p.InstitutionName, p.LastSyncedAt })
                 .ToListAsync(ct))
             .GroupBy(p => p.PolpIntegrationId)
             .ToDictionary(g => g.Key, g => g.First());
@@ -68,7 +68,11 @@ public static class CreditCardSummaryBuilder
                 InstitutionColor: BankBrandColors.Find(connection?.InstitutionName) ?? BankBrandColors.Find(account.Name),
                 ConnectionId: connection?.Id,
                 BankName: connection?.InstitutionName,
-                ConnectionLastSyncedAt: connection?.LastSyncedAt));
+                ConnectionLastSyncedAt: connection?.LastSyncedAt)
+            {
+                IssuerInstitutionId = connection?.InstitutionId,
+                OriginalProductName = account.PolpOriginalName,
+            });
         }
 
         foreach (var card in manualCards)

@@ -135,10 +135,6 @@ export default function RegisterPage() {
           <h1 className="register__title">
             Crie sua conta e comece a planejar
           </h1>
-          <p className="register__subtitle">
-            Em alguns cliques você terá acesso ao seu painel
-            financeiro.
-          </p>
         </div>
       </aside>
 
@@ -152,7 +148,6 @@ export default function RegisterPage() {
                 Entrar agora
               </Link>
             </p>
-            <p className="register__required-note">Todos os campos são obrigatórios.</p>
           </div>
 
           <div className="register__group">

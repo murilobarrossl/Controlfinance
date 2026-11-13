@@ -33,7 +33,7 @@ export default function CategoryDonutChart({
               paddingAngle={data.length > 1 ? 2 : 0}
               stroke="none"
               isAnimationActive={false}
-              onClick={onSliceClick ? (entry) => onSliceClick(entry.name) : undefined}
+              onClick={onSliceClick ? (entry) => onSliceClick(entry.name, entry.payload ?? entry) : undefined}
               cursor={onSliceClick ? "pointer" : "default"}
             >
               {data.map((entry, index) => (
@@ -54,7 +54,7 @@ export default function CategoryDonutChart({
         {centerLabel && (
           <div className="category-donut__center">
             <span className="category-donut__center-value">{centerLabel}</span>
-            <span className="category-donut__center-label">{centerCaption}</span>
+            {centerCaption && <span className="category-donut__center-label">{centerCaption}</span>}
           </div>
         )}
       </div>
@@ -64,8 +64,8 @@ export default function CategoryDonutChart({
           {data.map((entry, index) => {
             const percent = total > 0 ? (entry.value / total) * 100 : 0;
             const color = colors[index];
-            return (
-              <li key={entry.name ?? index} className="category-donut__legend-item">
+            const content = (
+              <>
                 <div className="category-donut__legend-row">
                   <span className="category-donut__legend-dot" style={{ backgroundColor: color }} />
                   <span className="category-donut__legend-name" title={entry.name}>
@@ -77,6 +77,21 @@ export default function CategoryDonutChart({
                 <div className="category-donut__legend-bar" aria-hidden="true">
                   <div style={{ width: `${percent}%`, backgroundColor: color }} />
                 </div>
+              </>
+            );
+            return (
+              <li key={entry.name ?? index}>
+                {onSliceClick ? (
+                  <button
+                    type="button"
+                    className="category-donut__legend-item category-donut__legend-item--button"
+                    onClick={() => onSliceClick(entry.name, entry)}
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <div className="category-donut__legend-item">{content}</div>
+                )}
               </li>
             );
           })}

@@ -14,13 +14,6 @@
   font-size: 0.9rem;
 }
 
-.categorias__section-hint {
-  color: var(--color-text-secondary);
-  font-size: 0.85rem;
-  line-height: 1.5;
-  margin: -0.5rem 0 1.25rem;
-}
-
 .categorias__grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

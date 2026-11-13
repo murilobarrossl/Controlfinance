@@ -5,7 +5,7 @@ import usePageTitle from "../../hooks/usePageTitle.js";
 // Descreve o serviço como ele existe hoje. Itens [PENDENTE] dependem de informação que ainda não
 // existe (dados da empresa, condições comerciais). Mudou o texto, muda a versão em legal/versions.js e em
 // backend/Services/LegalDocuments.cs.
-export const TERMS_UPDATED_AT = `6 de novembro de 2026 (versão ${TERMS_VERSION})`;
+export const TERMS_UPDATED_AT = `12 de novembro de 2026 (versão ${TERMS_VERSION})`;
 
 export default function TermosDeUso() {
   usePageTitle("Termos de uso");
@@ -29,14 +29,14 @@ export function TermosDeUsoTexto() {
       <h2>1. O que é o Control Finance</h2>
       <p>
         Uma ferramenta de organização e visualização financeira para pessoas físicas e pequenos negócios. Você conecta seus
-        bancos pelo Open Finance e o Control Finance importa automaticamente contas, saldos, extratos e dados de cartões. Não
+        bancos pelo Open Finance e o Control Finance importa automaticamente contas, saldos, extratos, dados de cartões, investimentos e caixinhas (saldos reservados). Não
         existe cadastro manual de contas ou transações: você pode ajustar o nome e a categoria das transações importadas e
         cadastrar cartões e parcelamentos que não vieram de um banco conectado.
       </p>
       <ul>
         <li>O Control Finance <strong>não é instituição financeira nem de pagamento</strong>: não guarda dinheiro, não faz pagamentos ou transferências e não concede crédito.</li>
         <li>O Control Finance <strong>não é participante do Open Finance</strong>: a conexão com bancos é feita por um fornecedor (Polp Tecnologia) que usa uma instituição participante.</li>
-        <li>O Control Finance <strong>não faz recomendação nem consultoria de investimentos</strong>. Textos sobre modalidades de investimento são explicativos e genéricos, e o simulador de financiamento é uma estimativa.</li>
+        <li>O Control Finance <strong>não faz recomendação nem consultoria de investimentos</strong>. Textos sobre modalidades de investimento são explicativos e genéricos. Projeções de rendimento usam só regras oficiais ou a taxa informada por você e são estimativas, assim como o simulador de financiamento.</li>
       </ul>
 
       <h2>2. Cadastro</h2>
@@ -51,7 +51,7 @@ export function TermosDeUsoTexto() {
         <li>Conectar um banco é opcional. A autorização é dada por você no ambiente do próprio banco, pelo Open Finance.</li>
         <li>Os dados exibidos são os informados pelo banco, por meio do fornecedor, na última sincronização. A sincronização é automática: os dados são atualizados quando há informações novas do banco, não em tempo real, e o painel mostra quando foi a última sincronização. Dados podem chegar incompletos ou atrasados quando o banco ou o fornecedor não os enviam.</li>
         <li>A conexão depende do fornecedor de integração e dos bancos. Ela pode ficar indisponível temporariamente; nesse caso, os dados já importados continuam visíveis, mas não são atualizados.</li>
-        <li>Você pode desconectar um banco a qualquer momento no painel. Ao desconectar, apagamos do Control Finance os dados que vieram dele e pedimos ao fornecedor que exclua a conexão. Você também pode revogar a autorização no aplicativo do banco.</li>
+        <li>Você pode desconectar um banco a qualquer momento no painel. Ao desconectar, apagamos do Control Finance os dados que vieram dele, inclusive investimentos e caixinhas, e pedimos ao fornecedor que exclua a conexão. Você também pode revogar a autorização no aplicativo do banco.</li>
       </ul>
 
       <h2>4. Uso permitido</h2>

@@ -698,3 +698,31 @@ public class PolpReconciliationTests
         Assert.Equal(t.Clock.UtcNow.Value.UtcDateTime, db.PolpIntegrations.Single().LastSyncedAt);
     }
 }
+
+public class PolpAccountNameTests
+{
+    [Fact]
+    public async Task Sync_renomeia_so_nome_gerado_e_preserva_nome_editado()
+    {
+        using var t = new TestDb();
+        var integration = SyncHarness.AddIntegration(t, synced: true);
+        var generated = SyncHarness.AddLinked(t, integration, Guid.NewGuid(), card: false);
+        var edited = SyncHarness.AddLinked(t, integration, Guid.NewGuid(), card: false);
+        generated.Name = "Banco · Conta corrente";
+        edited.Name = "Conta do salário";
+        t.Db.SaveChanges();
+
+        var polp = new ScriptedPolp();
+        foreach (var id in new[] { generated.PolpAccountId, edited.PolpAccountId })
+        {
+            var remote = ScriptedPolp.Account(id);
+            remote.ConsentId = integration.PolpIntegrationId;
+            polp.Accounts.Add(remote);
+        }
+        await SyncHarness.Processor(t, polp).Process("accounts", integration.PolpIntegrationId);
+
+        await using var db = t.NewContext();
+        Assert.Equal("Banco Teste · Conta corrente", db.BankAccounts.Single(b => b.Id == generated.Id).Name);
+        Assert.Equal("Conta do salário", db.BankAccounts.Single(b => b.Id == edited.Id).Name);
+    }
+}

@@ -46,6 +46,10 @@ appsettings.Local.json
 # Auditoria jurídica interna, não publicada no repositório
 AUDITORIA_JURIDICA_CONTROL_FINANCE.md
 
+# Notas de trabalho da integração de investimentos
+/POLP_*.md
+/INVESTIMENTOS_INTERFACE_REAL.md
+
 # Cópia local da solution gerada pelo editor; a versionada é Controlfinance.sln
 Controlfinance-1.sln
 

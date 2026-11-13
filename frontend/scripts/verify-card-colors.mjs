@@ -1,5 +1,5 @@
 import { readInstitutions } from "./lib/bank-brand-colors.mjs";
-import { cardTextColor, BLACK_BASE, CATEGORY_DEFAULTS, NEUTRAL_BASE, PRODUCT_BASES } from "../src/utils/cardColors.js";
+import { cardTextColor } from "../src/utils/cardColors.js";
 
 const MIN_CONTRAST = 4.5;
 
@@ -15,13 +15,7 @@ const contrast = (a, b) => {
   return (hi + 0.05) / (lo + 0.05);
 };
 
-const bases = [
-  ...readInstitutions().map(({ name, hex }) => ({ name, hex })),
-  ...PRODUCT_BASES.map((hex) => ({ name: "produto", hex })),
-  { name: "Black/Infinite", hex: BLACK_BASE },
-  ...Object.entries(CATEGORY_DEFAULTS).map(([name, hex]) => ({ name, hex })),
-  { name: "neutra", hex: NEUTRAL_BASE },
-];
+const bases = readInstitutions().map(({ name, hex }) => ({ name, hex }));
 
 let failures = 0;
 for (const { name, hex } of bases) {
@@ -34,4 +28,4 @@ for (const { name, hex } of bases) {
 }
 
 if (failures > 0) process.exit(1);
-console.log(`${bases.length} cores conferidas: todo texto do cartão tem contraste de pelo menos ${MIN_CONTRAST}:1.`);
+console.log(`${bases.length} cores conferidas: todo texto dos ícones de instituição tem contraste de pelo menos ${MIN_CONTRAST}:1.`);

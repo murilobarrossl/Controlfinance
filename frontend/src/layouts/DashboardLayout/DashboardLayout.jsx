@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { AccountProvider, useAccount } from "../../context/AccountContext.jsx";
 import { DashboardHeaderSlotContext } from "../../context/DashboardHeaderContext.jsx";
 import { logout as logoutRequest } from "../../api/auth.js";
 import ErrorBoundary from "../../components/ErrorBoundary/ErrorBoundary.jsx";
+import { PageLoading } from "../../pages/errors/ErrorPage.jsx";
 import NavUserMenu from "../../components/dashboard/NavUserMenu/NavUserMenu.jsx";
 import AccountSwitcher from "../../components/dashboard/AccountSwitcher/AccountSwitcher.jsx";
 import BalanceSyncButton from "../../components/dashboard/BalanceSyncButton/BalanceSyncButton.jsx";
@@ -38,10 +39,15 @@ function DashboardLayoutContent() {
   const { user, logout } = useAuth();
   const {
     accounts,
-    connectors,
     accountsStatus,
-    effectiveAccountId,
-    setSelectedAccountId,
+    scopeGroups,
+    connections,
+    connectionsStatus,
+    connectionScopeGroups,
+    effectiveConnectionScope,
+    setSelectedConnection,
+    effectiveScope,
+    setSelectedScope,
     disconnectConnection,
     removeManualAccount,
     bumpDataRefresh,
@@ -57,7 +63,8 @@ function DashboardLayoutContent() {
 
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   const isCardsTab = path === CARDS_PATH;
-  const showToolbar = isCardsTab || ACCOUNT_SCOPED_PATHS.has(path);
+  const isInvestmentsTab = path === "/dashboard/investimentos";
+  const showToolbar = isCardsTab || isInvestmentsTab || ACCOUNT_SCOPED_PATHS.has(path);
 
   // No desktop a barra fica na linha do título da aba, sobreposta ao topo da página; a largura
   // real dela (que muda com o nome da conta ou o seletor de Cartões) vira o espaço reservado ao
@@ -217,20 +224,22 @@ function DashboardLayoutContent() {
           <div ref={toolbarRef} className="dashboard-toolbar">
             {isCardsTab ? (
               <div ref={setHeaderSlot} className="dashboard-toolbar__slot" />
+            ) : isInvestmentsTab ? (
+              connectionsStatus === "loading" && connections.length === 0 ? <Skeleton width="12rem" height="2.5rem" />
+                : connections.length > 0 && <AccountSwitcher groups={connectionScopeGroups} activeScope={effectiveConnectionScope} onSelect={setSelectedConnection} />
             ) : accountsStatus === "loading" && accounts.length === 0 ? (
               <Skeleton width="12rem" height="2.5rem" />
             ) : (
               <AccountSwitcher
-                accounts={accounts}
-                activeAccountId={effectiveAccountId}
-                connectors={connectors}
-                onSelect={setSelectedAccountId}
+                groups={scopeGroups}
+                activeScope={effectiveScope ?? (scopeGroups.length > 0 && effectiveConnectionScope.connectionId ? effectiveConnectionScope : null)}
+                onSelect={setSelectedScope}
                 onDisconnect={disconnectConnection}
                 onRemoveManual={removeManualAccount}
                 onAccountCreated={bumpDataRefresh}
               />
             )}
-            <BalanceSyncButton />
+            {!isInvestmentsTab && <BalanceSyncButton />}
           </div>
         )}
         {notice && (
@@ -242,8 +251,10 @@ function DashboardLayoutContent() {
           </div>
         )}
         <DashboardHeaderSlotContext.Provider value={isCardsTab ? headerSlot : null}>
-          <ErrorBoundary>
-            <Outlet />
+          <ErrorBoundary embedded resetKey={pathname}>
+            <Suspense fallback={<PageLoading embedded />}>
+              <Outlet />
+            </Suspense>
           </ErrorBoundary>
         </DashboardHeaderSlotContext.Provider>
       </main>

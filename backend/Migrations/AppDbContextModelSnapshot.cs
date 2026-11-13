@@ -83,6 +83,9 @@ namespace ControlFinance.API.Migrations
                     b.Property<int?>("DueDay")
                         .HasColumnType("integer");
 
+                    b.Property<bool?>("HasReservedBalance")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("InvoiceDueDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -113,6 +116,10 @@ namespace ControlFinance.API.Migrations
 
                     b.Property<Guid?>("PolpIntegrationId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("PolpOriginalName")
+                        .HasColumnType("text")
+                        .HasColumnName("PolpOriginalNameEncrypted");
 
                     b.Property<string>("ProductType")
                         .HasColumnType("text");
@@ -247,17 +254,175 @@ namespace ControlFinance.API.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BankAccountId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("CurrentAmount")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("CurrentAmountEncrypted");
+
+                    b.Property<string>("ExcludedAutoReserveIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ImportedInvestmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ImportedReservedBalanceId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("UserId");
 
-                    b.ToTable("EmergencyReserves");
+                    b.HasIndex("BankAccountId");
+
+                    b.HasIndex("ImportedInvestmentId");
+
+                    b.HasIndex("ImportedReservedBalanceId");
+
+                    b.ToTable("EmergencyReserves", t =>
+                        {
+                            t.HasCheckConstraint("CK_EmergencyReserve_OneResource", "(\"BankAccountId\" IS NULL OR \"ImportedInvestmentId\" IS NULL) AND (\"BankAccountId\" IS NULL OR \"ImportedReservedBalanceId\" IS NULL) AND (\"ImportedInvestmentId\" IS NULL OR \"ImportedReservedBalanceId\" IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.ImportedInvestment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("Family")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("FirstObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IdentityAvailabilityJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("IdentityAvailabilityEncrypted");
+
+                    b.Property<string>("IdentityJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("IdentityEncrypted");
+
+                    b.Property<Guid>("IntegrationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("LastObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text")
+                        .HasColumnName("NameEncrypted");
+
+                    b.Property<string>("ProductType")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime?>("ProviderUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SourceConsentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Family", "ExternalId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "FirstObservedAt", "Id");
+
+                    b.HasIndex("UserId", "IntegrationId", "Id");
+
+                    b.ToTable("ImportedInvestments");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.ImportedReservedBalance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AvailabilityJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("AvailabilityEncrypted");
+
+                    b.Property<Guid>("BankAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTime>("FirstObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("IntegrationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("LastObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text")
+                        .HasColumnName("NameEncrypted");
+
+                    b.Property<string>("ProvenanceJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ProvenanceEncrypted");
+
+                    b.Property<DateTime?>("ProviderUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReservedIdentification")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<Guid>("SourceConsentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ValuesJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ValuesEncrypted");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BankAccountId", "ExternalId")
+                        .IsUnique();
+
+                    b.HasIndex("BankAccountId", "ReservedIdentification")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Reserved_OriginalIdentity");
+
+                    b.HasIndex("UserId", "FirstObservedAt", "Id");
+
+                    b.HasIndex("UserId", "IntegrationId", "Id");
+
+                    b.ToTable("ImportedReservedBalances");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.Installment", b =>
@@ -320,6 +485,339 @@ namespace ControlFinance.API.Migrations
                     b.ToTable("Installments");
                 });
 
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentContract", b =>
+                {
+                    b.Property<Guid>("InvestmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AvailabilityJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("AvailabilityEncrypted");
+
+                    b.Property<DateTime>("ObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProvenanceJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ProvenanceEncrypted");
+
+                    b.Property<string>("ValuesJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ValuesEncrypted");
+
+                    b.HasKey("InvestmentId");
+
+                    b.ToTable("InvestmentContracts");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentMovement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AvailabilityJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("AvailabilityEncrypted");
+
+                    b.Property<string>("Direction")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTime>("FirstObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("InvestmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("LastObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MovementType")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ProvenanceJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ProvenanceEncrypted");
+
+                    b.Property<DateTime?>("ProviderUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("TransactionDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ValuesJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ValuesEncrypted");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvestmentId", "ExternalId")
+                        .IsUnique();
+
+                    b.HasIndex("InvestmentId", "FirstObservedAt", "Id");
+
+                    b.HasIndex("InvestmentId", "TransactionDate", "Id");
+
+                    b.ToTable("InvestmentMovements");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentPosition", b =>
+                {
+                    b.Property<Guid>("InvestmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AvailabilityJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("AvailabilityEncrypted");
+
+                    b.Property<DateTime>("ObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProvenanceJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ProvenanceEncrypted");
+
+                    b.Property<DateTime?>("ReferenceAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ValuesJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ValuesEncrypted");
+
+                    b.HasKey("InvestmentId");
+
+                    b.ToTable("InvestmentPositions");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentPositionObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("InvestmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("PayloadEncrypted");
+
+                    b.Property<DateTime?>("ReferenceAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvestmentId", "ContentHash")
+                        .IsUnique();
+
+                    b.HasIndex("InvestmentId", "ObservedAt", "Id");
+
+                    b.HasIndex("InvestmentId", "ReferenceAt", "ObservedAt", "Id")
+                        .HasDatabaseName("IX_InvObservation_Reference");
+
+                    b.ToTable("InvestmentPositionObservations");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentRateProfile", b =>
+                {
+                    b.Property<Guid>("BankAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IncomeTaxExempt")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
+                    b.HasKey("BankAccountId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("InvestmentRateProfiles");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentSyncSchedule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<Guid>("IntegrationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LastSyncAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("NextSyncAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ObservedRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Resource")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("SourceConsentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "IntegrationId");
+
+                    b.HasIndex("IntegrationId", "SourceConsentId", "Resource", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_InvSchedule_Resource");
+
+                    b.ToTable("InvestmentSyncSchedules");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentSyncState", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AuthorizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AuthorizationOperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Availability")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("Cursor")
+                        .HasColumnType("text")
+                        .HasColumnName("CursorEncrypted");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Family")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("IntegrationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<DateTime?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastFullSuccessAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PageNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ParentExternalId")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<bool>("ReplayRequested")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SeenCursorsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("SeenCursorsEncrypted");
+
+                    b.Property<Guid>("SourceConsentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("WindowQuery")
+                        .HasColumnType("text")
+                        .HasColumnName("WindowEncrypted");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "LastAttemptAt");
+
+                    b.HasIndex("UserId", "IntegrationId");
+
+                    b.HasIndex("IntegrationId", "SourceConsentId", "Family", "Kind", "ParentExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_InvSync_Stream");
+
+                    b.ToTable("InvestmentSyncStates");
+                });
+
             modelBuilder.Entity("ControlFinance.API.Models.PendingProviderDeletion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -340,11 +838,31 @@ namespace ControlFinance.API.Migrations
                     b.ToTable("PendingProviderDeletions");
                 });
 
+            modelBuilder.Entity("ControlFinance.API.Models.PolpApiCooldown", b =>
+                {
+                    b.Property<string>("ClientKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("RetryAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ClientKey");
+
+                    b.ToTable("PolpApiCooldowns");
+                });
+
             modelBuilder.Entity("ControlFinance.API.Models.PolpIntegration", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ConsentCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConsentProductsJson")
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -385,9 +903,74 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("PolpIntegrationId")
                         .IsUnique();
 
-                    b.HasIndex("UserId");
-
                     b.ToTable("PolpIntegrations");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.PolpInvestmentAuthorization", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AuthorizationUrlExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExecutionStatus")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("InstitutionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("IntegrationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsSupplemental")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("OperationStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PolpConsentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProductsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProviderStatus")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("ProviderUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RecoveryCursor")
+                        .HasColumnType("text")
+                        .HasColumnName("RecoveryCursorEncrypted");
+
+                    b.Property<string>("ResourcesJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IntegrationId")
+                        .IsUnique();
+
+                    b.HasIndex("PolpConsentId")
+                        .IsUnique();
+
+                    b.ToTable("PolpInvestmentAuthorizations");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.PolpWebhookEvent", b =>
@@ -437,8 +1020,8 @@ namespace ControlFinance.API.Migrations
                         .HasColumnType("character varying(64)");
 
                     b.Property<string>("ResourceId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -511,6 +1094,38 @@ namespace ControlFinance.API.Migrations
                     b.HasKey("PolpId");
 
                     b.ToTable("RemovedPolpResources");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.ReservedBalanceObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("ObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("PayloadEncrypted");
+
+                    b.Property<Guid>("ReservedBalanceId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReservedBalanceId", "ContentHash")
+                        .IsUnique();
+
+                    b.HasIndex("ReservedBalanceId", "ObservedAt", "Id");
+
+                    b.ToTable("ReservedBalanceObservations");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.RevokedToken", b =>
@@ -783,6 +1398,23 @@ namespace ControlFinance.API.Migrations
 
             modelBuilder.Entity("ControlFinance.API.Models.EmergencyReserve", b =>
                 {
+                    b.HasOne("ControlFinance.API.Models.BankAccount", null)
+                        .WithMany()
+                        .HasForeignKey("BankAccountId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ControlFinance.API.Models.ImportedInvestment", null)
+                        .WithMany()
+                        .HasForeignKey("ImportedInvestmentId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_Reserve_ImportedInvestment");
+
+                    b.HasOne("ControlFinance.API.Models.ImportedReservedBalance", null)
+                        .WithMany()
+                        .HasForeignKey("ImportedReservedBalanceId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_Reserve_ImportedBalance");
+
                     b.HasOne("ControlFinance.API.Models.User", "User")
                         .WithOne()
                         .HasForeignKey("ControlFinance.API.Models.EmergencyReserve", "UserId")
@@ -790,6 +1422,35 @@ namespace ControlFinance.API.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.ImportedInvestment", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.PolpIntegration", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "IntegrationId")
+                        .HasPrincipalKey("UserId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_Inv_Integration");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.ImportedReservedBalance", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.BankAccount", null)
+                        .WithMany()
+                        .HasForeignKey("BankAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_Reserved_Account");
+
+                    b.HasOne("ControlFinance.API.Models.PolpIntegration", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "IntegrationId")
+                        .HasPrincipalKey("UserId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_Reserved_Integration");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.Installment", b =>
@@ -809,6 +1470,83 @@ namespace ControlFinance.API.Migrations
                     b.Navigation("CreditCard");
                 });
 
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentContract", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.ImportedInvestment", null)
+                        .WithOne()
+                        .HasForeignKey("ControlFinance.API.Models.InvestmentContract", "InvestmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_InvContract_Investment");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentMovement", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.ImportedInvestment", null)
+                        .WithMany()
+                        .HasForeignKey("InvestmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_InvMovement_Investment");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentPosition", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.ImportedInvestment", null)
+                        .WithOne()
+                        .HasForeignKey("ControlFinance.API.Models.InvestmentPosition", "InvestmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_InvPosition_Investment");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentPositionObservation", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.ImportedInvestment", null)
+                        .WithMany()
+                        .HasForeignKey("InvestmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_InvObservation_Investment");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentRateProfile", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.BankAccount", null)
+                        .WithMany()
+                        .HasForeignKey("BankAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ControlFinance.API.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentSyncSchedule", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.PolpIntegration", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "IntegrationId")
+                        .HasPrincipalKey("UserId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_InvSchedule_Integration");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.InvestmentSyncState", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.PolpIntegration", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "IntegrationId")
+                        .HasPrincipalKey("UserId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_InvSync_Integration");
+                });
+
             modelBuilder.Entity("ControlFinance.API.Models.PolpIntegration", b =>
                 {
                     b.HasOne("ControlFinance.API.Models.User", "User")
@@ -818,6 +1556,14 @@ namespace ControlFinance.API.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.PolpInvestmentAuthorization", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.PolpIntegration", null)
+                        .WithMany()
+                        .HasForeignKey("IntegrationId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.RecurrenceDecision", b =>
@@ -837,6 +1583,16 @@ namespace ControlFinance.API.Migrations
                     b.Navigation("BankAccount");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.ReservedBalanceObservation", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.ImportedReservedBalance", null)
+                        .WithMany()
+                        .HasForeignKey("ReservedBalanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ReservedObservation_Reserved");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.SavingsGoal", b =>

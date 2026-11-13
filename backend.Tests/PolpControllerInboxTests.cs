@@ -109,7 +109,11 @@ public class PolpControllerInboxTests
         Assert.True(json.TryGetProperty("integrationId", out _));
         Assert.True(json.TryGetProperty("urlToAuthenticate", out _));
 
-        var row = h.Single();
+        var queued = h.Rows();
+        var row = Assert.Single(queued, e => e.Event == PolpInternalEvents.Backfill);
+        Assert.Contains(queued, e => e.Event == PolpInternalEvents.ConsentMetadata && e.ResourceId == consentId.ToString("D"));
+        Assert.Contains(queued, e => e.Event == PolpInternalEvents.InvestmentDiscovery
+            && e.ResourceId == json.GetProperty("integrationId").GetGuid().ToString("D"));
         Assert.Equal(PolpInternalEvents.Backfill, row.Event);
         Assert.Equal("consents", row.Resource);
         Assert.Equal(consentId.ToString("D"), row.ResourceId);
@@ -222,7 +226,8 @@ public class PolpControllerInboxTests
         var json = Json(await controller.GetIntegrationStatus(integration.Id, default));
 
         Assert.Equal("syncing", json.GetProperty("status").GetString());
-        var row = h.Single();
+        var row = Assert.Single(h.Rows(), e => e.Event == PolpInternalEvents.Backfill);
+        Assert.Contains(h.Rows(), e => e.Event == PolpInternalEvents.InvestmentDiscovery && e.ResourceId == integration.Id.ToString("D"));
         Assert.Equal(PolpInternalEvents.Backfill, row.Event);
         Assert.Equal(integration.PolpIntegrationId.ToString("D"), row.ResourceId);
     }
@@ -338,7 +343,8 @@ public class PolpControllerInboxTests
 
         Assert.Equal(integration.Id, json.GetProperty("integrationId").GetGuid());
         Assert.Equal("AUTHORISED", Reload(h, integration.Id).Status);
-        Assert.Equal(PolpInternalEvents.Backfill, h.Single().Event);
+        Assert.Contains(h.Rows(), e => e.Event == PolpInternalEvents.Backfill);
+        Assert.Contains(h.Rows(), e => e.Event == PolpInternalEvents.InvestmentDiscovery && e.ResourceId == integration.Id.ToString("D"));
         using var db = h.NewContext();
         Assert.Single(db.ConsentRecords.Where(c => c.UserId == h.T.User.Id));
     }

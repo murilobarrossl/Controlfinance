@@ -1,5 +1,6 @@
 import { formatPastDue } from "./invoiceDue.js";
 import { isInvoiceOverdue } from "./cardLimits.js";
+import { cardNetwork } from "./cardBrand.js";
 
 const MAX_UPCOMING = 8;
 
@@ -14,7 +15,7 @@ export function buildUpcoming(cards, installments, pendingTransactions) {
       key: `invoice-${c.id}`,
       kind: "Fatura",
       name: `Fatura ${c.name}`,
-      meta: [c.bankName, c.brand].filter(Boolean).join(" · ") || "Cartão de crédito",
+      meta: [c.bankName, cardNetwork(c.brand)?.label].filter(Boolean).join(" · ") || "Cartão de crédito",
       date: c.invoiceDueDate,
       amount: c.currentInvoice,
       status: c.invoiceStatus,

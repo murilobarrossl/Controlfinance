@@ -19,6 +19,16 @@ export function WalletIcon() {
   );
 }
 
+export function InfoIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" />
+      <circle cx="12" cy="7.75" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function SyncIcon() {
   return (
     <svg {...BASE_PROPS}>

@@ -16,40 +16,35 @@ export function isCreditCardAccount(account) {
   return Boolean(account?.isCreditCard);
 }
 
-// Modalidades de dinheiro guardado. A ordem importa: caixinha/porquinho vêm pelo nome (o banco
-// costuma mandar o mesmo tipo genérico pra elas), poupança e investimento pelo tipo da Polp.
+// Modalidades de dinheiro guardado. A ordem importa: caixinha/porquinho/Tesouro Selic vêm pelo nome
+// (o banco costuma mandar o mesmo tipo genérico pra elas), poupança e investimento pelo tipo da Polp.
 export const INVESTMENT_MODALITIES = {
-  caixinha: {
-    key: "caixinha",
-    label: "Caixinha",
-    color: "#4ECDC4",
-    description:
-      "Um espaço separado dentro da sua conta pra guardar dinheiro com um objetivo (no Nubank, é a Caixinha). Quase sempre é um CDB por trás, que rende um percentual do CDI. Rendimento, prazo de resgate e regras variam de banco para banco: confira no app do seu banco.",
-  },
+  caixinha: { key: "caixinha", label: "Caixinha", groupLabel: "Caixinhas", color: "#4ECDC4" },
   porquinho: {
     key: "porquinho",
     label: "Porquinho / Cofrinho",
+    groupLabel: "Porquinhos e cofrinhos",
     color: "#B04A5E",
     textColor: "#C57988",
-    description:
-      "Recurso de bancos digitais pra separar uma parte do saldo, com nomes diferentes: Cofrinho (Mercado Pago, PicPay, PagBank), Porquinho (Inter) ou Cofre. Funciona como uma caixinha e também rende um percentual do CDI; as regras são definidas por cada banco.",
   },
-  poupanca: {
-    key: "poupanca",
-    label: "Poupança",
-    color: "#C9923E",
-    description:
-      "Conta de reserva tradicional, com rendimento definido por regra legal. Conta com a garantia do FGC dentro dos limites e regras do próprio FGC (consulte fgc.org.br).",
+  poupanca: { key: "poupanca", label: "Poupança", groupLabel: "Poupança", color: "#C9923E" },
+  tesouroSelic: {
+    key: "tesouroSelic",
+    label: "Tesouro Selic",
+    groupLabel: "Tesouro Selic",
+    color: "#5B8DB8",
+    textColor: "#7FA6C9",
   },
   investimento: {
     key: "investimento",
     label: "Investimento",
+    groupLabel: "Outros investimentos",
     color: "#8573A8",
     textColor: "#9A8BB7",
-    description:
-      "Aplicações como CDB, LCI/LCA, Tesouro Direto ou fundos. Prazo de resgate, rendimento, riscos e garantias dependem de cada produto.",
   },
 };
+
+export const INVESTMENT_MODALITY_ORDER = ["caixinha", "porquinho", "poupanca", "tesouroSelic", "investimento"];
 
 export function getInvestmentModality(account) {
   if (isCreditCardAccount(account)) return null;
@@ -59,6 +54,7 @@ export function getInvestmentModality(account) {
 
   if (matches(name, /caixinha/i)) return INVESTMENT_MODALITIES.caixinha;
   if (matches(name, /porquinho|cofrinho|cofre/i)) return INVESTMENT_MODALITIES.porquinho;
+  if (matches(name, /tesouro\s+selic|\blft\b/i)) return INVESTMENT_MODALITIES.tesouroSelic;
   if (matches(type, /saving|poupan/i) || matches(name, /poupan/i)) return INVESTMENT_MODALITIES.poupanca;
   if (matches(type, /invest/i) || matches(name, /\b(cdb|lci|lca|tesouro|fundo|invest)/i)) {
     return INVESTMENT_MODALITIES.investimento;
@@ -68,5 +64,6 @@ export function getInvestmentModality(account) {
 
 export function getAccountKindLabel(account) {
   if (isCreditCardAccount(account)) return "Cartão de crédito";
+  if (matches(account.accountType, /^CONTA_PAGAMENTO/)) return "Conta de pagamento";
   return getInvestmentModality(account)?.label ?? "Conta corrente";
 }

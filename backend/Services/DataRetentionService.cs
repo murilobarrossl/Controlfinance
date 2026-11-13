@@ -67,6 +67,12 @@ public class DataRetentionService(IServiceScopeFactory scopeFactory, IJobLock jo
                         transactions = await db.Transactions
                             .Where(DataRetentionPolicy.PurgeableSyncedHistory(cutoff.Value))
                             .ExecuteDeleteAsync(stoppingToken);
+                        await db.InvestmentMovements.Where(x => x.TransactionDate < cutoff.Value
+                            || (x.TransactionDate == null && x.FirstObservedAt < cutoff.Value)).ExecuteDeleteAsync(stoppingToken);
+                        // Observation time is the retention clock; never invent a historical
+                        // market date, and never delete the separate current position here.
+                        await db.InvestmentPositionObservations.Where(x => x.ObservedAt < cutoff.Value).ExecuteDeleteAsync(stoppingToken);
+                        await db.ReservedBalanceObservations.Where(x => x.ObservedAt < cutoff.Value).ExecuteDeleteAsync(stoppingToken);
                     }
 
                     var accessCutoff = now.AddDays(-DataRetentionPolicy.AccessLogRetentionDays(config));

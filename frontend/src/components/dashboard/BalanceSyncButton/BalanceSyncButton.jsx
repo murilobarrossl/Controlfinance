@@ -12,21 +12,17 @@ function resultMessage(result) {
   return "Saldo atualizado";
 }
 
-// Usa sempre a conexão da conta escolhida no seletor global (effectiveAccountId), nunca o cartão
-// escolhido em Cartões, que é uma seleção só daquela aba.
+// Usa sempre o banco escolhido no seletor global, nunca o cartão escolhido em Cartões, que é uma
+// seleção só daquela aba.
 export default function BalanceSyncButton() {
-  const { accounts, effectiveAccountId, bumpDataRefresh } = useAccount();
+  const { effectiveScope, bumpDataRefresh } = useAccount();
   const [state, setState] = useState(null); // { connectionId, status: "loading" | "done" | "error", message }
   const timerRef = useRef(null);
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
-  const activeAccount = accounts.find((a) => a.id === effectiveAccountId);
-  const connectionId = activeAccount?.localIntegrationId ?? null;
-  const canSync =
-    connectionId != null && accounts.some((a) => a.localIntegrationId === connectionId && a.canSyncBalance);
-
-  if (!canSync) return null;
+  const connectionId = effectiveScope?.connectionId ?? null;
+  if (!connectionId || !effectiveScope.canSyncBalance) return null;
 
   const current = state?.connectionId === connectionId ? state : null;
   const loading = current?.status === "loading";

@@ -109,11 +109,6 @@ export default function LoginPage({ mode = "email" }) {
           <h1 className="login__title">
             Suas finanças organizadas no seu bolso
           </h1>
-
-          <p className="login__subtitle">
-            Organize suas finanças, simule financiamentos e planeje seu futuro,
-            tudo em um só lugar.
-          </p>
         </div>
       </aside>
 
@@ -128,7 +123,6 @@ export default function LoginPage({ mode = "email" }) {
                 Cadastre-se agora
               </Link>
             </p>
-            <p className="login__required-note">Todos os campos são obrigatórios.</p>
           </div>
 
           <div className="login__fields">

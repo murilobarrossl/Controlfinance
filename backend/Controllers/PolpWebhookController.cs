@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using ControlFinance.API.Models;
 using ControlFinance.API.Services;
+using ControlFinance.API.Services.Investments;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -91,9 +92,17 @@ public class PolpWebhookController(
             return false;
 
         if (string.IsNullOrWhiteSpace(payload.Event)) return true;
+        // Internal queue commands carry local identifiers and must never enter via callbacks.
+        if (payload.Event.StartsWith("internal.", StringComparison.Ordinal)) return false;
 
-        // Guid normalizado: o mesmo recurso em maiúsculas não pode escapar da deduplicação.
-        evt = new PolpInboxEvent(payload.Event, payload.Resource, payload.ResourceId?.ToString("D"), payload.QueryParameters);
+        // Investment ids are opaque strings (some documented examples are not UUIDs).
+        // Keep numeric ids as exact tokens; normalise UUIDs without converting numbers to float.
+        var rawId = payload.ResourceId.ValueKind == JsonValueKind.String ? payload.ResourceId.GetString()
+            : payload.ResourceId.ValueKind == JsonValueKind.Number ? payload.ResourceId.GetRawText() : null;
+        string id;
+        try { id = PolpInvestmentContracts.ValidateIdentifier(rawId); }
+        catch (PolpPermanentException) { return false; }
+        evt = new PolpInboxEvent(payload.Event, payload.Resource, id, payload.QueryParameters);
         return true;
     }
 
@@ -101,7 +110,7 @@ public class PolpWebhookController(
     {
         [JsonPropertyName("event")] public string? Event { get; set; }
         [JsonPropertyName("resource")] public string? Resource { get; set; }
-        [JsonPropertyName("resource_id")] public Guid? ResourceId { get; set; }
+        [JsonPropertyName("resource_id")] public JsonElement ResourceId { get; set; }
         [JsonPropertyName("query_parameters")] public string? QueryParameters { get; set; }
     }
 

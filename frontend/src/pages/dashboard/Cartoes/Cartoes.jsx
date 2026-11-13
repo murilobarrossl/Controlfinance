@@ -13,12 +13,11 @@ import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
 import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
-import BankLogo from "../../../components/ui/BankLogo/BankLogo.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
-import { CardIcon, WalletIcon, BellIcon, HistoryIcon, StarIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
+import { CardIcon, WalletIcon, BellIcon, HistoryIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import LimitBar from "../../../components/dashboard/LimitBar/LimitBar.jsx";
 import { formatCurrency, formatDate, formatPercentage } from "../../../utils/financeMath.js";
@@ -26,8 +25,8 @@ import { summarizeCards, groupCards } from "../../../utils/cardGroups.js";
 import { buildUpcoming } from "../../../utils/upcomingDues.js";
 import { formatDueDay, formatDataAge } from "../../../utils/invoiceDue.js";
 import { cardLimits, isInvoiceOverdue } from "../../../utils/cardLimits.js";
-import { getCardBase, cardTextColor } from "../../../utils/cardColors.js";
 import CardStatement from "./CardStatement.jsx";
+import CardFace from "../../../components/dashboard/CardFace/CardFace.jsx";
 import CardPicker from "../../../components/dashboard/CardPicker/CardPicker.jsx";
 import { cardBrand, cardPickerOption, connectorsByName as buildConnectorsMap } from "../../../utils/cardBrand.js";
 import "./Cartoes.css";
@@ -323,10 +322,8 @@ export default function Cartoes() {
 
   function renderCardTile(card) {
     const selected = scopeCard?.id === card.id;
-    const brand = brandOf(card);
     const { available, usagePercent, overLimit, overAmount } = cardLimits(card);
     const pastDue = isInvoiceOverdue(card);
-    const base = getCardBase({ name: card.name, productType: card.productType, institutionColor: card.institutionColor });
     const group = groups.find((g) => g.cards.includes(card));
     return [
       <li key={card.id} className={`cartoes__tile${selected ? " cartoes__tile--selected" : ""}`}>
@@ -337,25 +334,7 @@ export default function Cartoes() {
           aria-controls={`cartao-${card.id}`}
           onClick={() => setSummaryScope(selected ? "all" : card.id)}
         >
-          <span className="cartoes__tile-face" style={{ "--card-base": base, "--card-text": cardTextColor(base) }}>
-            <span className="cartoes__tile-top">
-              {brand.isManual ? (
-                <span className="cartoes__tile-manual" aria-hidden="true">
-                  <CardIcon />
-                </span>
-              ) : (
-                <BankLogo name={brand.name} logoUrl={brand.logoUrl} color={brand.color} size={24} />
-              )}
-              <span className="cartoes__tile-bank">{brand.name}</span>
-              {card.isPrimary && (
-                <span className="cartoes__tile-primary">
-                  <StarIcon filled />
-                  <span className="visually-hidden">Cartão principal</span>
-                </span>
-              )}
-            </span>
-            <span className="cartoes__tile-name">{card.name}</span>
-          </span>
+          <CardFace card={card} holder={user?.name} />
           <span className="cartoes__tile-stats">
             <span className="cartoes__tile-stat">
               <span>Fatura atual</span>
@@ -488,7 +467,7 @@ export default function Cartoes() {
   if (!loading && loadError) {
     return (
       <div className="cartoes">
-        <SectionHeading title="Cartões" level={1}>Fatura, limite e parcelamentos</SectionHeading>
+        <SectionHeading title="Cartões" level={1} />
         <div className="cartoes__load-error">
           <p className="cartoes__error" role="alert">{loadError}</p>
           <Button as="button" type="button" variant="outline" size="sm" onClick={reload}>
@@ -503,21 +482,10 @@ export default function Cartoes() {
 
   return (
     <div className="cartoes">
-      <SectionHeading title="Cartões" level={1}>Fatura, limite e parcelamentos</SectionHeading>
+      <SectionHeading title="Cartões" level={1} />
 
       {error?.where === "page" && <p className="cartoes__error" role="alert">{error.message}</p>}
 
-      <p className="cartoes__intro">
-        Aqui ficam só os cartões de crédito: o que você gastou no crédito e ainda vai pagar na fatura. O saldo
-        da conta corrente (dinheiro que você já tem) continua no Dashboard inteligente, sem ser somado com os
-        cartões.
-      </p>
-
-      {!loading && cards.length === 1 && (
-        <p className="cartoes__scope-title">
-          Os números abaixo mostram: <strong>{scopeLabel}</strong>
-        </p>
-      )}
       {!loading &&
         cards.length > 1 &&
         headerSlot &&
@@ -537,10 +505,6 @@ export default function Cartoes() {
       {noCards ? (
         <Card className="cartoes__empty">
           <p className="cartoes__empty-title">Você ainda não tem cartões por aqui</p>
-          <p className="cartoes__hint">
-            Limite, fatura e vencimento aparecem quando um cartão de crédito chega por um banco conectado ou é
-            cadastrado manualmente.
-          </p>
           <div className="cartoes__empty-actions">
             <Button as={Link} to="/conectar-banco" variant="primary" size="sm">
               Conectar banco
@@ -633,10 +597,7 @@ export default function Cartoes() {
         {loading ? (
           listSkeleton
         ) : cards.length === 0 ? (
-          <p className="cartoes__hint">
-            Nenhum cartão reconhecido ainda. Se você tem um cartão sincronizado por um banco conectado,
-            ele deve aparecer aqui sozinho na próxima sincronização — ou cadastre um manualmente abaixo.
-          </p>
+          <p className="cartoes__hint">Nenhum cartão cadastrado.</p>
         ) : (
           <ul className="cartoes__tiles">
             {orderedCards.map((card) => renderCardTile(card))}
@@ -649,13 +610,12 @@ export default function Cartoes() {
           <CardStatement key={scopeCard.id} card={scopeCard} getBrand={brandOf} />
         ) : (
           <Card title="Extrato do cartão">
-            <p className="cartoes__hint">Escolha um cartão no menu acima ou na lista para ver o extrato dele.</p>
+            <p className="cartoes__hint">Selecione um cartão para ver o extrato.</p>
           </Card>
         ))}
 
       <div ref={manualFormRef}>
       <Card title="Cadastrar cartão não sincronizado">
-        <p className="cartoes__hint">Pra um cartão que não veio de nenhum banco conectado.</p>
         {showManualForm ? (
           <form className="cartoes__form cartoes__form--spaced" onSubmit={handleCreateManualCard}>
             <label className="cartoes__field">
@@ -897,19 +857,6 @@ export default function Cartoes() {
         }}
         onClose={() => setPendingInstallment(null)}
       />
-
-      <Card title="Sobre os dados desta página">
-        <p className="cartoes__hint">
-          Cartões reconhecidos automaticamente (pela sua conta sincronizada) têm extrato real, logo
-          acima, e as transações deles também aparecem em Relatórios e Categorias ao selecionar a
-          conta no seletor do cabeçalho. Limite, fechamento, vencimento e fatura tentam vir direto da
-          Polp; quando ela não manda algum desses dados pra um banco específico, só o que faltar
-          pede preenchimento manual aqui. Um relatório de gastos por categoria dentro do próprio
-          cartão ainda não é possível de forma confiável (falta vínculo entre lançamentos e cartão
-          no sistema) — é um ponto de integração pra evoluir mais adiante, não algo que esta tela
-          tenta simular.
-        </p>
-      </Card>
     </div>
   );
 }

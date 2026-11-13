@@ -1,5 +1,7 @@
 import LegalPageLayout from "./LegalPageLayout.jsx";
+import { useEffect, useState } from "react";
 import { PRIVACY_VERSION } from "../../legal/versions.js";
+import { getDataPolicy } from "../../api/account.js";
 import usePageTitle from "../../hooks/usePageTitle.js";
 
 // Este texto descreve o que o código faz hoje. Ao mudar como um dado é coletado, guardado ou
@@ -8,12 +10,22 @@ import usePageTitle from "../../hooks/usePageTitle.js";
 // fornecedores): não preencher com suposições.
 export default function PoliticaDePrivacidade() {
   usePageTitle("Política de privacidade");
+  const [dataPolicy, setDataPolicy] = useState(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getDataPolicy({ signal: controller.signal })
+      .then(setDataPolicy)
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+
   return (
-    <LegalPageLayout kicker="Legal" title="Política de privacidade" updatedAt={`8 de novembro de 2026 (versão ${PRIVACY_VERSION})`}>
+    <LegalPageLayout kicker="Legal" title="Política de privacidade" updatedAt={`12 de novembro de 2026 (versão ${PRIVACY_VERSION})`}>
       <h2>Resumo</h2>
       <ul>
         <li>Coletamos o mínimo para o painel funcionar. O número do seu CPF/CNPJ não fica guardado, e não pedimos telefone.</li>
-        <li>Se você conectar um banco, guardamos contas, saldos, extrato e dados de cartão, cifrados, enquanto a conexão existir.</li>
+        <li>Se você conectar um banco, guardamos contas, saldos, extrato, dados de cartão, investimentos e caixinhas, cifrados, enquanto a conexão existir.</li>
         <li>Os dados passam só por fornecedores indispensáveis ao serviço, listados abaixo. Não vendemos dados e não usamos para publicidade.</li>
         <li>No painel, em <strong>Privacidade e dados</strong>, você baixa uma cópia de tudo, desconecta bancos, desliga e-mails e exclui a conta.</li>
       </ul>
@@ -33,6 +45,7 @@ export default function PoliticaDePrivacidade() {
       <p><strong>Cadastro</strong></p>
       <ul>
         <li>Nome e e-mail.</li>
+        <li>Fuso horário do seu aparelho, informado no cadastro, para calcular datas de vencimento e o dia de envio dos e-mails.</li>
         <li>Senha: guardada só como hash (bcrypt), que não permite recuperar a senha.</li>
         <li>
           CPF ou CNPJ: o número não é guardado. Guardamos um código de verificação gerado a partir dele (hash HMAC com
@@ -51,12 +64,18 @@ export default function PoliticaDePrivacidade() {
           Transações: descrição, estabelecimento, valor, data, situação e categoria sugerida pelo provedor. Em transferências,
           a descrição pode trazer o nome da outra pessoa envolvida (dado de terceiro), que é mostrado só a você.
         </li>
+        <li>
+          Investimentos que o banco disponibiliza pelo Open Finance: nome e tipo do produto, características do
+          contrato (como indexador, taxa e vencimento, quando informados), posição, histórico de posições e
+          movimentações. Também os saldos reservados da conta (caixinhas), com nome, valor e histórico.
+        </li>
       </ul>
 
       <p><strong>Dados que você cadastra</strong></p>
       <ul>
         <li>Cartões e parcelamentos cadastrados por você (a descrição do parcelamento é guardada cifrada), categorias e edições de nome/categoria das transações importadas.</li>
         <li>Reserva de emergência e metas de economia que você registra na aba Investimentos: valor da reserva e, de cada meta, nome, valor alvo, valor guardado e prazo. Ficam na sua conta, nos nossos servidores, com nome e valores cifrados.</li>
+        <li>Marcações que você faz em aplicações importadas: qual delas é a sua reserva de emergência e a regra de rendimento que você informar (por exemplo, percentual do CDI), usadas só para as projeções.</li>
       </ul>
 
       <p><strong>Registros de aceite e preferências</strong></p>
@@ -69,10 +88,15 @@ export default function PoliticaDePrivacidade() {
       <ul>
         <li>Endereço IP: usado só em memória, por até 15 minutos e já convertido em código irreversível, para limitar tentativas de login, cadastro e exclusão de conta.</li>
         <li>
-          Registros de acesso (data, hora e IP de cada login): hoje a aplicação não grava. O Marco Civil da Internet (art. 15)
-          obriga empresas que exploram aplicações de internet com fins econômicos a guardá-los por 6 meses; quando essa
-          obrigação passar a valer para o Control Finance, eles serão gravados com o IP cifrado, apagados automaticamente após
-          6 meses e informados aqui.
+          Registros de acesso (data, hora, tipo de evento e IP de cada login): o Marco Civil da Internet (art. 15) obriga
+          empresas que exploram aplicações de internet com fins econômicos a guardá-los por pelo menos 6 meses. A gravação
+          é ligada quando essa obrigação se aplica ao Control Finance. Quando ligada, o IP é guardado cifrado, os registros
+          são apagados automaticamente ao fim do prazo e continuam guardados até esse prazo mesmo se você excluir a conta,
+          porque a obrigação legal permanece. A situação em vigor aparece aqui e em Privacidade e dados, no painel.{" "}
+          {dataPolicy &&
+            (dataPolicy.accessLogEnabled
+              ? `Situação atual: gravados, por ${dataPolicy.accessLogRetentionDays} dias.`
+              : "Situação atual: não gravados.")}
         </li>
         <li>
           Logs da aplicação: registram erros e eventos técnicos com identificadores internos, sem saldos, extratos, números de
@@ -84,7 +108,7 @@ export default function PoliticaDePrivacidade() {
       <p><strong>Neste navegador</strong></p>
       <ul>
         <li>Um cookie de sessão (essencial, não legível por scripts da página), que expira em até 8 horas ou ao sair.</li>
-        <li>No armazenamento local do navegador: identificador interno do usuário, conta selecionada no painel e uma conexão bancária em andamento.</li>
+        <li>No armazenamento local do navegador: identificador interno do usuário, conta selecionada no painel e uma conexão bancária em andamento. São apagados ao sair da conta.</li>
         <li>Metas e reserva registradas antes desta versão ficavam só no navegador. No primeiro acesso depois dela, são levadas para a sua conta e apagadas do navegador assim que ficam guardadas. Se o navegador tiver uma reserva diferente da já salva na conta, você escolhe qual manter.</li>
         <li>Não usamos cookies de publicidade nem ferramentas de análise de navegação.</li>
       </ul>
@@ -96,7 +120,9 @@ export default function PoliticaDePrivacidade() {
         <li>Conectar bancos e importar seus dados: execução de contrato, a seu pedido, e a autorização que você dá no próprio banco pelo Open Finance.</li>
         <li>Lembrete de vencimento: execução de contrato; você pode desligar a qualquer momento.</li>
         <li>Aviso mensal: seu consentimento (só é enviado se você ligar a opção); pode ser retirado a qualquer momento.</li>
-        <li>Limitar tentativas de acesso e proteger a conta: legítimo interesse (art. 7º, IX, e art. 10, II), usando só o estritamente necessário (o IP fica em memória por até 15 minutos e não é gravado).</li>
+        <li>Limitar tentativas de acesso e proteger a conta: legítimo interesse (art. 7º, IX, e art. 10, II), usando só o estritamente necessário (para isso, o IP fica em memória por até 15 minutos e não é gravado).</li>
+        <li>Registros de acesso, quando gravados: cumprimento de obrigação legal (art. 7º, II; Marco Civil da Internet, art. 15).</li>
+        <li>Investimentos e caixinhas importados, e as projeções feitas com eles: execução de contrato, a seu pedido, ao conectar o banco.</li>
         <li>Guardar registros de aceite: exercício regular de direitos (art. 7º, VI).</li>
         <li>Nomes de terceiros que aparecem em transferências: legítimo interesse (art. 7º, IX), limitado a mostrar seu próprio extrato a você, cifrados no banco de dados e nunca usados para outra finalidade.</li>
         <li>Declaração de maioridade: execução de contrato (o serviço é destinado a maiores de 18 anos).</li>
@@ -137,7 +163,7 @@ export default function PoliticaDePrivacidade() {
 
       <h2>6. Como protegemos</h2>
       <ul>
-        <li>Saldos, valores, limites, faturas, descrições de transações e de parcelamentos, nomes e valores das metas, valor da reserva de emergência e os dígitos de conta guardados são cifrados (AES-256-GCM) no banco de dados, com chaves que podem ser trocadas periodicamente.</li>
+        <li>Saldos, valores, limites, faturas, descrições de transações e de parcelamentos, investimentos e caixinhas importados (nomes e valores de contratos, posições e movimentações), nomes e valores das metas, valor da reserva de emergência, IP dos registros de acesso e os dígitos de conta guardados são cifrados (AES-256-GCM) no banco de dados, com chaves que podem ser trocadas periodicamente.</li>
         <li>Comunicação cifrada (HTTPS) entre o navegador, o Control Finance e os fornecedores.</li>
         <li>Sessão em cookie que scripts da página não conseguem ler, com proteção contra requisições forjadas por outros sites.</li>
         <li>Cada pessoa só acessa os próprios dados; tentativas repetidas de login são bloqueadas temporariamente.</li>
@@ -148,8 +174,10 @@ export default function PoliticaDePrivacidade() {
       <h2>7. Por quanto tempo guardamos</h2>
       <ul>
         <li>Cadastro, cartões e parcelamentos cadastrados por você, reserva de emergência, metas de economia, edições e preferências: até você excluir a conta (ou remover o item).</li>
-        <li>Dados de um banco conectado: até você desconectar esse banco ou excluir a conta. Ao desconectar, apagamos na hora tudo que veio dele. Um prazo máximo para o histórico importado pode ser configurado; o prazo em vigor aparece em Privacidade e dados, no painel.</li>
+        <li>Dados de um banco conectado, inclusive investimentos e caixinhas: até você desconectar esse banco ou excluir a conta. Ao desconectar, apagamos na hora tudo que veio dele. Um prazo máximo para o histórico importado (extrato, movimentações de investimento e histórico de posições e de caixinhas) pode ser configurado; o prazo em vigor aparece em Privacidade e dados, no painel.</li>
+        <li>Marcação de reserva e regras de rendimento em aplicações importadas: até você removê-las, desconectar o banco da aplicação ou excluir a conta.</li>
         <li>Registros de aceite: enquanto a conta existir; são apagados junto com ela.</li>
+        <li>Registros de acesso, quando gravados: pelo prazo informado na seção 2, mesmo depois da exclusão da conta.</li>
         <li>Identificador de sessão encerrada: até o horário em que a sessão expiraria (no máximo 8 horas).</li>
         <li>
           Pedido de exclusão à Polp que não pôde ser enviado na hora: guardamos só o identificador técnico da conexão, sem
@@ -162,7 +190,7 @@ export default function PoliticaDePrivacidade() {
       <h2>8. Seus direitos e como exercer</h2>
       <p>Pela LGPD (art. 18), você pode pedir confirmação de tratamento, acesso, correção, anonimização, bloqueio ou eliminação de dados desnecessários, portabilidade, informação sobre compartilhamento, informação sobre a possibilidade de não consentir e revogação do consentimento, além de se opor a tratamentos irregulares.</p>
       <ul>
-        <li><strong>No painel, em Privacidade e dados:</strong> baixar uma cópia de todos os seus dados, desconectar bancos, desligar e-mails, encerrar sessões em todos os aparelhos, apagar os dados guardados no navegador e excluir a conta.</li>
+        <li><strong>No painel, em Privacidade e dados:</strong> baixar uma cópia de todos os seus dados, desconectar bancos, desligar e-mails, encerrar sessões em todos os aparelhos e excluir a conta.</li>
         <li><strong>Pelo canal de privacidade</strong> (suporte@controlfinance.app.br): correção de nome ou e-mail e qualquer outro pedido. Respondemos no prazo da LGPD (art. 19).</li>
         <li>Você também pode revogar a autorização de Open Finance diretamente no aplicativo do seu banco.</li>
         <li>Você pode apresentar reclamação à Autoridade Nacional de Proteção de Dados (ANPD).</li>
@@ -170,12 +198,13 @@ export default function PoliticaDePrivacidade() {
 
       <h2>9. Desconectar um banco e excluir a conta</h2>
       <p>
-        <strong>Desconectar um banco</strong> apaga do Control Finance as contas, cartões, extrato e parcelamentos que vieram
-        dele e pede à Polp que exclua a conexão. Sua conta no Control Finance continua existindo.
+        <strong>Desconectar um banco</strong> apaga do Control Finance as contas, cartões, extrato, parcelamentos, investimentos e
+        caixinhas que vieram dele e pede à Polp que exclua a conexão. Sua conta no Control Finance continua existindo.
       </p>
       <p>
         <strong>Excluir a conta</strong> apaga todos os seus dados dos nossos servidores e pede à Polp a exclusão de todas as
-        suas conexões. Não dá para desfazer.
+        suas conexões. Não dá para desfazer. A única exceção são os registros de acesso, quando gravados, que a lei obriga
+        a guardar até o fim do prazo (seção 2).
       </p>
       <p>
         Nos dois casos, a exclusão do lado da Polp é feita por ela de forma assíncrona; se ela estiver indisponível, o pedido é

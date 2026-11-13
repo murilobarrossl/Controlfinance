@@ -26,12 +26,12 @@ const PERGUNTAS = [
   {
     pergunta: "Quais bancos são suportados pela sincronização?",
     resposta:
-      "A sincronização funciona com os bancos e instituições financeiras participantes do Open Finance no Brasil, a mesma estrutura usada pelos grandes bancos e fintechs para compartilhar dados com segurança.",
+      "A sincronização funciona com os bancos e instituições financeiras participantes do Open Finance no Brasil.",
   },
   {
     pergunta: "Como vocês tratam meus dados bancários?",
     resposta:
-      "Você autoriza a conexão no ambiente do próprio banco, pelo Open Finance, e a senha do banco não passa pelo Control Finance. Os dados chegam por meio da Polp, nossa fornecedora de integração. Guardamos só o necessário para o painel (contas, saldos, extrato, dados de cartão e os 4 últimos dígitos do número da conta), cifrados no banco de dados. Seu CPF não fica guardado. Os dados passam por fornecedores indispensáveis ao serviço (integração bancária, hospedagem e envio de e-mail), todos listados na Política de Privacidade. Não vendemos dados e não usamos para publicidade.",
+      "Você autoriza a conexão no ambiente do próprio banco, pelo Open Finance, e a senha do banco não passa pelo Control Finance. Guardamos só o necessário para o painel (contas, saldos, extrato, dados de cartão e os 4 últimos dígitos do número da conta), cifrados no banco de dados. Seu CPF não fica guardado. Não vendemos dados e não usamos para publicidade.",
   },
   {
     pergunta: "Vocês compartilham meus dados com terceiros?",
@@ -41,27 +41,27 @@ const PERGUNTAS = [
   {
     pergunta: "Qual a diferença entre conta corrente e cartão de crédito no painel?",
     resposta:
-      "A conta corrente mostra o dinheiro que você tem hoje: saldo, entradas e saídas. O cartão de crédito mostra o que você gastou usando crédito e ainda vai pagar na fatura. Quando um banco conectado tem os dois, eles aparecem juntos na mesma conexão, mas os valores nunca são somados. Fatura, limite, vencimentos e parcelamentos ficam reunidos na aba Cartões.",
+      "A conta corrente mostra o dinheiro que você tem hoje: saldo, entradas e saídas. O cartão de crédito mostra o que você gastou usando crédito e ainda vai pagar na fatura. Fatura, limite, vencimentos e parcelamentos ficam reunidos na aba Cartões.",
   },
   {
     pergunta: "O que eu encontro no painel?",
     resposta:
-      "Um dashboard com saldo, receitas e despesas do mês e principais categorias de gasto; a aba Cartões, com fatura, limite, próximos vencimentos e parcelamentos; Receitas e despesas e Categorias, para entender para onde vai o dinheiro; Relatórios, com o histórico de lançamentos filtrável por mês ou por todo o período; Investimentos, com as contas de reserva e investimento reconhecidas nos seus bancos conectados, metas de economia e um simulador de financiamento; e Privacidade e dados, onde você baixa uma cópia dos seus dados, desconecta bancos e exclui a conta. Os dados do banco são atualizados automaticamente quando há informações novas, não em tempo real, e o painel mostra quando foi a última sincronização.",
+      "Um dashboard com saldo, receitas e despesas do mês e principais categorias de gasto; a aba Cartões, com fatura, limite, próximos vencimentos e parcelamentos; Receitas e despesas e Categorias, para entender para onde vai o dinheiro; Relatórios, com o histórico de lançamentos filtrável por mês ou por todo o período; Investimentos, com as contas de reserva e investimento reconhecidas nos seus bancos conectados, metas de economia e um simulador de financiamento; e Privacidade e dados, onde você baixa uma cópia dos seus dados, desconecta bancos e exclui a conta.",
   },
   {
     pergunta: "Vou receber lembretes de vencimento?",
     resposta:
-      "Sim, se você quiser. O lembrete avisa quantas contas pendentes vencem nos próximos 3 dias, sem nomes nem valores (os detalhes ficam só no painel). Dá para desligar em Privacidade e dados.",
+      "Sim, se você quiser. O lembrete avisa quantas contas pendentes vencem nos próximos 3 dias, sem nomes nem valores. Dá para desligar em Privacidade e dados.",
   },
   {
     pergunta: "Posso desconectar um banco ou excluir minha conta?",
     resposta:
-      "Pode, direto no painel. Ao desconectar um banco, apagamos na hora tudo que veio dele e pedimos à Polp que exclua a conexão; você também pode revogar a autorização no aplicativo do banco, na área de Open Finance. Ao excluir a conta, apagamos todos os seus dados dos nossos servidores. Cópias de segurança da hospedagem só deixam de conter os dados quando expiram, no prazo informado na Política de Privacidade.",
+      "Pode, direto no painel. Ao desconectar um banco, apagamos na hora tudo que veio dele; você também pode revogar a autorização no aplicativo do banco, na área de Open Finance. Ao excluir a conta, apagamos todos os seus dados dos nossos servidores, exceto registros de acesso que a lei obriga a guardar, quando existirem. Cópias de segurança da hospedagem só deixam de conter os dados quando expiram, no prazo informado na Política de Privacidade.",
   },
   {
     pergunta: "Como entro em contato com o suporte?",
     resposta:
-      "Pelo e-mail suporte@controlfinance.app.br, nosso time responde por lá. Quem assina o plano trimestral ou anual conta com suporte prioritário.",
+      "Pelo e-mail suporte@controlfinance.app.br. Quem assina o plano trimestral ou anual conta com suporte prioritário.",
   },
 ];
 

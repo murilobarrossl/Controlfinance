@@ -1,0 +1,207 @@
+.card-presentation {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.card-face {
+  container-type: inline-size;
+  isolation: isolate;
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.586 / 1;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 17%);
+  border-radius: 14px;
+  color: #f5f5ef;
+  background:
+    radial-gradient(ellipse at 85% 5%, color-mix(in srgb, var(--card-detail) 16%, transparent), transparent 65%),
+    linear-gradient(130deg, color-mix(in srgb, var(--card-base) 88%, white), var(--card-base) 56%, color-mix(in srgb, var(--card-base) 82%, black));
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 17%),
+    inset 0 -1px 1px rgb(0 0 0 / 35%),
+    0 12px 24px -14px rgb(0 0 0 / 65%);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* Surface finishes only: no product artwork or dashboard-like decorative frames. */
+.card-face::before,
+.card-face::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+}
+
+.card-face::after {
+  background: linear-gradient(118deg, transparent 20%, rgb(255 255 255 / 6%) 44%, transparent 66%);
+}
+
+.card-face[data-finish="brushed"]::before {
+  background: repeating-linear-gradient(0deg, rgb(255 255 255 / 4%) 0 1px, transparent 1px 3px);
+}
+
+.card-face[data-finish="satin"]::before {
+  background: linear-gradient(145deg, rgb(255 255 255 / 3%), transparent 50%, rgb(0 0 0 / 16%));
+}
+
+.card-face[data-finish="woven"]::before {
+  background:
+    repeating-linear-gradient(45deg, rgb(255 255 255 / 3%) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(-45deg, rgb(0 0 0 / 7%) 0 1px, transparent 1px 4px);
+}
+
+.card-face__issuer {
+  position: absolute;
+  top: 8%;
+  left: 8%;
+  right: 8%;
+  display: flex;
+  flex-direction: column;
+  gap: 1cqi;
+  min-width: 0;
+}
+
+.card-face__bank,
+.card-face__name,
+.card-face__holder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-face__bank {
+  font-size: max(0.8rem, 5.1cqi);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 18%);
+}
+
+.card-face__name {
+  max-width: 90%;
+  color: rgb(245 245 239 / 76%);
+  font-size: max(0.6rem, 3cqi);
+  line-height: 1.2;
+}
+
+.card-face__chip {
+  position: absolute;
+  top: 35%;
+  left: 8%;
+  display: block;
+  width: 11%;
+  height: auto;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 25%));
+}
+
+.card-face__number {
+  position: absolute;
+  left: 8%;
+  bottom: 25%;
+  max-width: 64%;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: max(1rem, 7cqi);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 12%), 0 -1px 1px rgb(0 0 0 / 35%);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-face__number-unknown {
+  color: rgb(245 245 239 / 70%);
+  font-family: inherit;
+  font-size: max(0.6rem, 3cqi);
+  letter-spacing: 0;
+  text-shadow: none;
+}
+
+.card-face__holder {
+  position: absolute;
+  left: 8%;
+  bottom: 8%;
+  max-width: 60%;
+  font-size: max(0.65rem, 3.6cqi);
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 20%);
+}
+
+.card-face__network {
+  position: absolute;
+  right: 7%;
+  bottom: 7.5%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1.2cqi;
+  width: 22%;
+  color: #eeeeea;
+}
+
+.card-face__network-symbol {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 15%));
+}
+
+.card-face__network-symbol--mastercard {
+  width: 87%;
+}
+
+.card-face__network-text {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: max(0.65rem, 4cqi);
+  font-weight: 600;
+  line-height: 1.05;
+  text-align: right;
+}
+
+.card-face__category {
+  max-width: 100%;
+  color: rgb(245 245 239 / 78%);
+  font-size: max(0.55rem, 2.7cqi);
+  font-weight: 400;
+  line-height: 1.1;
+  text-align: right;
+}
+
+/* Billing dates and app controls are not printed-card data. Keep them outside the face. */
+.card-presentation__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  color: var(--color-text-secondary, #a5afbf);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.card-presentation__primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.card-presentation__primary svg {
+  width: 12px;
+  height: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-face {
+    transition: none;
+  }
+}

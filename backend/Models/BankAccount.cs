@@ -14,6 +14,7 @@ public class BankAccount
     public string Name { get; set; } = string.Empty;
     public string? BankCode { get; set; }
     public decimal? Balance { get; set; }
+    public bool? HasReservedBalance { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -48,6 +49,10 @@ public class BankAccount
     /// o que faltar). Nenhuma tabela separada representa o cartão — é esta mesma BankAccount.</summary>
     public string? Brand { get; set; }
     public string? ProductType { get; set; }
+    /// <summary>Nome original do recurso de cartão recebido em credit_cards.name. Separado do
+    /// Name editável; atualizado somente pelo sync e nulo até uma resposta real da Polp.
+    /// Não é código comercial nem confirmação de revisão/cor do plástico.</summary>
+    public string? PolpOriginalName { get; set; }
     public decimal? CreditLimit { get; set; }
     public decimal? UsedLimit { get; set; }
     public int? ClosingDay { get; set; }
