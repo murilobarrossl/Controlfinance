@@ -26,6 +26,7 @@ public static class PolpInternalEvents
     public const string InvestmentDiscovery = "internal.investment-discovery";
     public const string InvestmentPage = "internal.investment-page";
     public const string ReservedBalances = "internal.reserved-balances";
+    public const string TransactionDetails = "internal.transaction-details";
 }
 
 /// <summary>Não adianta tentar de novo: o evento vai para Dead.</summary>

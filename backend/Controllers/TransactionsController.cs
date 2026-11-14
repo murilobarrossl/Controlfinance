@@ -447,6 +447,61 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             : query.OrderBy(t => t.DueDate).ThenBy(t => t.Id),
     };
 
+    // Só lê o que o sync já gravou: abrir um lançamento nunca gera consulta ao banco/Polp.
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
+    {
+        var t = await db.Transactions
+            .AsNoTracking()
+            .Include(x => x.Category)
+            .Include(x => x.BankAccount)
+            .Where(x => x.UserId == UserId && x.BankAccount != null && x.BankAccount.IsActive && x.BankAccount.PolpAccountId != null)
+            .FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t is null || !Guid.TryParse(t.Description, out _)) return NotFound();
+
+        var account = t.BankAccount!;
+        var isCard = CreditCardAccountDetector.LooksLikeCreditCard(account);
+        var integration = account.PolpIntegrationId is { } consentId
+            ? await db.PolpIntegrations.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == UserId && p.PolpIntegrationId == consentId, ct)
+            : null;
+        var today = await UserTodayAsync(db, ct);
+
+        // Nome editável (Name) nunca entra aqui: a outra parte vem da Polp ou, sem ela, da descrição original.
+        var hasCounterparty = t.CounterpartyAlias is not null || t.CounterpartyName is not null;
+        string? described = null;
+        if (!hasCounterparty && t.PolpMovementKind != PolpMovementKind.CardBillPayment)
+            described = isCard
+                ? t.BankOperationType is null or "PAGAMENTO" or "ESTORNO" ? DescribedCounterparty.FromCard(t.BankDescription) : null
+                : DescribedCounterparty.FromAccount(t.BankDescription, t.Type == TransactionType.Income);
+
+        return Ok(new TransactionDetailDto(
+            t.Id, t.Name, t.Type.ToString(), TransactionDto.EffectiveStatus(t.Status, t.DueDate, today),
+            t.Amount, t.DueDate, t.PaidAt, t.CreatedAt,
+            t.Category?.Name, t.Category?.Color, t.IsFixed, t.PolpMovementKind.ToString(),
+            new TransactionAccountDto(account.Name, account.Number, isCard, integration?.InstitutionName, integration?.LastSyncedAt),
+            new TransactionBankDataDto(
+                t.BankDateTime, t.BankOperationType, t.BankDescription, t.CounterpartyAlias, t.CounterpartyName, described,
+                t.CounterpartyCnpj, t.CounterpartyPersonType,
+                t.CounterpartyBankCode, t.CounterpartyAccount, t.CardNumber,
+                t.InstallmentNumber, t.InstallmentTotal, t.OriginalAmount, t.OriginalCurrency, t.BillMonth,
+                await DetailsStatusAsync(t, integration, ct))));
+    }
+
+    // "ready" quando a releitura do histórico já terminou, mesmo que a Polp não tenha devolvido
+    // esta transação: daí em diante a tela mostra "não informado", nunca "em importação" para sempre.
+    private async Task<string> DetailsStatusAsync(Transaction t, PolpIntegration? integration, CancellationToken ct)
+    {
+        if (t.BankDescription is not null || t.BankOperationType is not null) return "ready";
+        if (integration is null || integration.TransactionDetailsVersion >= PolpSyncService.TransactionDetailsVersion) return "ready";
+
+        var consentId = integration.PolpIntegrationId.ToString();
+        var failing = await db.PolpWebhookEvents.AsNoTracking().AnyAsync(e =>
+            e.Event == PolpInternalEvents.TransactionDetails && e.ResourceId == consentId
+            && (e.Status == PolpWebhookEventStatus.Pending || e.Status == PolpWebhookEventStatus.Processing)
+            && e.Attempts > 0 && e.LastError != null, ct);
+        return failing ? "delayed" : "importing";
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateTransactionDto dto)
     {

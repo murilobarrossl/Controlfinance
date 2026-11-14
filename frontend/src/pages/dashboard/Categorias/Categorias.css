@@ -1,12 +1,14 @@
 .categorias {
+  container: categorias / inline-size;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 2rem;
 }
 
 .categorias__hint {
   color: var(--color-text-secondary);
   font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .categorias__error {
@@ -14,243 +16,36 @@
   font-size: 0.9rem;
 }
 
-.categorias__grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  /* Sem isso, o grid estica os dois cards pra altura do mais alto (padrão do CSS Grid) — como
-     o gráfico e a lista raramente têm a mesma altura, sobrava espaço vazio dentro do card mais
-     curto, às vezes o suficiente pra empurrar a página um pouco além da tela e criar um scroll
-     vertical que não servia pra nada. Cada card agora fica só do tamanho do seu próprio conteúdo. */
-  align-items: start;
+.categorias__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.categorias__donut-block {
+/* ── Cabeçalho: título e escopo à esquerda, período à direita ── */
+
+/* O período fica abaixo do título, não ao lado: no computador o seletor de contas do painel é
+   posicionado por cima do canto direito do conteúdo, e só o título reserva espaço para ele. */
+.categorias__header {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: 1.25rem;
 }
 
-.categorias__donut-wrap {
-  width: 100%;
-  max-width: 340px;
+.categorias__header .section-heading {
+  margin-bottom: 0;
 }
 
-.categorias__donut-summary {
-  list-style: none;
-  margin: 0;
-  padding-top: 1rem;
-  border-top: 1px solid var(--color-border);
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.categorias__donut-summary-item {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.82rem;
-}
-
-.categorias__donut-summary-dot {
-  flex-shrink: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.categorias__donut-summary-name {
-  flex: 1;
-  min-width: 0;
-  color: var(--color-text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.categorias__donut-summary-percentage {
-  color: var(--color-text-tertiary);
-  white-space: nowrap;
-}
-
-.categorias__donut-summary-value {
-  color: var(--color-text-primary);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.categorias__donut-summary-more {
-  color: var(--color-text-tertiary);
-  font-size: 0.78rem;
-  text-align: center;
-}
-
-.categorias__select {
-  background-color: var(--color-border-strong);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  padding: 0.5rem 0.75rem;
-  color: var(--color-text-primary);
-  font-family: inherit;
-  font-size: 0.82rem;
-}
-
-.categorias__pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 1.25rem;
-}
-
-/* Mesma pílula do "Impacto de cortar" mais abaixo nesta página (.categorias__impact-rate), de
-   propósito: a paginação usa a linguagem visual da própria tela de Categorias em vez do
-   par de setas "‹ Página X de Y ›" do rodapé de tabela do Relatórios. */
-.categorias__page-btn {
-  min-width: 32px;
-  height: 32px;
-  padding: 0 0.6rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border);
-  background-color: var(--color-surface);
-  color: var(--color-text-secondary);
-  font-size: 0.82rem;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.categorias__page-btn:hover {
-  background-color: var(--color-surface-hover);
-}
-
-.categorias__page-btn:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.categorias__page-btn--active {
-  border-color: var(--color-accent);
-  color: var(--color-text-primary);
-  background-color: var(--color-surface-hover);
-}
-
-.categorias__visits {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.categorias__visits-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.6rem;
-  font-size: 0.82rem;
-}
-
-.categorias__visits-date {
-  color: var(--color-text-tertiary);
-}
-
-.categorias__visits-installment {
-  color: var(--color-text-secondary);
-  font-weight: 500;
-}
-
-.categorias__visits-amount {
-  color: var(--color-accent);
-  font-weight: 500;
-}
-
-.categorias__drilldown-section {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.categorias__impact-rates {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.85rem;
-}
-
-.categorias__impact-rate {
-  padding: 0.35rem 0.75rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border);
-  background-color: var(--color-surface);
-  color: var(--color-text-secondary);
-  font-size: 0.82rem;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.categorias__impact-rate:hover {
-  background-color: var(--color-surface-hover);
-}
-
-.categorias__impact-rate--active {
-  border-color: var(--color-accent);
-  color: var(--color-text-primary);
-  background-color: var(--color-surface-hover);
-}
-
-.categorias__impact-sentence {
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.5;
-  margin-bottom: 1rem;
-}
-
-.categorias__impact-targets {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.categorias__impact-target {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 0.65rem 0.85rem;
-}
-
-.categorias__impact-target-label {
-  color: var(--color-text-primary);
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.categorias__impact-target-values {
-  color: var(--color-text-secondary);
-  font-size: 0.85rem;
-  white-space: nowrap;
-}
-
-.categorias__impact-target-after {
-  color: var(--color-income);
-  font-weight: 600;
-}
-
-@media (max-width: 900px) {
-  .categorias__grid {
-    grid-template-columns: 1fr;
+@media (min-width: 56.3125em) {
+  .categorias__header .section-heading {
+    max-width: min(40rem, calc(100% - var(--dash-toolbar-space, 0px)));
   }
 }
 
-/* Escolha do período: Mês / Ano / Todo o período, com a navegação (‹ ›) ao lado. */
 .categorias__period {
   display: flex;
   flex-wrap: wrap;
@@ -258,7 +53,10 @@
   gap: 0.75rem 1.25rem;
 }
 
-.categorias__period-modes {
+/* Seletor segmentado usado no período e na simulação de corte. A seleção é neutra: no painel o
+   laranja significa despesa, e um segmento laranja passaria a ler como valor. */
+.categorias__period-modes,
+.categorias__impact-rates {
   display: inline-flex;
   padding: 0.2rem;
   gap: 0.2rem;
@@ -275,6 +73,7 @@
   font-family: inherit;
   font-size: 0.85rem;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
   white-space: nowrap;
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -295,20 +94,710 @@
   outline-offset: 2px;
 }
 
+/* ── Os dois cards principais ── */
+
+.categorias__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  /* Cada card fica do tamanho do próprio conteúdo: esticar o mais curto deixava um vazio no fundo. */
+  align-items: start;
+}
+
+.categorias__card .card__header {
+  min-height: 2.25rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Rosca */
+
+.categorias__donut-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.categorias__donut-wrap {
+  container-type: inline-size;
+  width: 100%;
+  max-width: 272px;
+}
+
+.categorias__donut-wrap .category-donut__center {
+  padding: 0 20%;
+}
+
+.categorias__donut-wrap .category-donut__center-value {
+  font-size: clamp(1rem, 7.6cqi, 1.45rem);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.categorias__donut-wrap .category-donut__center-label {
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+.categorias__legend {
+  list-style: none;
+  width: 100%;
+  margin: 1.75rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.categorias__legend-item {
+  display: grid;
+  grid-template-columns: 0.625rem minmax(0, 1fr) 3.75rem auto;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding-block: 0.7rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.categorias__legend-dot {
+  align-self: center;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 3px;
+}
+
+.categorias__legend-name {
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.categorias__legend-pct {
+  color: var(--color-text-tertiary);
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+.categorias__legend-value {
+  color: var(--color-text-primary);
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.categorias__legend-more {
+  align-self: flex-start;
+  margin-top: 0.75rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.8rem;
+}
+
+.categorias__donut-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.75rem;
+}
+
+.categorias__donut-loading .skeleton,
+.categorias__list-loading .skeleton {
+  display: block;
+}
+
+/* Lista de categorias */
+
+.categorias__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.8rem;
+}
+
+.categorias__sort select {
+  background-color: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.6rem;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.categorias__sort select:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.categorias__sort select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.categorias__sort option {
+  background-color: var(--color-surface);
+}
+
+.categorias__list-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cat-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.85rem 0.95rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface-alt);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.cat-row:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.cat-row--active,
+.cat-row--active:hover {
+  border-color: var(--color-text-tertiary);
+  background-color: var(--color-surface-hover);
+}
+
+.cat-row:focus-visible {
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: 2px;
+}
+
+.cat-row__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.cat-row__name {
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: 0.92rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.cat-row__value {
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cat-row__track {
+  display: block;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-border);
+  overflow: hidden;
+}
+
+.cat-row__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.cat-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.5rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cat-row__pct {
+  color: var(--color-text-secondary);
+}
+
+.cat-row__dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+/* Paginação */
+
+.categorias__pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.categorias__page-count {
+  color: var(--color-text-tertiary);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.categorias__pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.categorias__page-btn {
+  position: relative;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.categorias__page-btn::before {
+  content: "";
+  position: absolute;
+  inset: -0.375rem -0.1875rem;
+}
+
+.categorias__page-btn:hover {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.categorias__page-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.categorias__page-btn--active,
+.categorias__page-btn--active:hover {
+  border-color: var(--color-text-primary);
+  background-color: var(--color-text-primary);
+  color: var(--color-bg);
+  font-weight: 600;
+}
+
+/* ── Categoria aberta: seção direto no fundo, sem card ── */
+
+.categorias__detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+  padding-top: 2rem;
+  border-top: 1px solid var(--color-border);
+  scroll-margin-top: 1.5rem;
+}
+
+.categorias__detail-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.categorias__detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.categorias__detail-title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.categorias__detail-note {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Estabelecimentos */
+
+.est-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.est {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.est__toggle {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.85rem 0.75rem;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.est__toggle:hover {
+  background-color: var(--color-surface);
+}
+
+.est__toggle:focus-visible {
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: -2px;
+}
+
+.est__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 1rem;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.est__name {
+  color: var(--color-text-primary);
+  font-size: 0.92rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.est__tag {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-tertiary);
+  font-size: 0.7rem;
+  font-weight: 500;
+  vertical-align: 0.1em;
+}
+
+.est__value {
+  color: var(--color-text-primary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.est__chevron {
+  display: inline-flex;
+  align-self: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s ease;
+}
+
+.est__toggle:hover .est__chevron {
+  color: var(--color-text-secondary);
+}
+
+.est--open .est__chevron {
+  transform: rotate(180deg);
+}
+
+.est__sub {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  /* Alinha o fim da barra com o fim do valor (a coluna do chevron fica de fora). */
+  padding-right: 2rem;
+}
+
+.est__track {
+  flex: 0 0 min(10rem, 30%);
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-border);
+  overflow: hidden;
+}
+
+.est__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background-color: var(--color-accent);
+}
+
+.est__meta {
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Lançamentos de um estabelecimento: linhas recuadas dentro da própria linha aberta. */
+
+.est__panel {
+  margin: 0 0.75rem 0.75rem;
+  padding-left: 0.85rem;
+  border-left: 1px solid var(--color-border-strong);
+}
+
+.est__panel > .skeleton {
+  display: block;
+  margin-block: 0.5rem;
+}
+
+.est-tx {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+p.est-tx {
+  padding-block: 0.5rem;
+  color: var(--color-accent-soft);
+  font-size: 0.85rem;
+}
+
+.est-tx__item {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.5rem 1.25rem 0.5rem 0;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.est-tx__item + .est-tx__item {
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+.est-tx__date {
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.est-tx__note {
+  color: var(--color-text-tertiary);
+  font-size: 0.8rem;
+}
+
+.est-tx__amount {
+  color: var(--color-accent-soft);
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Simulação de corte: continua em card por ser uma ferramenta, não um dado da categoria. */
+
+.categorias__impact .card__header {
+  margin-bottom: 1rem;
+}
+
+.categorias__impact-rates {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 1rem;
+}
+
+.categorias__impact-rates .categorias__segment {
+  padding-inline: 0.8rem;
+}
+
+.categorias__impact-sentence {
+  margin-bottom: 1rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+  text-wrap: pretty;
+}
+
+.categorias__impact-targets {
+  margin: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.categorias__impact-target {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-block: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.categorias__impact-target dt {
+  color: var(--color-text-tertiary);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.categorias__impact-target dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.categorias__impact-target strong {
+  color: var(--color-income);
+  font-weight: 600;
+}
+
+.categorias__impact-arrow {
+  margin-inline: 0.4rem;
+  color: var(--color-text-tertiary);
+}
+
+.categorias__impact-hint {
+  margin-top: 0.75rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* ── Adaptação ── */
+
+@container categorias (min-width: 62rem) {
+  .categorias__detail--with-aside {
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 20rem);
+    gap: 2.5rem;
+  }
+
+  .categorias__detail--with-aside .categorias__impact {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+
+@container categorias (max-width: 52rem) {
+  .categorias__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .categorias__donut-block {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0 2rem;
+  }
+
+  .categorias__donut-wrap {
+    width: 15rem;
+    grid-row: span 2;
+  }
+
+  .categorias__legend {
+    margin-top: 0;
+  }
+}
+
+@container categorias (max-width: 34rem) {
+  .categorias__donut-block {
+    display: flex;
+  }
+
+  .categorias__donut-wrap {
+    width: 100%;
+    max-width: 15rem;
+  }
+
+  .categorias__legend {
+    margin-top: 1.5rem;
+  }
+
+  .categorias__segment {
+    padding-inline: 0.8rem;
+  }
+
+  .est__toggle {
+    padding-inline: 0.25rem;
+  }
+
+  .est__sub {
+    padding-right: 0;
+  }
+
+  .est__panel {
+    margin-inline: 0.25rem;
+    padding-left: 0.75rem;
+  }
+
+  .est-tx__item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "date amount"
+      "note amount";
+    gap: 0.1rem 1rem;
+    padding-right: 0;
+  }
+
+  .est-tx__date {
+    grid-area: date;
+  }
+
+  .est-tx__note {
+    grid-area: note;
+  }
+
+  .est-tx__note:empty {
+    display: none;
+  }
+
+  .est-tx__amount {
+    grid-area: amount;
+    align-self: center;
+  }
+}
+
 @media (pointer: coarse) {
   .categorias__segment {
     min-height: 2.75rem;
   }
 }
 
-/* Qual conta/cartão está sendo mostrado (e como trocar). */
-.categorias__scope-title {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-}
-
-.categorias__scope-title strong {
-  color: var(--color-text-primary);
-  font-weight: 600;
+@media (prefers-reduced-motion: reduce) {
+  .categorias__segment,
+  .cat-row,
+  .categorias__page-btn,
+  .est__toggle,
+  .est__chevron {
+    transition: none;
+  }
 }

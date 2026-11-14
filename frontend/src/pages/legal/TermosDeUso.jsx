@@ -5,7 +5,7 @@ import usePageTitle from "../../hooks/usePageTitle.js";
 // Descreve o serviço como ele existe hoje. Itens [PENDENTE] dependem de informação que ainda não
 // existe (dados da empresa, condições comerciais). Mudou o texto, muda a versão em legal/versions.js e em
 // backend/Services/LegalDocuments.cs.
-export const TERMS_UPDATED_AT = `12 de novembro de 2026 (versão ${TERMS_VERSION})`;
+export const TERMS_UPDATED_AT = `14 de novembro de 2026 (versão ${TERMS_VERSION})`;
 
 export default function TermosDeUso() {
   usePageTitle("Termos de uso");
@@ -30,8 +30,8 @@ export function TermosDeUsoTexto() {
       <p>
         Uma ferramenta de organização e visualização financeira para pessoas físicas e pequenos negócios. Você conecta seus
         bancos pelo Open Finance e o Control Finance importa automaticamente contas, saldos, extratos, dados de cartões, investimentos e caixinhas (saldos reservados). Não
-        existe cadastro manual de contas ou transações: você pode ajustar o nome e a categoria das transações importadas e
-        cadastrar cartões e parcelamentos que não vieram de um banco conectado.
+        existe cadastro manual de contas, cartões ou transações: você pode ajustar o nome e a categoria das transações
+        importadas.
       </p>
       <ul>
         <li>O Control Finance <strong>não é instituição financeira nem de pagamento</strong>: não guarda dinheiro, não faz pagamentos ou transferências e não concede crédito.</li>

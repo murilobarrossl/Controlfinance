@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import { getTransactionsReport, setTransactionDetails } from "../../../api/transactions.js";
 import { getCategories } from "../../../api/categories.js";
 import { isAbortError } from "../../../api/client.js";
@@ -137,23 +138,26 @@ function groupByDate(items, dayTotals) {
 export default function Relatorios() {
   usePageTitle("Relatórios");
   const { effectiveScope, scopeKey, scopeQuery, dataRefreshKey, accountsStatus, bumpDataRefresh } = useAccount();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [saved] = useState(() => location.state?.relatorios ?? null);
   const [result, setResult] = useState(null);
   const [categories, setCategories] = useState([]);
   const [categoriesStatus, setCategoriesStatus] = useState("loading");
   const [categoriesReloadKey, setCategoriesReloadKey] = useState(0);
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [sort, setSort] = useState({ key: "dueDate", direction: "desc" });
-  const [page, setPage] = useState(1);
+  const [typeFilter, setTypeFilter] = useState(saved?.typeFilter ?? "all");
+  const [statusFilter, setStatusFilter] = useState(saved?.statusFilter ?? "all");
+  const [searchInput, setSearchInput] = useState(saved?.search ?? "");
+  const [search, setSearch] = useState(saved?.search ?? "");
+  const [sort, setSort] = useState(saved?.sort ?? { key: "dueDate", direction: "desc" });
+  const [page, setPage] = useState(saved?.page ?? 1);
   // "all" mantém o comportamento antigo (histórico completo, sem filtro de data). Sem isso os
   // cards de "Entradas/Saídas do período" somavam o histórico inteiro mesmo quando o rótulo
   // dizia "do período". Nada aqui limitava por mês.
-  const [periodMode, setPeriodMode] = useState("all");
-  const [monthOffset, setMonthOffset] = useState(0);
+  const [periodMode, setPeriodMode] = useState(saved?.periodMode ?? "all");
+  const [monthOffset, setMonthOffset] = useState(saved?.monthOffset ?? 0);
   const [reloadKey, setReloadKey] = useState(0);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", suffix: "", categoryId: "", categoryKnown: true, categoryTouched: false });
@@ -181,13 +185,15 @@ export default function Relatorios() {
   // Busca com debounce: sem isso, cada tecla digitada dispararia uma requisição nova.
   // Reseta a página junto, no mesmo callback (filtro/status/tipo/ordenação já resetam a
   // página direto nos próprios handlers).
+  // Sem a comparação, voltar dos detalhes com uma busca restaurada jogaria a página de volta para 1.
   useEffect(() => {
+    if (searchInput === search) return;
     const timeout = setTimeout(() => {
       setSearch(searchInput);
       setPage(1);
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timeout);
-  }, [searchInput]);
+  }, [searchInput, search]);
 
   const filters = useMemo(
     () => ({
@@ -286,6 +292,15 @@ export default function Relatorios() {
       e.preventDefault();
       cancelEdit();
     }
+  }
+
+  // Guarda o recorte atual na entrada do histórico desta tela: o "voltar" dos detalhes reabre a
+  // mesma página, filtros e ordenação em vez do extrato do zero.
+  function rememberView() {
+    navigate(location.pathname, {
+      replace: true,
+      state: { relatorios: { typeFilter, statusFilter, search, sort, page, periodMode, monthOffset } },
+    });
   }
 
   function handlePeriodModeChange(mode) {
@@ -701,6 +716,13 @@ export default function Relatorios() {
                             </div>
                           ) : (
                             <div className="relatorios__description">
+                              <Link
+                                to={`/dashboard/relatorios/${t.id}`}
+                                state={{ fromReport: true }}
+                                className="relatorios__row-link"
+                                aria-label={`Ver detalhes de ${primary}`}
+                                onClick={rememberView}
+                              />
                               <span className="relatorios__description-primary">
                                 {renderNameWithTrigger(t, primary)}
                                 {t.isTransfer && (

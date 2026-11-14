@@ -1,26 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
 import { getTransactionAggregates } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import NoBankAccount from "../../../components/dashboard/NoBankAccount/NoBankAccount.jsx";
-import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import TransactionFormDialog from "../../../components/dashboard/TransactionFormDialog/TransactionFormDialog.jsx";
-import BreakdownRows from "../../../components/dashboard/BreakdownRows/BreakdownRows.jsx";
-import TransactionDetails from "../../../components/dashboard/TransactionDetails/TransactionDetails.jsx";
+import CategoryBlocks from "./CategoryBlocks.jsx";
 import { TrendUpIcon, TrendDownIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
-import { formatCurrency, formatDate, roundMoney, formatPercentage } from "../../../utils/financeMath.js";
+import { formatCurrency, roundMoney, formatPercentage } from "../../../utils/financeMath.js";
 import { formatMonthLong } from "../../../utils/monthLabel.js";
 import { getMonthsWindow, monthRange } from "../../../utils/monthlyTrend.js";
 import { computeTrend } from "../../../utils/trend.js";
 import "./ReceitasDespesas.css";
 import usePageTitle from "../../../hooks/usePageTitle.js";
-
 
 function breakdownFromAggregates(categories, type) {
   const totals = new Map();
@@ -54,12 +50,12 @@ function closingSentence(totalIncome, totalExpense) {
 
 export default function ReceitasDespesas() {
   usePageTitle("Receitas e despesas");
-  const navigate = useNavigate();
   const { accounts, scopeKey, scopeQuery, effectiveScope, dataRefreshKey, bumpDataRefresh, accountsStatus } = useAccount();
   const [aggregateResult, setAggregateResult] = useState(null);
   const [newEntryOpen, setNewEntryOpen] = useState(false);
   const [monthOffset, setMonthOffset] = useState(0);
-  const [expandedIncomeSources, setExpandedIncomeSources] = useState(() => new Set());
+  const [expandedIncome, setExpandedIncome] = useState(() => new Set());
+  const [expandedExpense, setExpandedExpense] = useState(() => new Set());
   const requestKey = `${scopeKey}|${dataRefreshKey}`;
   const aggregateKey = `${requestKey}|${monthOffset}`;
   const loading = accountsStatus !== "ready" || aggregateResult?.key !== aggregateKey;
@@ -111,29 +107,34 @@ export default function ReceitasDespesas() {
   const incomeTrend = computeTrend(totalIncome, previous?.totalIncome);
   const expenseTrend = computeTrend(totalExpense, previous?.totalExpense, { invertTone: true });
 
-  function toggleIncomeSource(name) {
-    setExpandedIncomeSources((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
+  function toggleIn(setter) {
+    return (name) =>
+      setter((prev) => {
+        const next = new Set(prev);
+        if (next.has(name)) next.delete(name);
+        else next.add(name);
+        return next;
+      });
   }
 
-  function goToCategory(categoryName) {
-    navigate(`/dashboard/categorias?categoria=${encodeURIComponent(categoryName)}`);
+  // Categorias só aceita "periodo=mes" para o mês corrente; num mês anterior ela abre no ano.
+  function categoryHref(categoryName) {
+    const params = new URLSearchParams();
+    if (monthOffset === 0) params.set("periodo", "mes");
+    params.set("categoria", categoryName);
+    return `/dashboard/categorias?${params}`;
   }
 
   if (error) return <p className="receitas-despesas__error">{error}</p>;
   if (accountsStatus === "ready" && !scopeKey) return <NoBankAccount />;
 
   const leftover = roundMoney(totalIncome - totalExpense);
+  const monthQuery = { ...scopeQuery, ...monthRange(currentMonth), refresh: dataRefreshKey };
 
   return (
     <div className="receitas-despesas">
-      <SectionHeading title="Receitas e despesas" level={1} />
-
-      <div className="receitas-despesas__toolbar">
+      <header className="receitas-despesas__header">
+        <SectionHeading title="Receitas e despesas" level={1} />
         <RangePicker
           label={formatMonthLong(currentMonth)}
           onPrev={() => setMonthOffset((prev) => prev + 1)}
@@ -143,7 +144,7 @@ export default function ReceitasDespesas() {
         <Button as="button" type="button" variant="primary" size="sm" onClick={() => setNewEntryOpen(true)}>
           + Novo lançamento
         </Button>
-      </div>
+      </header>
 
       <TransactionFormDialog
         open={newEntryOpen}
@@ -153,9 +154,8 @@ export default function ReceitasDespesas() {
         onCreated={bumpDataRefresh}
       />
 
-
       <div className="receitas-despesas__halves">
-        <section className="receitas-despesas__half">
+        <section className="receitas-despesas__half" aria-label="Receitas">
           <StatCard
             icon={<TrendUpIcon />}
             label="Receitas"
@@ -169,35 +169,17 @@ export default function ReceitasDespesas() {
           ) : incomeBreakdown.length === 0 ? (
             <p className="receitas-despesas__hint">Sem receitas neste período.</p>
           ) : (
-            <BreakdownRows
+            <CategoryBlocks
               data={incomeBreakdown}
               tone="income"
-              onRowClick={toggleIncomeSource}
-              expandedNames={expandedIncomeSources}
-              renderExpanded={(name) => (
-                <TransactionDetails
-                  className="rd-transactions"
-                  query={{
-                    ...scopeQuery,
-                    ...monthRange(currentMonth),
-                    type: "Income",
-                    category: name,
-                    refresh: dataRefreshKey,
-                  }}
-                  renderItem={(t) => (
-                    <li key={t.id} className="rd-transactions__item">
-                      <span className="rd-transactions__name">{t.name}</span>
-                      <span className="rd-transactions__date">{formatDate(t.dueDate)}</span>
-                      <span className="rd-transactions__amount">{formatCurrency(t.amount)}</span>
-                    </li>
-                  )}
-                />
-              )}
+              expandedNames={expandedIncome}
+              onToggle={toggleIn(setExpandedIncome)}
+              detailsQuery={{ ...monthQuery, type: "Income" }}
             />
           )}
         </section>
 
-        <section className="receitas-despesas__half">
+        <section className="receitas-despesas__half" aria-label="Despesas">
           <StatCard
             icon={<TrendDownIcon />}
             label="Despesas"
@@ -211,30 +193,36 @@ export default function ReceitasDespesas() {
           ) : expenseBreakdown.length === 0 ? (
             <p className="receitas-despesas__hint">Sem despesas neste período.</p>
           ) : (
-            <BreakdownRows data={expenseBreakdown} tone="expense" onRowClick={goToCategory} showLinkHint />
+            <CategoryBlocks
+              data={expenseBreakdown}
+              tone="expense"
+              expandedNames={expandedExpense}
+              onToggle={toggleIn(setExpandedExpense)}
+              detailsQuery={{ ...monthQuery, type: "Expense" }}
+              categoryHref={categoryHref}
+            />
           )}
         </section>
       </div>
 
-      <Card title="Resultado do período" className="receitas-despesas__closing">
+      <section className="rd-result" aria-labelledby="rd-result-label">
+        <h2 id="rd-result-label" className="rd-result__label">
+          Resultado do período
+        </h2>
         {loading ? (
-          <>
-            <Skeleton width="8rem" height="2rem" />
-            <Skeleton width="100%" height="1rem" />
-          </>
+          <div className="rd-result__loading">
+            <Skeleton width="10rem" height="2.25rem" />
+            <Skeleton width="min(100%, 32rem)" height="1rem" />
+          </div>
         ) : (
           <>
-            <p
-              className={`receitas-despesas__closing-value ${
-                leftover >= 0 ? "receitas-despesas__closing-value--income" : "receitas-despesas__closing-value--expense"
-              }`}
-            >
-              {formatCurrency(leftover)}
+            <p className={`rd-result__value rd-result__value--${leftover >= 0 ? "income" : "expense"}`}>
+              {leftover < 0 ? `−${formatCurrency(Math.abs(leftover))}` : formatCurrency(leftover)}
             </p>
-            <p className="receitas-despesas__closing-text">{closingSentence(totalIncome, totalExpense)}</p>
+            <p className="rd-result__text">{closingSentence(totalIncome, totalExpense)}</p>
           </>
         )}
-      </Card>
+      </section>
     </div>
   );
 }

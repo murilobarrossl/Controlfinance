@@ -54,11 +54,6 @@ public class User
     /// <summary>Dia local do último lembrete de vencimento enviado: no máximo um por dia local.</summary>
     public DateOnly? LastDueReminderLocalDate { get; set; }
 
-    /// <summary>Cartão mostrado em "Seu cartão" no Dashboard: id de uma BankAccount reconhecida como
-    /// cartão ou de um CreditCard manual. Sem FK porque pode apontar para qualquer uma das duas
-    /// tabelas; se o cartão deixar de existir, vale o primeiro da lista.</summary>
-    public Guid? PrimaryCardId { get; set; }
-
     /// <summary>Fuso IANA do navegador do usuário, atualizado a cada login. Define o "hoje" de
     /// vencimentos e parcelas (ver UserClock).</summary>
     public string TimeZone { get; set; } = Services.UserClock.DefaultTimeZoneId;

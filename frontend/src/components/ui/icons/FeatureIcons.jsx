@@ -201,10 +201,50 @@ export function CoinsIcon() {
   );
 }
 
-export function StarIcon({ filled = false }) {
+export function LandmarkIcon() {
   return (
-    <svg {...BASE_PROPS} fill={filled ? "currentColor" : "none"}>
-      <path d="M12 3.5l2.6 5.3 5.9.9-4.25 4.1 1 5.85L12 16.9l-5.25 2.75 1-5.85L3.5 9.7l5.9-.9z" />
+    <svg {...BASE_PROPS}>
+      <path d="M3.5 9 12 4l8.5 5" />
+      <path d="M5.5 10v7M10 10v7M14 10v7M18.5 10v7" />
+      <path d="M4 20h16" />
+    </svg>
+  );
+}
+
+export function HomeIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <path d="M4 10.5 12 4l8 6.5" />
+      <path d="M6 9v11h12V9" />
+      <path d="M10 20v-5h4v5" />
+    </svg>
+  );
+}
+
+export function LeafIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <path d="M6 18c-1-7 3.5-12.5 13-13 .5 9.5-5 14-12 13.5" />
+      <path d="M5 20c2.5-4.5 5.5-7.5 9.5-9.5" />
+    </svg>
+  );
+}
+
+export function PieChartIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <path d="M11 4a8 8 0 1 0 9 9h-9V4z" />
+      <path d="M14.5 3.5a6.5 6.5 0 0 1 6 6h-6v-6z" />
+    </svg>
+  );
+}
+
+export function CandlestickIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <path d="M8 4v3M8 15v5M16 4v4M16 16v4" />
+      <rect x="6" y="7" width="4" height="8" rx="1" />
+      <rect x="14" y="8" width="4" height="8" rx="1" />
     </svg>
   );
 }

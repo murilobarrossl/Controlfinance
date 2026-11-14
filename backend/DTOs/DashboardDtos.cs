@@ -116,73 +116,44 @@ public record TransactionDto(
             : status.ToString();
 }
 
-// ── CREDIT CARD (só cartão 100% manual — não sincronizado por nenhum banco) ────
-public record CreateCreditCardDto(
-    [Required(ErrorMessage = "Nome é obrigatório."), MaxLength(80)] string Name,
-    [MaxLength(50)] string? Brand,
-    [Range(0, double.MaxValue, ErrorMessage = "Limite não pode ser negativo.")] decimal CreditLimit,
-    [Range(1, 31, ErrorMessage = "Dia de fechamento deve ser entre 1 e 31.")] int ClosingDay,
-    [Range(1, 31, ErrorMessage = "Dia de vencimento deve ser entre 1 e 31.")] int DueDay
-);
-
-public record UpdateCreditCardDto(
-    [MaxLength(50)] string? Brand,
-    [Range(0, double.MaxValue, ErrorMessage = "Limite não pode ser negativo.")] decimal CreditLimit,
-    [Range(1, 31, ErrorMessage = "Dia de fechamento deve ser entre 1 e 31.")] int ClosingDay,
-    [Range(1, 31, ErrorMessage = "Dia de vencimento deve ser entre 1 e 31.")] int DueDay
-);
-
-public record CreditCardDto(
+public record TransactionDetailDto(
     Guid Id,
     string Name,
-    string? Brand,
-    decimal CreditLimit,
-    decimal UsedLimit,
-    decimal AvailableLimit,
-    int ClosingDay,
-    int DueDay
-)
-{
-    public static CreditCardDto FromEntity(CreditCard c) => new(
-        c.Id, c.Name, c.Brand,
-        c.CreditLimit, c.UsedLimit,
-        c.CreditLimit - c.UsedLimit,
-        c.ClosingDay, c.DueDay
-    );
-}
-
-// ── INSTALLMENT ───────────────────────────────────────
-// CreditCardId (cartão manual) e BankAccountId (conta reconhecida como cartão) são mutuamente
-// exclusivos — o formulário manda um ou outro, nunca os dois.
-public record CreateInstallmentDto(
-    Guid? CreditCardId,
-    Guid? BankAccountId,
-    [Required(ErrorMessage = "Descrição é obrigatória."), MaxLength(150)] string Description,
-    [Range(0.01, double.MaxValue, ErrorMessage = "Valor total deve ser maior que zero.")] decimal TotalAmount,
-    [Range(1, int.MaxValue, ErrorMessage = "Total de parcelas deve ser maior que zero.")] int TotalInstallments,
-    [Range(1, int.MaxValue, ErrorMessage = "Parcela atual deve ser maior que zero.")] int CurrentInstallment,
-    [Range(0.01, double.MaxValue, ErrorMessage = "Valor da parcela deve ser maior que zero.")] decimal InstallmentAmount,
-    DateTime NextDueDate
+    string Type,
+    string Status,
+    decimal Amount,
+    DateTime DueDate,
+    DateTime? PaidAt,
+    DateTime CreatedAt,
+    string? CategoryName,
+    string? CategoryColor,
+    bool IsFixed,
+    string MovementKind,
+    TransactionAccountDto Account,
+    TransactionBankDataDto Bank
 );
 
-public record InstallmentDto(
-    Guid Id,
-    string Description,
-    decimal InstallmentAmount,
-    int CurrentInstallment,
-    int TotalInstallments,
-    DateTime NextDueDate,
-    string? CreditCardName,
-    bool AffectsCardLimit = false
-)
-{
-    public static InstallmentDto FromEntity(Installment i) => new(
-        i.Id, i.Description, i.InstallmentAmount,
-        i.CurrentInstallment, i.TotalInstallments, i.NextDueDate,
-        i.CreditCard?.Name ?? i.BankAccount?.Name,
-        i.CreditCard is not null || i.BankAccount is { UsedLimit: not null, PolpAccountId: null }
-    );
-}
+public record TransactionAccountDto(string Name, string? Number, bool IsCard, string? InstitutionName, DateTime? LastSyncedAt);
+
+public record TransactionBankDataDto(
+    DateTime? DateTime,
+    string? OperationType,
+    string? Description,
+    string? CounterpartyAlias,
+    string? CounterpartyLegalName,
+    string? DescribedParty,
+    string? CounterpartyCnpj,
+    string? CounterpartyPersonType,
+    string? CounterpartyBankCode,
+    string? CounterpartyAccount,
+    string? CardNumber,
+    int? InstallmentNumber,
+    int? InstallmentTotal,
+    decimal? OriginalAmount,
+    string? OriginalCurrency,
+    string? BillMonth,
+    string DetailsStatus
+);
 
 // ── DASHBOARD ─────────────────────────────────────────
 public record DashboardSummaryDto(
@@ -209,10 +180,9 @@ public record DashboardAccountDto(Guid Id, string Name, string Kind, decimal? Ba
 
 public record CategoryExpenseDto(string CategoryName, decimal Amount, decimal Percentage);
 
-// Um cartão "reconhecido": IsSynced=true vem de uma BankAccount identificada como cartão pela
-// Polp (CreditCardAccountDetector) — sem entidade separada, é a própria conta. IsSynced=false vem
-// de um CreditCard 100% manual. HasFullDetails=false é o estado "reconhecemos o cartão, faltam os
-// campos que a Polp não mandou pra esse banco" — a UI pede só o que estiver null.
+// Um cartão "reconhecido": BankAccount identificada como cartão pela Polp
+// (CreditCardAccountDetector) — sem entidade separada, é a própria conta. HasFullDetails=false é o
+// estado "reconhecemos o cartão, faltam os campos que a Polp não mandou pra esse banco".
 public record RecognizedCardDto(
     Guid Id,
     bool IsSynced,
@@ -226,13 +196,11 @@ public record RecognizedCardDto(
     decimal? CurrentInvoice,
     DateTime? InvoiceDueDate,
     bool HasFullDetails,
-    IEnumerable<InstallmentDto> Installments,
     string? ProductType,
     string? InstitutionColor,
     Guid? ConnectionId,
     string? BankName,
-    DateTime? ConnectionLastSyncedAt,
-    bool IsPrimary = false
+    DateTime? ConnectionLastSyncedAt
 )
 {
     public string? InvoiceStatus { get; init; }

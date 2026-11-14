@@ -41,6 +41,8 @@ public class PolpIntegration
     /// ERROR_PROCESSING_CATEGORIES/COUNTERPARTIES do consentimento).</summary>
     public bool EnrichmentPending { get; set; }
 
+    public int TransactionDetailsVersion { get; set; }
+
     // Products reported by the authenticated provider, never inferred from the request body.
     public string? ConsentProductsJson { get; set; }
     public DateTime? ConsentCheckedAt { get; set; }

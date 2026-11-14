@@ -17,6 +17,7 @@ public class PolpSyncService(
     IIntegrationLock integrationLock, TimeProvider time, ILogger<PolpSyncService>? logger = null, IPolpInbox? inbox = null)
 {
     public const string AuthorisedStatus = "AUTHORISED";
+    public const int TransactionDetailsVersion = 2;
     public static readonly TimeSpan ReconcileWindow = TimeSpan.FromDays(7);
 
     private const string CardBillPaymentType = "PAGAMENTO_FATURA";
@@ -76,7 +77,7 @@ public class PolpSyncService(
             throw new PolpResourceNotReadyException("Consentimento ainda não autorizado localmente.");
         }
 
-        var plan = new Plan(local) { Backfill = true };
+        var plan = new Plan(local) { Backfill = true, FullTransactionHistory = true };
         plan.Accounts.AddRange(await polp.GetAccountsAsync(local.PolpIntegrationId, null, ct));
         plan.Cards.AddRange(await polp.GetCreditCardsAsync(local.PolpIntegrationId, null, ct));
 
@@ -123,6 +124,21 @@ public class PolpSyncService(
         }
         else
             return;
+
+        await CommitAsync(plan, ct);
+    }
+
+    // Linhas importadas antes de existirem os campos de detalhe só os recebem relendo o histórico.
+    public async Task RefreshTransactionDetailsAsync(PolpIntegration local, CancellationToken ct)
+    {
+        if (local.Status != AuthorisedStatus || !local.SyncedLocally || local.TransactionDetailsVersion >= TransactionDetailsVersion) return;
+
+        var plan = new Plan(local) { FullTransactionHistory = true };
+        var known = await db.BankAccounts.AsNoTracking()
+            .Where(b => b.UserId == local.UserId && b.PolpIntegrationId == local.PolpIntegrationId && b.PolpAccountId != null && b.IsActive)
+            .ToListAsync(ct);
+        foreach (var account in known)
+            await FetchTransactionsAsync(plan, account.PolpAccountId!.Value, CreditCardAccountDetector.LooksLikeCreditCard(account), null, ct);
 
         await CommitAsync(plan, ct);
     }
@@ -381,10 +397,12 @@ public class PolpSyncService(
 
         var syncedAt = now.UtcDateTime;
         var synced = current.SyncedLocally || plan.Backfill;
+        var detailsVersion = plan.FullTransactionHistory ? TransactionDetailsVersion : current.TransactionDetailsVersion;
         var updated = await db.PolpIntegrations
             .Where(p => p.Id == current.Id && p.Status != PolpDisconnectService.PendingStatus)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(p => p.SyncedLocally, synced)
+                .SetProperty(p => p.TransactionDetailsVersion, detailsVersion)
                 .SetProperty(p => p.LastSyncedAt, syncedAt)
                 .SetProperty(p => p.UpdatedAt, syncedAt), ct);
         if (updated == 0) throw new IntegrationGoneException();
@@ -562,6 +580,7 @@ public class PolpSyncService(
                     existing.DueDate = dueDate;
                     existing.PaidAt = paidAt;
                     existing.PolpMovementKind = rt.MovementKind(existing.PolpMovementKind);
+                    rt.ApplyBankDetails(existing);
 
                     // Enriquecimento tardio: só completa o que ainda é automático; renomeação ou
                     // recategorização feita no app nunca é sobrescrita.
@@ -587,6 +606,7 @@ public class PolpSyncService(
                     PolpMovementKind = rt.MovementKind(PolpMovementKind.None),
                     PaidAt = paidAt
                 };
+                rt.ApplyBankDetails(transaction);
                 db.Transactions.Add(transaction);
                 existingByKey[(account.Id, polpTransactionId)] = transaction;
             }
@@ -640,6 +660,7 @@ public class PolpSyncService(
     {
         public PolpIntegration Integration { get; } = integration;
         public bool Backfill { get; init; }
+        public bool FullTransactionHistory { get; init; }
         public List<PolpAccountDto> Accounts { get; } = [];
         public List<PolpCreditCardDto> Cards { get; } = [];
         public Dictionary<Guid, CardIdentity> CardIdentities { get; } = [];
@@ -660,6 +681,47 @@ public class PolpSyncService(
         string? DateTime, string? CategoryRef, bool IsCardBillPayment,
         string? BillPostDate = null, string? BillForecastDate = null, string? IdentificationNumber = null)
     {
+        public string? BankName { get; init; }
+        public string? OperationType { get; init; }
+        public string? CounterpartyBankCode { get; init; }
+        public string? CounterpartyNumber { get; init; }
+        public string? CounterpartyPersonType { get; init; }
+        public int? ChargeIdentificator { get; init; }
+        public int? ChargeNumber { get; init; }
+        public PolpMoney? OriginalAmount { get; init; }
+        public bool IsCard { get; init; }
+        public PolpCounterpartyDto? Counterparty { get; init; }
+
+        public void ApplyBankDetails(Transaction t)
+        {
+            t.BankDateTime = ToBankInstant(DateTime);
+            t.BankOperationType = SafeCode(OperationType, 40);
+            t.BankDescription = string.IsNullOrWhiteSpace(BankName) ? null : BankName.Trim();
+            // Enriquecimento chega depois e pode faltar num webhook seguinte: não apaga o que já veio.
+            if (Counterparty is { } cp && (!string.IsNullOrWhiteSpace(cp.Name) || !string.IsNullOrWhiteSpace(cp.Alias)))
+            {
+                t.CounterpartyName = string.IsNullOrWhiteSpace(cp.Name) ? null : cp.Name.Trim();
+                t.CounterpartyAlias = string.IsNullOrWhiteSpace(cp.Alias) ? null : cp.Alias.Trim();
+                // Só CNPJ (cadastro público de empresa); um CPF de terceiro nunca é guardado.
+                t.CounterpartyCnpj = cp.TaxId is { Length: 14 } taxId && taxId.All(char.IsAsciiDigit) ? taxId : null;
+            }
+            t.CounterpartyPersonType = CounterpartyPersonType is "PESSOA_NATURAL" or "PESSOA_JURIDICA" ? CounterpartyPersonType : null;
+            t.CounterpartyBankCode = CounterpartyBankCode is { Length: > 0 and <= 8 } code && code.All(char.IsAsciiDigit) ? code : null;
+            t.CounterpartyAccount = AccountNumberMask.Mask(CounterpartyNumber);
+            t.CardNumber = IsCard ? AccountNumberMask.Mask(IdentificationNumber) : null;
+
+            var validInstallment = ChargeNumber is > 1 && ChargeIdentificator >= 1 && ChargeIdentificator <= ChargeNumber;
+            t.InstallmentNumber = validInstallment ? ChargeIdentificator : null;
+            t.InstallmentTotal = validInstallment ? ChargeNumber : null;
+
+            var currency = SafeCode(OriginalAmount?.Currency, 3);
+            var foreign = IsCard && currency is { Length: 3 } && currency != "BRL" && OriginalAmount?.Value is not null;
+            t.OriginalAmount = foreign ? Math.Abs(OriginalAmount!.Value!.Value) : null;
+            t.OriginalCurrency = foreign ? currency : null;
+
+            t.BillMonth = IsCard && ParseYearMonth(BillForecastDate) is { } m ? $"{m.Year:D4}-{m.Month:D2}" : null;
+        }
+
         public string CategoryName => IsCardBillPayment
             ? TransferDetection.CardBillPaymentCategoryName
             : PolpCategoryMap.ToCategoryName(CategoryRef);
@@ -680,7 +742,15 @@ public class PolpSyncService(
             false,
             t.TransactionDateTime,
             t.CategoryRef,
-            false);
+            false)
+        {
+            BankName = t.TransactionName,
+            OperationType = t.Type,
+            Counterparty = t.Counterparty,
+            CounterpartyBankCode = t.PartieCompeCode?.Trim(),
+            CounterpartyNumber = t.PartieNumber,
+            CounterpartyPersonType = t.PartiePersonType,
+        };
 
         public static RemoteTransaction From(PolpCardTransactionDto t) => new(
             t.Id,
@@ -695,7 +765,50 @@ public class PolpSyncService(
             string.Equals(t.TransactionType, CardBillPaymentType, StringComparison.OrdinalIgnoreCase),
             t.BillPostDate,
             t.BillForecastDate,
-            t.IdentificationNumber);
+            t.IdentificationNumber)
+        {
+            BankName = t.TransactionName,
+            OperationType = t.TransactionType,
+            Counterparty = t.Counterparty,
+            ChargeIdentificator = t.ChargeIdentificator,
+            ChargeNumber = t.ChargeNumber,
+            OriginalAmount = t.OriginalAmount,
+            IsCard = true,
+        };
+    }
+
+    private static string? SafeCode(string? value, int maxLength)
+    {
+        var code = value?.Trim().ToUpperInvariant();
+        return code is { Length: > 0 } && code.Length <= maxLength && code.All(c => char.IsAsciiLetter(c) || c == '_')
+            ? code
+            : null;
+    }
+
+    // Só data, ou meia-noite exata no relógio do próprio texto, é tratada como "sem horário".
+    internal static DateTime? ToBankInstant(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var tIndex = text.IndexOfAny(['T', ' ']);
+        if (tIndex < 0) return null;
+
+        var timePart = text[(tIndex + 1)..];
+        var hasOffset = timePart.Contains('Z') || timePart.Contains('z') || timePart.Contains('+') || timePart.Contains('-');
+
+        if (hasOffset)
+        {
+            if (!DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dto)
+                || dto.Year < 1900 || dto.TimeOfDay == TimeSpan.Zero)
+                return null;
+            return dto.UtcDateTime;
+        }
+
+        if (!System.DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var local)
+            || local.Year < 1900 || local.TimeOfDay == TimeSpan.Zero)
+            return null;
+        return System.DateTime.SpecifyKind(
+            TimeZoneInfo.ConvertTimeToUtc(System.DateTime.SpecifyKind(local, DateTimeKind.Unspecified), Brasilia),
+            DateTimeKind.Utc);
     }
 
     // Categorias são criadas antes do lock, cada uma salva isolada: no Postgres uma violação de

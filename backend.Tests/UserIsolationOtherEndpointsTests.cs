@@ -85,43 +85,14 @@ public class UserIsolationCardsTests
     {
         using var t = new TestDb();
         var other = OtherUser.Add(t);
-        var myCard = t.AddCard(3000m, 0m);
+        var myCard = t.AddAccount("Meu cartao", type: "CREDIT_CARD");
 
-        var own = Http.Json(await Cards(t).GetAll()) + Http.Json(await Cards(t).GetSummary(default));
-        Assert.Equal(2, own.Split(myCard.Id.ToString()).Length - 1);
-
-        foreach (var json in new[]
-        {
-            Http.Json(await Cards(t).GetAll()),
-            Http.Json(await Cards(t).GetSummary(default)),
-            Http.Json(await t.Controller(db => new InstallmentsController(db)).GetAll()),
-        })
-        {
-            Assert.DoesNotContain(other.ManualCard.Id.ToString(), json);
-            Assert.DoesNotContain(other.Card.Id.ToString(), json);
-            Assert.DoesNotContain(other.Installment.Id.ToString(), json);
-            Assert.DoesNotContain("da outra pessoa", json);
-        }
+        var json = Http.Json(await Cards(t).GetSummary(default));
+        Assert.Contains(myCard.Id.ToString(), json);
+        Assert.DoesNotContain(other.Card.Id.ToString(), json);
+        Assert.DoesNotContain("da outra pessoa", json);
     }
 
-    [Fact]
-    public async Task Cartao_alheio_nao_pode_ser_principal_editado_nem_apagado()
-    {
-        using var t = new TestDb();
-        var other = OtherUser.Add(t);
-
-        Assert.Equal(404, Http.Status(await Cards(t).SetPrimary(other.ManualCard.Id, default)));
-        Assert.Equal(404, Http.Status(await Cards(t).SetPrimary(other.Card.Id, default)));
-        Assert.Equal(404, Http.Status(await Cards(t).Update(other.ManualCard.Id, new UpdateCreditCardDto("Visa", 1m, 1, 2))));
-        Assert.Equal(404, Http.Status(await Cards(t).Delete(other.ManualCard.Id)));
-
-        await using var db = t.NewContext();
-        Assert.Null(db.Users.Single(u => u.Id == t.User.Id).PrimaryCardId);
-        var card = db.CreditCards.Single(c => c.Id == other.ManualCard.Id);
-        Assert.True(card.IsActive);
-        Assert.Equal(5000m, card.CreditLimit);
-        Assert.Equal(5, card.ClosingDay);
-    }
 }
 
 public class UserIsolationRecurrencesAndPlanningTests
@@ -168,7 +139,7 @@ public class UserIsolationRecurrencesAndPlanningTests
         });
         t.Db.SaveChanges();
 
-        Assert.Equal(404, Http.Status(await Planning(t).SetReserveAccount(new SetReserveAccountDto(other.Account.Id), default)));
+        Assert.Equal(400, Http.Status(await Planning(t).SetReserveAccount(new SetReserveAccountDto(other.Account.Id), default)));
         Assert.Equal(404, Http.Status(await Planning(t).SetInvestmentRate(other.ManualAccount.Id,
             new SetInvestmentRateDto(InvestmentRateKinds.CdiPercent, 110m, false), default)));
         await Planning(t).DeleteInvestmentRate(other.ManualAccount.Id, default);
@@ -192,7 +163,7 @@ public class UserIsolationExportTests
         using var t = new TestDb();
         var other = OtherUser.Add(t);
         t.Db.SavingsGoals.Add(new SavingsGoal { UserId = other.User.Id, Name = "Meta da outra pessoa", TargetAmount = 1000m });
-        t.Db.EmergencyReserves.Add(new EmergencyReserve { UserId = other.User.Id, CurrentAmount = 777.77m, BankAccountId = other.Account.Id });
+        t.Db.EmergencyReserves.Add(new EmergencyReserve { UserId = other.User.Id, BankAccountId = other.Account.Id });
         t.Db.ConsentRecords.Add(new ConsentRecord { UserId = other.User.Id, Kind = ConsentKinds.BankConnection, Version = "x", Reference = "alheia" });
         t.Db.SaveChanges();
         var mine = t.AddAccount("Minha conta");

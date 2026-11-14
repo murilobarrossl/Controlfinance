@@ -19,8 +19,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<BankAccount> BankAccounts => Set<BankAccount>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
-    public DbSet<CreditCard> CreditCards => Set<CreditCard>();
-    public DbSet<Installment> Installments => Set<Installment>();
     public DbSet<PolpIntegration> PolpIntegrations => Set<PolpIntegration>();
     public DbSet<PolpApiCooldown> PolpApiCooldowns => Set<PolpApiCooldown>();
     public DbSet<InvestmentSyncSchedule> InvestmentSyncSchedules => Set<InvestmentSyncSchedule>();
@@ -42,6 +40,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<RemovedPolpResource> RemovedPolpResources => Set<RemovedPolpResource>();
     public DbSet<EmergencyReserve> EmergencyReserves => Set<EmergencyReserve>();
     public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
+    public DbSet<PlanningAllocation> PlanningAllocations => Set<PlanningAllocation>();
     public DbSet<InvestmentRateProfile> InvestmentRateProfiles => Set<InvestmentRateProfile>();
     public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
 
@@ -150,6 +149,21 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(t => t.Type).HasConversion<string>();
             e.Property(t => t.Status).HasConversion<string>();
             e.Property(t => t.PolpMovementKind).HasConversion<string>().HasMaxLength(20);
+            e.Property(t => t.BankDescription).HasConversion(nullableTextConverter).HasColumnName("BankDescriptionEncrypted");
+            e.Property(t => t.CounterpartyName).HasConversion(nullableTextConverter).HasColumnName("CounterpartyNameEncrypted");
+            e.Property(t => t.CounterpartyAlias).HasConversion(nullableTextConverter).HasColumnName("CounterpartyAliasEncrypted");
+            e.Property(t => t.CounterpartyCnpj).HasConversion(nullableTextConverter).HasColumnName("CounterpartyCnpjEncrypted");
+            e.Property(t => t.CounterpartyPersonType).HasMaxLength(20);
+            e.Property(t => t.CounterpartyAccount).HasConversion(nullableTextConverter).HasColumnName("CounterpartyAccountEncrypted");
+            e.Property(t => t.CardNumber).HasConversion(nullableTextConverter).HasColumnName("CardNumberEncrypted");
+            e.Property(t => t.OriginalAmount).HasConversion(nullableDecimalConverter).HasColumnName("OriginalAmountEncrypted");
+            e.Property(t => t.BankOperationType).HasMaxLength(40);
+            e.Property(t => t.CounterpartyBankCode).HasMaxLength(8);
+            e.Property(t => t.OriginalCurrency).HasMaxLength(3);
+            e.Property(t => t.BillMonth).HasMaxLength(7);
+            // O banco já tem InstallmentNumber/InstallmentCount criadas fora das migrations.
+            e.Property(t => t.InstallmentNumber).HasColumnName("BankInstallmentNumber");
+            e.Property(t => t.InstallmentTotal).HasColumnName("BankInstallmentTotal");
             e.HasOne(t => t.User)
              .WithMany()
              .HasForeignKey(t => t.UserId)
@@ -170,59 +184,35 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasIndex(t => new { t.UserId, t.BankAccountId, t.DueDate });
         });
 
-        modelBuilder.Entity<CreditCard>(e =>
-        {
-            e.HasKey(c => c.Id);
-            e.Property(c => c.Name).IsRequired().HasMaxLength(80);
-            e.Property(c => c.CreditLimit).HasConversion(decimalConverter).HasColumnName("CreditLimitEncrypted");
-            e.Property(c => c.UsedLimit).HasConversion(decimalConverter).HasColumnName("UsedLimitEncrypted");
-            e.HasOne(c => c.User)
-             .WithMany()
-             .HasForeignKey(c => c.UserId)
-             .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<Installment>(e =>
-        {
-            e.HasKey(i => i.Id);
-            e.HasIndex(i => i.UserId);
-            // Descrição do parcelamento é digitada pelo usuário ("Notebook", "Tratamento dentário"…)
-            // e pode revelar mais do que parece (inclusive saúde): cifrada como o nome das
-            // transações. Mesma transição em duas fases: linhas antigas ficam em "Description"
-            // (shadow LegacyDescription) até PrivacyBackfill cifrar.
-            e.Property(i => i.Description).HasConversion(textConverter).HasColumnName("DescriptionEncrypted").IsRequired(false);
-            e.Property<string?>("LegacyDescription").HasColumnName("Description").HasMaxLength(150);
-            e.Property(i => i.TotalAmount).HasConversion(decimalConverter).HasColumnName("TotalAmountEncrypted");
-            e.Property(i => i.InstallmentAmount).HasConversion(decimalConverter).HasColumnName("InstallmentAmountEncrypted");
-            e.HasOne(i => i.CreditCard)
-             .WithMany(c => c.Installments)
-             .HasForeignKey(i => i.CreditCardId)
-             .OnDelete(DeleteBehavior.SetNull);
-            e.HasOne(i => i.BankAccount)
-             .WithMany()
-             .HasForeignKey(i => i.BankAccountId)
-             .OnDelete(DeleteBehavior.SetNull);
-        });
-
         modelBuilder.Entity<EmergencyReserve>(e =>
         {
             e.HasKey(r => r.UserId);
-            e.Property(r => r.CurrentAmount).HasConversion(decimalConverter).HasColumnName("CurrentAmountEncrypted");
             e.HasOne(r => r.User)
              .WithOne()
              .HasForeignKey<EmergencyReserve>(r => r.UserId)
              .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(r => r.BankAccountId);
-            e.HasIndex(r => r.ImportedInvestmentId);
-            e.HasIndex(r => r.ImportedReservedBalanceId);
-            e.HasOne<ImportedInvestment>().WithMany().HasForeignKey(r => r.ImportedInvestmentId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("FK_Reserve_ImportedInvestment");
-            e.HasOne<ImportedReservedBalance>().WithMany().HasForeignKey(r => r.ImportedReservedBalanceId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("FK_Reserve_ImportedBalance");
-            e.ToTable(t => t.HasCheckConstraint("CK_EmergencyReserve_OneResource",
-                "(\"BankAccountId\" IS NULL OR \"ImportedInvestmentId\" IS NULL) AND (\"BankAccountId\" IS NULL OR \"ImportedReservedBalanceId\" IS NULL) AND (\"ImportedInvestmentId\" IS NULL OR \"ImportedReservedBalanceId\" IS NULL)"));
             e.HasOne<BankAccount>()
              .WithMany()
              .HasForeignKey(r => r.BankAccountId)
              .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Índice único por recurso, não por (meta, recurso): um investimento serve a um destino só, então
+        // a soma da reserva com as metas nunca passa do dinheiro que existe de fato.
+        modelBuilder.Entity<PlanningAllocation>(e =>
+        {
+            e.HasKey(a => a.Id);
+            e.HasIndex(a => a.UserId);
+            e.HasIndex(a => a.GoalId);
+            e.HasIndex(a => a.ImportedInvestmentId).IsUnique();
+            e.HasIndex(a => a.ImportedReservedBalanceId).IsUnique();
+            e.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<SavingsGoal>().WithMany().HasForeignKey(a => a.GoalId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<ImportedInvestment>().WithMany().HasForeignKey(a => a.ImportedInvestmentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<ImportedReservedBalance>().WithMany().HasForeignKey(a => a.ImportedReservedBalanceId).OnDelete(DeleteBehavior.Cascade);
+            e.ToTable(t => t.HasCheckConstraint("CK_PlanningAllocation_OneResource",
+                "(\"ImportedInvestmentId\" IS NULL) <> (\"ImportedReservedBalanceId\" IS NULL)"));
         });
 
         modelBuilder.Entity<InvestmentRateProfile>(e =>
@@ -242,14 +232,13 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         });
 
         // Nome da meta é digitado pelo usuário e pode revelar planos pessoais ("Tratamento", "Divórcio"…):
-        // cifrado como a descrição dos parcelamentos, junto com os valores.
+        // cifrado como a descrição dos parcelamentos, junto com o valor-alvo.
         modelBuilder.Entity<SavingsGoal>(e =>
         {
             e.HasKey(g => g.Id);
             e.HasIndex(g => g.UserId);
             e.Property(g => g.Name).HasConversion(textConverter).HasColumnName("NameEncrypted");
             e.Property(g => g.TargetAmount).HasConversion(decimalConverter).HasColumnName("TargetAmountEncrypted");
-            e.Property(g => g.CurrentAmount).HasConversion(decimalConverter).HasColumnName("CurrentAmountEncrypted");
             e.HasOne(g => g.User)
              .WithMany()
              .HasForeignKey(g => g.UserId)

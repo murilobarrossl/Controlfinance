@@ -31,8 +31,6 @@ public static class EncryptionKeyRotation
         total += await RotateAsync<User>(db, ct);
         total += await RotateAsync<BankAccount>(db, ct);
         total += await RotateAsync<Transaction>(db, ct);
-        total += await RotateAsync<CreditCard>(db, ct);
-        total += await RotateAsync<Installment>(db, ct);
         total += await RotateAsync<AccessLogEntry>(db, ct);
 
         logger.LogInformation("Rotação de chave concluída: {Rows} linha(s) regravada(s) com a chave ativa. Desligue Encryption:RotateOnStartup.", total);

@@ -1,4 +1,3 @@
-import { StarIcon } from "../../ui/icons/FeatureIcons.jsx";
 import { cardNetwork } from "../../../utils/cardBrand.js";
 import { cardPalette } from "../../../utils/cardColors.js";
 import { CardChip, CardNetworkSymbol } from "./CardSymbols.jsx";
@@ -12,7 +11,7 @@ function lastDigits(number) {
 // Both screens use this same family template. Names and issuer never select an appearance.
 export default function CardFace({ card: suppliedCard, holder }) {
   const card = suppliedCard ?? {};
-  const bank = card.bankName || (card.isSynced === false ? "Cartão manual" : "Banco não informado");
+  const bank = card.bankName || "Banco não informado";
   const name = card.name || card.originalProductName;
   const network = cardNetwork(card.brand);
   const digits = lastDigits(card.number);
@@ -56,12 +55,9 @@ export default function CardFace({ card: suppliedCard, holder }) {
         </span>
       </span>
 
-      {(card.dueDay || card.isPrimary) && (
+      {card.dueDay && (
         <span className="card-presentation__meta">
-          {card.dueDay ? <span>Fatura vence dia {card.dueDay}</span> : null}
-          {card.isPrimary && (
-            <span className="card-presentation__primary"><StarIcon filled /> Principal</span>
-          )}
+          <span>Fatura vence dia {card.dueDay}</span>
         </span>
       )}
     </span>

@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";
-import { getCreditCardsSummary, createCreditCard, updateCreditCard, setPrimaryCard } from "../../../api/creditCards.js";
-import { getInstallments, createInstallment, deleteInstallment } from "../../../api/installments.js";
+import { getCreditCardsSummary } from "../../../api/creditCards.js";
 import { getTransactions } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
@@ -11,11 +10,8 @@ import { useDashboardHeaderSlot } from "../../../context/DashboardHeaderContext.
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
-import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
-import IconAvatar from "../../../components/ui/IconAvatar/IconAvatar.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
-import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import { CardIcon, WalletIcon, BellIcon, HistoryIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
@@ -32,57 +28,28 @@ import { cardBrand, cardPickerOption, connectorsByName as buildConnectorsMap } f
 import "./Cartoes.css";
 import usePageTitle from "../../../hooks/usePageTitle.js";
 
-const EMPTY_DETAIL_FORM = { id: null, brand: "", creditLimit: "", closingDay: "1", dueDay: "10" };
-const EMPTY_MANUAL_FORM = { name: "", brand: "", creditLimit: "", closingDay: "1", dueDay: "10" };
-const EMPTY_INSTALLMENT_FORM = {
-  description: "",
-  totalAmount: "",
-  totalInstallments: "1",
-  currentInstallment: "1",
-  installmentAmount: "",
-  nextDueDate: todayIso(),
-  // Codifica tipo+id num valor só de <select> ("synced:<bankAccountId>" ou "manual:<creditCardId>")
-  // pra dropdown misturar cartão reconhecido (BankAccount) e cartão manual (CreditCard) numa lista
-  // só, já que são duas fontes diferentes.
-  cardKey: "",
-};
 const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
-const KIND_CLASS = { Fatura: "invoice", Parcela: "installment", Conta: "bill" };
+const EMPTY_LIST = [];
+const TRANSACTIONS_CAP = 2000;
 
 function formatDateTime(value) {
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
-function installmentRemovalMessage(installment) {
-  const remaining = Math.max(0, installment.totalInstallments - installment.currentInstallment + 1);
-  const card = installment.creditCardName || "sem cartão vinculado";
-  const parts = [
-    `Parcela ${installment.currentInstallment} de ${installment.totalInstallments} (${formatCurrency(installment.installmentAmount)} por mês, ${card}).`,
-    remaining === 1
-      ? `A última parcela, de ${formatCurrency(installment.installmentAmount)}, sai desta lista e dos próximos vencimentos.`
-      : `As ${remaining} parcelas restantes, somando ${formatCurrency(remaining * installment.installmentAmount)}, saem desta lista e dos próximos vencimentos.`,
-  ];
-  if (installment.affectsCardLimit)
-    parts.push(`O limite usado de ${installment.creditCardName} diminui nesse mesmo valor.`);
-  parts.push("Os lançamentos do extrato não são apagados. Não é possível desfazer.");
-  return parts.join(" ");
+function Section({ id, title, aside, children }) {
+  return (
+    <section className="cartoes__section" aria-labelledby={id}>
+      <header className="cartoes__section-head">
+        <h2 id={id} className="cartoes__section-title">{title}</h2>
+        {aside}
+      </header>
+      {children}
+    </section>
+  );
 }
 
-function todayIso() {
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-
-const EMPTY_LIST = [];
-const TRANSACTIONS_CAP = 2000;
-
-
-
-// Esta página não depende da conta selecionada no seletor lateral (useAccount()): cartões
-// reconhecidos (card.isSynced) já vêm prontos de getCreditCardsSummary(), independente de qual
-// conta está ativa no seletor — a mesma BankAccount aparece aqui sempre que for identificada como
-// cartão, sem relação com qual conta o usuário escolheu ver no Dashboard Inteligente.
+// Esta página não depende da conta selecionada no seletor lateral (useAccount()): os cartões vêm
+// prontos de getCreditCardsSummary(), independente de qual conta está ativa no Dashboard.
 export default function Cartoes() {
   usePageTitle("Cartões");
   const { user } = useAuth();
@@ -93,22 +60,10 @@ export default function Cartoes() {
   const [reloadKey, setReloadKey] = useState(0);
   const [loadedKey, setLoadedKey] = useState(null);
   const loading = loadedKey !== reloadKey;
-  const [error, setError] = useState(null);
-  const [detailForm, setDetailForm] = useState(EMPTY_DETAIL_FORM);
-  const [manualForm, setManualForm] = useState(EMPTY_MANUAL_FORM);
-  const [saving, setSaving] = useState(false);
-  const [showInstallmentForm, setShowInstallmentForm] = useState(false);
-  const [showManualForm, setShowManualForm] = useState(false);
-  const [installmentForm, setInstallmentForm] = useState(EMPTY_INSTALLMENT_FORM);
   // Os quatro números do topo podem somar todos os cartões ("all") ou mostrar só um deles (id).
   const [summaryScope, setSummaryScope] = useState("all");
-  const [pendingInstallment, setPendingInstallment] = useState(null);
-  const focusAfterDelete = useRef(null);
-  const installmentsRef = useRef(null);
-  const manualFormRef = useRef(null);
 
   const cards = data?.cards ?? EMPTY_LIST;
-  const installments = data?.installments ?? EMPTY_LIST;
   const pendingTransactions = data?.pendingTransactions ?? EMPTY_LIST;
 
   const reload = () => setReloadKey((key) => key + 1);
@@ -119,14 +74,13 @@ export default function Cartoes() {
 
     Promise.all([
       getCreditCardsSummary({ signal }),
-      getInstallments({ signal }),
       getTransactions({ status: "Overdue", type: "Expense" }, { signal }),
       getTransactions({ status: "Pending", type: "Expense" }, { signal }),
     ])
-      .then(([cardsData, installmentsData, overdueData, pendingData]) => {
+      .then(([cardsData, overdueData, pendingData]) => {
         if (signal.aborted) return;
         setLoadError("");
-        setData({ cards: cardsData, installments: installmentsData, pendingTransactions: [...overdueData, ...pendingData] });
+        setData({ cards: cardsData, pendingTransactions: [...overdueData, ...pendingData] });
         setLoadedKey(reloadKey);
       })
       .catch((err) => {
@@ -139,143 +93,7 @@ export default function Cartoes() {
     return () => controller.abort();
   }, [reloadKey]);
 
-  function openDetailForm(card) {
-    setDetailForm({
-      id: card.id,
-      brand: card.brand || "",
-      creditLimit: card.creditLimit != null ? String(card.creditLimit) : "",
-      closingDay: card.closingDay != null ? String(card.closingDay) : "1",
-      dueDay: card.dueDay != null ? String(card.dueDay) : "10",
-    });
-  }
-
-  async function handleSubmitDetail(e) {
-    e.preventDefault();
-    if (!detailForm.creditLimit) return;
-
-    const payload = {
-      creditLimit: Math.max(0.01, Number(detailForm.creditLimit)),
-      closingDay: Math.min(31, Math.max(1, Number(detailForm.closingDay) || 1)),
-      dueDay: Math.min(31, Math.max(1, Number(detailForm.dueDay) || 1)),
-    };
-
-    setError(null);
-    setSaving(true);
-    try {
-      await updateCreditCard(detailForm.id, { ...payload, brand: detailForm.brand || null });
-      setDetailForm(EMPTY_DETAIL_FORM);
-      reload();
-    } catch (err) {
-      setError({ where: "detail", message: err.message || "Não foi possível salvar os dados desse cartão." });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleCreateManualCard(e) {
-    e.preventDefault();
-    if (!manualForm.name || !manualForm.creditLimit) return;
-
-    setError(null);
-    setSaving(true);
-    try {
-      await createCreditCard({
-        name: manualForm.name,
-        brand: manualForm.brand || null,
-        creditLimit: Math.max(0.01, Number(manualForm.creditLimit)),
-        closingDay: Math.min(31, Math.max(1, Number(manualForm.closingDay) || 1)),
-        dueDay: Math.min(31, Math.max(1, Number(manualForm.dueDay) || 1)),
-      });
-      setManualForm(EMPTY_MANUAL_FORM);
-      setShowManualForm(false);
-      reload();
-    } catch (err) {
-      setError({ where: "manual", message: err.message || "Não foi possível cadastrar esse cartão." });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleCreateInstallment(e) {
-    e.preventDefault();
-    const { description, totalAmount, totalInstallments: totalCount, currentInstallment, installmentAmount, nextDueDate, cardKey } =
-      installmentForm;
-    if (!description || !totalAmount || !installmentAmount) return;
-
-    const [cardType, cardId] = cardKey ? cardKey.split(":") : [null, null];
-
-    setError(null);
-    setSaving(true);
-    try {
-      await createInstallment({
-        creditCardId: cardType === "manual" ? cardId : null,
-        bankAccountId: cardType === "synced" ? cardId : null,
-        description,
-        totalAmount: Math.max(0.01, Number(totalAmount)),
-        totalInstallments: Math.max(1, Number(totalCount)),
-        currentInstallment: Math.max(1, Number(currentInstallment)),
-        installmentAmount: Math.max(0.01, Number(installmentAmount)),
-        nextDueDate,
-      });
-      setInstallmentForm(EMPTY_INSTALLMENT_FORM);
-      setShowInstallmentForm(false);
-      reload();
-    } catch (err) {
-      setError({ where: "installment", message: err.message || "Não foi possível criar esse parcelamento." });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function handleCancelInstallment() {
-    setShowInstallmentForm(false);
-    setInstallmentForm(EMPTY_INSTALLMENT_FORM);
-  }
-
-  async function handleSetPrimary(id) {
-    const previousPrimaryId = cards.find((c) => c.isPrimary)?.id;
-    const markPrimary = (primaryId) =>
-      setData((current) =>
-        current && { ...current, cards: current.cards.map((c) => ({ ...c, isPrimary: c.id === primaryId })) },
-      );
-
-    markPrimary(id);
-    setError(null);
-    try {
-      await setPrimaryCard(id);
-    } catch (err) {
-      markPrimary(previousPrimaryId);
-      setError({ where: "page", message: err.message || "Não foi possível definir o cartão principal." });
-    }
-  }
-
-  async function handleDeleteInstallment(id) {
-    setError(null);
-    focusAfterDelete.current = installments.findIndex((i) => i.id === id);
-    try {
-      await deleteInstallment(id);
-      reload();
-    } catch (err) {
-      focusAfterDelete.current = null;
-      setError({ where: "installments", message: err.message || "Não foi possível remover esse parcelamento." });
-    }
-  }
-
-  useEffect(() => {
-    if (loading || focusAfterDelete.current == null) return;
-    const container = installmentsRef.current;
-    const index = focusAfterDelete.current;
-    focusAfterDelete.current = null;
-    const buttons = container?.querySelectorAll(".cartoes__remove");
-    const target = buttons?.length ? buttons[Math.min(index, buttons.length - 1)] : container?.querySelector("h3");
-    if (target && !target.matches("button")) target.setAttribute("tabindex", "-1");
-    target?.focus();
-  }, [loading, installments]);
-
-  const upcoming = useMemo(
-    () => buildUpcoming(cards, installments, pendingTransactions),
-    [cards, installments, pendingTransactions]
-  );
+  const upcoming = useMemo(() => buildUpcoming(cards, pendingTransactions), [cards, pendingTransactions]);
 
   // Se o cartão escolhido deixou de existir (banco desconectado), volta pra "todos" sozinho.
   const scopeCard = useMemo(() => cards.find((c) => c.id === summaryScope) ?? null, [cards, summaryScope]);
@@ -285,7 +103,6 @@ export default function Cartoes() {
   const connectorsMap = useMemo(() => buildConnectorsMap(connectors), [connectors]);
   const brandOf = (source) => cardBrand(source, connectorsMap);
 
-  const scopeLabel = scopeCard ? `${brandOf(scopeCard).name} · ${scopeCard.name}` : `Todos os cartões (${cards.length})`;
   const noCards = !loading && cards.length === 0;
   const orderedCards = groups.flatMap((group) => group.cards);
   const pickerOptions = [
@@ -293,32 +110,34 @@ export default function Cartoes() {
     ...orderedCards.map((card) => cardPickerOption(card, brandOf(card))),
   ];
   const oldestSync = (scopeCard ? [scopeCard] : cards)
-    .filter((c) => c.isSynced && c.connectionLastSyncedAt)
+    .filter((c) => c.connectionLastSyncedAt)
     .map((c) => c.connectionLastSyncedAt)
     .sort((a, b) => new Date(a) - new Date(b))[0];
   const dataAge = formatDataAge(oldestSync);
-  const scopeLines = [{ label: [scopeLabel, dataAge].filter(Boolean).join(" · "), value: "" }];
-  const summaryValue = (value) => (loading ? valueSkeleton : formatCurrency(value));
-  const usageLines =
-    summary.usagePercent == null
-      ? scopeLines
-      : [
-          {
-            label:
-              summary.overLimitCards > 0
-                ? `Limite excedido em ${formatCurrency(summary.overAmount)} · ${formatPercentage(summary.usagePercent)} do limite`
-                : `${formatPercentage(summary.usagePercent)} do limite`,
-            value: "",
-          },
-          ...scopeLines,
-        ];
-
-  function openManualForm() {
-    setShowManualForm(true);
-    requestAnimationFrame(() => manualFormRef.current?.querySelector("input")?.focus());
-  }
+  const scopeLabel = scopeCard
+    ? `${brandOf(scopeCard).name} · ${scopeCard.name}`
+    : cards.length === 1 ? "1 cartão" : `Soma de ${cards.length} cartões`;
+  const scopeNote = [scopeLabel, dataAge].filter(Boolean).join(" · ");
 
   const valueSkeleton = <Skeleton width="7rem" height="1.5rem" />;
+  const summaryValue = (value) => (loading ? valueSkeleton : formatCurrency(value));
+
+  const usageLine = (() => {
+    if (summary.usagePercent == null) return null;
+    const percent = formatPercentage(summary.usagePercent);
+    if (summary.overLimitCards === 0) return `${percent} do limite`;
+    if (scopeCard || cards.length === 1) return `Excedido em ${formatCurrency(summary.overAmount)} · ${percent} do limite`;
+    const which = summary.overLimitCards === 1 ? "1 cartão acima" : `${summary.overLimitCards} cartões acima`;
+    return `${which} do limite, em ${formatCurrency(summary.overAmount)} · ${percent} do limite total`;
+  })();
+
+  const nextDueLine = (() => {
+    if (!summary.nextDue) return null;
+    const ownAge = formatDataAge(summary.nextDue.syncedAt);
+    return [summary.nextDue.pastDue && "Fatura atrasada", summary.nextDue.label, ownAge !== dataAge && ownAge]
+      .filter(Boolean)
+      .join(" · ");
+  })();
 
   function renderCardTile(card) {
     const selected = scopeCard?.id === card.id;
@@ -341,8 +160,8 @@ export default function Cartoes() {
               <strong>{card.currentInvoice != null ? formatCurrency(card.currentInvoice) : "—"}</strong>
             </span>
             <span className="cartoes__tile-stat">
-              <span>Próximo vencimento</span>
-              <strong>
+              <span>Vencimento</span>
+              <strong className={pastDue ? "cartoes__tile-value--overdue" : undefined}>
                 {!card.invoiceDueDate ? "—" : pastDue ? formatDueDay(card.invoiceDueDate) : formatDate(card.invoiceDueDate)}
               </strong>
             </span>
@@ -353,7 +172,7 @@ export default function Cartoes() {
               {usagePercent != null && (
                 <span className={`cartoes__tile-limit-note${overLimit ? " cartoes__tile-limit-note--over" : ""}`}>
                   {overLimit
-                    ? `Limite excedido em ${formatCurrency(overAmount)} · ${formatPercentage(usagePercent)} usado`
+                    ? `Excedido em ${formatCurrency(overAmount)} · ${formatPercentage(usagePercent)} usado`
                     : `${formatPercentage(usagePercent)} do limite usado`}
                 </span>
               )}
@@ -363,105 +182,18 @@ export default function Cartoes() {
       </li>,
       selected && (
         <li key={`${card.id}-detalhe`} id={`cartao-${card.id}`} className="cartoes__tile-detail">
-          {card.isSynced && (
-            <p className="cartoes__tile-updated">
-              Atualizado em {group?.lastSyncedAt ? formatDateTime(group.lastSyncedAt) : "Ainda não"}
-            </p>
-          )}
-          {renderCardBlock(card)}
+          <p className="cartoes__tile-updated">
+            Atualizado em {group?.lastSyncedAt ? formatDateTime(group.lastSyncedAt) : "—"}
+          </p>
+          <CreditCardVisual
+            card={card}
+            cardholderName={user?.name}
+            showKeyStats={false}
+            showFace={false}
+          />
         </li>
       ),
     ];
-  }
-
-  function renderCardBlock(card) {
-    return (
-      <div key={card.id} className="cartoes__card-block">
-        <CreditCardVisual
-          card={card}
-          cardholderName={user?.name}
-          onSetPrimary={() => handleSetPrimary(card.id)}
-          showKeyStats={false}
-          showFace={false}
-        />
-
-        {!card.isSynced && detailForm.id !== card.id && (
-          <button type="button" className="cartoes__edit-link" onClick={() => openDetailForm(card)}>
-            Editar limite/fatura
-          </button>
-        )}
-
-        {detailForm.id === card.id && (
-          <form className="cartoes__form" onSubmit={handleSubmitDetail}>
-            {!card.isSynced && (
-              <label className="cartoes__field">
-                <span className="cartoes__field-label">Bandeira (opcional)</span>
-                <input
-                  type="text"
-                  placeholder="Ex: Mastercard"
-                  maxLength={50}
-                  value={detailForm.brand}
-                  onChange={(e) => setDetailForm({ ...detailForm, brand: e.target.value })}
-                />
-              </label>
-            )}
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Limite de crédito</span>
-              <CurrencyInput
-                placeholder="Ex: 5.000,00"
-                value={detailForm.creditLimit}
-                onChange={(e) => setDetailForm({ ...detailForm, creditLimit: e.target.value })}
-                required
-              />
-            </label>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Dia de fechamento</span>
-              <input
-                type="number"
-                min="1"
-                max="31"
-                step="1"
-                value={detailForm.closingDay}
-                onChange={(e) => setDetailForm({ ...detailForm, closingDay: e.target.value })}
-                required
-              />
-            </label>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Dia de vencimento</span>
-              <input
-                type="number"
-                min="1"
-                max="31"
-                step="1"
-                value={detailForm.dueDay}
-                onChange={(e) => setDetailForm({ ...detailForm, dueDay: e.target.value })}
-                required
-              />
-            </label>
-
-            {error?.where === "detail" && (
-              <p className="cartoes__error cartoes__form-error" role="alert">
-                {error.message}
-              </p>
-            )}
-            <div className="cartoes__form-actions">
-              <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
-                {saving ? "Salvando..." : "Salvar"}
-              </Button>
-              <Button
-                as="button"
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setDetailForm(EMPTY_DETAIL_FORM)}
-              >
-                Cancelar
-              </Button>
-            </div>
-          </form>
-        )}
-      </div>
-    );
   }
 
   if (!loading && loadError) {
@@ -478,13 +210,9 @@ export default function Cartoes() {
     );
   }
 
-  const listSkeleton = <Skeleton width="100%" height="6rem" />;
-
   return (
     <div className="cartoes">
       <SectionHeading title="Cartões" level={1} />
-
-      {error?.where === "page" && <p className="cartoes__error" role="alert">{error.message}</p>}
 
       {!loading &&
         cards.length > 1 &&
@@ -504,359 +232,103 @@ export default function Cartoes() {
 
       {noCards ? (
         <Card className="cartoes__empty">
-          <p className="cartoes__empty-title">Você ainda não tem cartões por aqui</p>
+          <p className="cartoes__empty-title">Nenhum cartão encontrado</p>
+          <p className="cartoes__hint">
+            Os cartões de crédito aparecem aqui quando você conecta o banco que os emitiu.
+          </p>
           <div className="cartoes__empty-actions">
             <Button as={Link} to="/conectar-banco" variant="primary" size="sm">
               Conectar banco
             </Button>
-            <Button as="button" type="button" variant="outline" size="sm" onClick={openManualForm}>
-              Cadastrar cartão
-            </Button>
           </div>
         </Card>
       ) : (
-        <div className="cartoes__summary">
-          <StatCard
-            icon={<CardIcon />}
-            label="Limite usado"
-            value={summaryValue(summary.usedLimit)}
-            valueTone={!loading && summary.overLimitCards > 0 ? "expense" : "default"}
-            secondaryLines={loading ? [] : usageLines}
-          />
-          <StatCard
-            icon={<WalletIcon />}
-            label="Limite disponível"
-            value={summaryValue(summary.availableLimit)}
-            secondaryLines={loading ? [] : scopeLines}
-          />
-          <StatCard
-            icon={<BellIcon />}
-            label="Fatura atual"
-            value={summaryValue(summary.currentInvoice)}
-            secondaryLines={loading ? [] : scopeLines}
-          />
-          <StatCard
-            icon={<HistoryIcon />}
-            label="Próximo vencimento"
-            value={
-              loading
-                ? valueSkeleton
-                : !summary.nextDue
-                  ? "—"
-                  : summary.nextDue.pastDue
-                    ? formatDueDay(summary.nextDue.date)
-                    : formatDate(summary.nextDue.date)
-            }
-            valueTone={!loading && summary.nextDue?.pastDue ? "expense" : "default"}
-            secondaryLines={
-              !loading && summary.nextDue
-                ? [
-                    {
-                      label: summary.nextDue.pastDue
-                        ? ["Fatura atrasada", summary.nextDue.label, formatDataAge(summary.nextDue.syncedAt)].filter(Boolean).join(" · ")
-                        : [summary.nextDue.label, formatDataAge(summary.nextDue.syncedAt)].filter(Boolean).join(" · "),
-                      value: "",
-                    },
-                  ]
-                : []
-            }
-          />
+        <div className="cartoes__overview">
+          <div className="cartoes__summary">
+            <StatCard
+              icon={<CardIcon />}
+              label="Limite usado"
+              value={summaryValue(summary.usedLimit)}
+              valueTone={!loading && summary.overLimitCards > 0 ? "expense" : "default"}
+              secondaryLines={!loading && usageLine ? [{ label: usageLine, value: "" }] : []}
+            />
+            <StatCard icon={<WalletIcon />} label="Limite disponível" value={summaryValue(summary.availableLimit)} />
+            <StatCard icon={<BellIcon />} label="Fatura atual" value={summaryValue(summary.currentInvoice)} />
+            <StatCard
+              icon={<HistoryIcon />}
+              label="Próximo vencimento"
+              value={
+                loading
+                  ? valueSkeleton
+                  : !summary.nextDue
+                    ? "—"
+                    : summary.nextDue.pastDue
+                      ? formatDueDay(summary.nextDue.date)
+                      : formatDate(summary.nextDue.date)
+              }
+              valueTone={!loading && summary.nextDue?.pastDue ? "expense" : "default"}
+              secondaryLines={!loading && nextDueLine ? [{ label: nextDueLine, value: "" }] : []}
+            />
+          </div>
+          <p className="cartoes__scope-note">{loading ? <Skeleton width="14rem" height="0.9rem" /> : scopeNote}</p>
         </div>
       )}
 
-      <Card title="Próximos vencimentos">
+      <Section id="cartoes-vencimentos" title="Próximos vencimentos">
         {!loading && pendingTransactions.length >= TRANSACTIONS_CAP && (
           <p className="cartoes__hint">Mostrando os 2.000 lançamentos mais recentes.</p>
         )}
         {loading ? (
-          listSkeleton
+          <Skeleton width="100%" height="6rem" />
         ) : upcoming.length === 0 ? (
-          <p className="cartoes__hint">Nenhuma fatura, parcela ou conta pendente por enquanto.</p>
+          <p className="cartoes__hint">Nenhuma fatura ou conta pendente por enquanto.</p>
         ) : (
-          <ul className="cartoes__list">
+          <ul className="cartoes__rows">
             {upcoming.map((item) => (
-              <li key={item.key} className="cartoes__list-item">
-                <span className={`cartoes__kind cartoes__kind--${KIND_CLASS[item.kind]}`}>
-                  {item.kind}
-                </span>
-                <div className="cartoes__list-info">
-                  <span className="cartoes__list-name">{item.name}</span>
-                  <span className="cartoes__list-meta">
+              <li key={item.key} className="cartoes__row">
+                <span className="cartoes__row-kind">{item.kind}</span>
+                <span className="cartoes__row-info">
+                  <span className="cartoes__row-name" title={item.name}>{item.name}</span>
+                  <span className="cartoes__row-meta">
                     {item.meta} · {item.pastDueText ?? formatDate(item.date)}
                   </span>
-                </div>
-                <StatusPill status={item.status}>{STATUS_LABELS[item.status] || item.status}</StatusPill>
-                <span className="cartoes__list-amount">{item.amount != null ? formatCurrency(item.amount) : "—"}</span>
+                </span>
+                <span className="cartoes__row-end">
+                  <StatusPill status={item.status}>{STATUS_LABELS[item.status] || item.status}</StatusPill>
+                  <span className="cartoes__row-amount">{item.amount != null ? formatCurrency(item.amount) : "—"}</span>
+                </span>
               </li>
             ))}
           </ul>
         )}
-      </Card>
+      </Section>
 
-      <Card title="Seus cartões">
-        {loading ? (
-          listSkeleton
-        ) : cards.length === 0 ? (
-          <p className="cartoes__hint">Nenhum cartão cadastrado.</p>
-        ) : (
-          <ul className="cartoes__tiles">
-            {orderedCards.map((card) => renderCardTile(card))}
-          </ul>
-        )}
-      </Card>
+      {!noCards && (
+        <Section
+          id="cartoes-lista"
+          title="Seus cartões"
+          aside={
+            !loading && cards.length > 1 && (
+              <span className="cartoes__section-note">Selecione um cartão para ver só os números e o extrato dele.</span>
+            )
+          }
+        >
+          {loading ? (
+            <Skeleton width="100%" height="12rem" />
+          ) : (
+            <ul className="cartoes__tiles">{orderedCards.map((card) => renderCardTile(card))}</ul>
+          )}
+        </Section>
+      )}
 
       {!loading && cards.length > 0 &&
         (scopeCard ? (
           <CardStatement key={scopeCard.id} card={scopeCard} getBrand={brandOf} />
         ) : (
-          <Card title="Extrato do cartão">
-            <p className="cartoes__hint">Selecione um cartão para ver o extrato.</p>
-          </Card>
+          <Section id="cartoes-extrato" title="Extrato do cartão">
+            <p className="cartoes__hint">Selecione um cartão acima para ver o extrato.</p>
+          </Section>
         ))}
-
-      <div ref={manualFormRef}>
-      <Card title="Cadastrar cartão não sincronizado">
-        {showManualForm ? (
-          <form className="cartoes__form cartoes__form--spaced" onSubmit={handleCreateManualCard}>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Nome</span>
-              <input
-                type="text"
-                placeholder="Ex: Nubank Roxinho"
-                maxLength={80}
-                value={manualForm.name}
-                onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })}
-                required
-              />
-            </label>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Bandeira (opcional)</span>
-              <input
-                type="text"
-                placeholder="Ex: Mastercard"
-                maxLength={50}
-                value={manualForm.brand}
-                onChange={(e) => setManualForm({ ...manualForm, brand: e.target.value })}
-              />
-            </label>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Limite de crédito</span>
-              <CurrencyInput
-                placeholder="Ex: 5.000,00"
-                value={manualForm.creditLimit}
-                onChange={(e) => setManualForm({ ...manualForm, creditLimit: e.target.value })}
-                required
-              />
-            </label>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Dia de fechamento</span>
-              <input
-                type="number"
-                min="1"
-                max="31"
-                step="1"
-                value={manualForm.closingDay}
-                onChange={(e) => setManualForm({ ...manualForm, closingDay: e.target.value })}
-                required
-              />
-            </label>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Dia de vencimento</span>
-              <input
-                type="number"
-                min="1"
-                max="31"
-                step="1"
-                value={manualForm.dueDay}
-                onChange={(e) => setManualForm({ ...manualForm, dueDay: e.target.value })}
-                required
-              />
-            </label>
-
-            {error?.where === "manual" && (
-              <p className="cartoes__error cartoes__form-error" role="alert">
-                {error.message}
-              </p>
-            )}
-            <div className="cartoes__form-actions">
-              <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
-                {saving ? "Adicionando..." : "Adicionar cartão"}
-              </Button>
-              <Button
-                as="button"
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setShowManualForm(false);
-                  setManualForm(EMPTY_MANUAL_FORM);
-                }}
-              >
-                Cancelar
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <div className="cartoes__form-hint">
-            <Button as="button" type="button" variant="outline" size="sm" onClick={openManualForm}>
-              Cadastrar cartão
-            </Button>
-          </div>
-        )}
-      </Card>
-      </div>
-
-      <div ref={installmentsRef} className="cartoes__installments">
-      <Card title="Parcelamentos">
-        {error?.where === "installments" && (
-          <p className="cartoes__error cartoes__form-error" role="alert">
-            {error.message}
-          </p>
-        )}
-        {loading ? (
-          listSkeleton
-        ) : installments.length === 0 ? (
-          <p className="cartoes__hint">Nenhum parcelamento cadastrado ainda.</p>
-        ) : (
-          <ul className="cartoes__list">
-            {installments.map((i) => (
-              <li key={i.id} className="cartoes__list-item">
-                <IconAvatar type="expense" />
-                <div className="cartoes__list-info">
-                  <span className="cartoes__list-name">{i.description}</span>
-                  <span className="cartoes__list-meta">
-                    {i.currentInstallment}/{i.totalInstallments} · {i.creditCardName || "Sem cartão vinculado"} · próx.{" "}
-                    {formatDate(i.nextDueDate)}
-                  </span>
-                </div>
-                <span className="cartoes__list-amount">{formatCurrency(i.installmentAmount)}</span>
-                <button
-                  type="button"
-                  className="cartoes__remove"
-                  onClick={() => setPendingInstallment(i)}
-                  aria-label={`Remover parcelamento ${i.description}`}
-                  title="Remover parcelamento"
-                >
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {showInstallmentForm ? (
-          <form className="cartoes__form cartoes__form--spaced" onSubmit={handleCreateInstallment}>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Descrição</span>
-              <input
-                type="text"
-                placeholder="Ex: Notebook"
-                maxLength={150}
-                value={installmentForm.description}
-                onChange={(e) => setInstallmentForm({ ...installmentForm, description: e.target.value })}
-                required
-              />
-            </label>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Valor total</span>
-              <CurrencyInput
-                placeholder="Ex: 3.000,00"
-                value={installmentForm.totalAmount}
-                onChange={(e) => setInstallmentForm({ ...installmentForm, totalAmount: e.target.value })}
-                required
-              />
-            </label>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Total de parcelas</span>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={installmentForm.totalInstallments}
-                onChange={(e) => setInstallmentForm({ ...installmentForm, totalInstallments: e.target.value })}
-                required
-              />
-            </label>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Parcela atual</span>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={installmentForm.currentInstallment}
-                onChange={(e) => setInstallmentForm({ ...installmentForm, currentInstallment: e.target.value })}
-                required
-              />
-            </label>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Valor da parcela</span>
-              <CurrencyInput
-                placeholder="Ex: 250,00"
-                value={installmentForm.installmentAmount}
-                onChange={(e) => setInstallmentForm({ ...installmentForm, installmentAmount: e.target.value })}
-                required
-              />
-            </label>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Próximo vencimento</span>
-              <input
-                type="date"
-                value={installmentForm.nextDueDate}
-                onChange={(e) => setInstallmentForm({ ...installmentForm, nextDueDate: e.target.value })}
-                required
-              />
-            </label>
-            <label className="cartoes__field">
-              <span className="cartoes__field-label">Cartão (opcional)</span>
-              <select
-                value={installmentForm.cardKey}
-                onChange={(e) => setInstallmentForm({ ...installmentForm, cardKey: e.target.value })}
-              >
-                <option value="">Sem cartão vinculado</option>
-                {cards.map((c) => (
-                  <option key={c.id} value={`${c.isSynced ? "synced" : "manual"}:${c.id}`}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {error?.where === "installment" && (
-              <p className="cartoes__error cartoes__form-error" role="alert">
-                {error.message}
-              </p>
-            )}
-            <div className="cartoes__form-actions">
-              <Button as="button" type="submit" variant="primary" size="sm" disabled={saving}>
-                {saving ? "Adicionando..." : "Adicionar"}
-              </Button>
-              <Button as="button" type="button" variant="outline" size="sm" onClick={handleCancelInstallment}>
-                Cancelar
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <div className="cartoes__form-hint">
-            <Button as="button" type="button" variant="outline" size="sm" onClick={() => setShowInstallmentForm(true)}>
-              + Adicionar parcelamento
-            </Button>
-          </div>
-        )}
-      </Card>
-      </div>
-
-      <ConfirmDialog
-        open={pendingInstallment !== null}
-        title={`Remover o parcelamento "${pendingInstallment?.description ?? ""}"?`}
-        message={pendingInstallment ? installmentRemovalMessage(pendingInstallment) : ""}
-        confirmLabel="Remover"
-        cancelLabel="Cancelar"
-        onConfirm={() => {
-          const id = pendingInstallment.id;
-          setPendingInstallment(null);
-          handleDeleteInstallment(id);
-        }}
-        onClose={() => setPendingInstallment(null)}
-      />
     </div>
   );
 }

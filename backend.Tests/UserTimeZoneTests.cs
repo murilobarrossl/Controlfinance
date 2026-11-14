@@ -47,12 +47,6 @@ public class UserTimeZoneTests
 
     private static DateTime Day(int y, int m, int d) => new(y, m, d, 0, 0, 0, DateTimeKind.Utc);
 
-    private static async Task<decimal> UsedLimit(TestDb t)
-    {
-        await using var db = t.NewContext();
-        return (await db.CreditCards.SingleAsync()).UsedLimit;
-    }
-
     private static TestDb NewDb(string zone)
     {
         var t = new TestDb();
@@ -116,63 +110,6 @@ public class UserTimeZoneTests
         Assert.Equal(123.45m, overdue.Amount);
         Assert.Empty(await List("Pending"));
         Assert.Single(await List("Overdue"));
-    }
-
-    [Theory]
-    [MemberData(nameof(DueDates))]
-    public async Task Parcela_so_avanca_depois_da_meia_noite_do_fuso(
-        string zone, int offset, int y, int m, int d, int ny, int nm, int nd)
-    {
-        var due = Day(y, m, d);
-
-        using (var t = NewDb(zone))
-        {
-            var card = t.AddCard(5000m, 1200m);
-            t.AddInstallment(card, null, 100m, 1, 12, due, dueDay: d);
-            t.Clock.UtcNow = Local(due.AddDays(1).AddSeconds(-1), offset);
-
-            var dto = Assert.Single(Results.OkValue<IEnumerable<InstallmentDto>>(
-                await t.Controller(db => new InstallmentsController(db)).GetAll()));
-
-            Assert.Equal(1, dto.CurrentInstallment);
-            Assert.Equal(due, dto.NextDueDate);
-            Assert.Equal(1200.00m, await UsedLimit(t));
-        }
-
-        using (var t = NewDb(zone))
-        {
-            var card = t.AddCard(5000m, 1200m);
-            t.AddInstallment(card, null, 100m, 1, 12, due, dueDay: d);
-            t.Clock.UtcNow = Local(due.AddDays(1), offset);
-
-            var dto = Assert.Single(Results.OkValue<IEnumerable<InstallmentDto>>(
-                await t.Controller(db => new InstallmentsController(db)).GetAll()));
-
-            Assert.Equal(2, dto.CurrentInstallment);
-            Assert.Equal(Day(ny, nm, nd), dto.NextDueDate);
-            Assert.Equal(1100.00m, await UsedLimit(t));
-        }
-    }
-
-    [Theory]
-    [MemberData(nameof(DueDates))]
-    public async Task Vencimento_do_cartao_manual_vira_na_meia_noite_do_fuso(
-        string zone, int offset, int y, int m, int d, int ny, int nm, int nd)
-    {
-        var due = Day(y, m, d);
-        using var t = NewDb(zone);
-        t.AddCard(5000m, 0m, dueDay: d);
-        var controller = t.Controller(db => new CreditCardsController(db));
-
-        async Task<DateTime?> InvoiceDueAt(DateTime wallClock)
-        {
-            t.Clock.UtcNow = Local(wallClock, offset);
-            return Assert.Single(Results.OkValue<List<RecognizedCardDto>>(await controller.GetSummary(default))).InvoiceDueDate;
-        }
-
-        Assert.Equal(due, await InvoiceDueAt(due));
-        Assert.Equal(due, await InvoiceDueAt(due.AddDays(1).AddSeconds(-1)));
-        Assert.Equal(Day(ny, nm, nd), await InvoiceDueAt(due.AddDays(1)));
     }
 
     [Theory]

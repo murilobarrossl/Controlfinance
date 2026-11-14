@@ -70,10 +70,6 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
-  /* Sem isso o grid estica os dois cards pra altura do mais alto (padrão do CSS Grid) — o card
-     de "Seu cartão" (rosto do cartão + estatísticas) raramente tem a mesma altura do card ao
-     lado, então sobrava espaço vazio dentro do mais curto. Mesmo ajuste já feito no grid de
-     Categorias. */
   align-items: start;
 }
 
@@ -99,14 +95,42 @@
   }
 }
 
+.dashboard-home__card-block {
+  container: dh-card / inline-size;
+}
+
+.dashboard-home__card-block .card__header {
+  align-items: flex-start;
+  min-height: 2.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.dashboard-home__card-block .card__title {
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
 .dashboard-home__card-switch {
-  color: var(--color-text-secondary);
-  font-size: 0.8rem;
-  text-decoration: underline;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-primary);
+  font-size: 0.8125rem;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .dashboard-home__card-switch:hover {
-  color: var(--color-text-primary);
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-text-tertiary);
+}
+
+.dashboard-home__card-switch:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .dashboard-home__empty-hint {
@@ -128,41 +152,82 @@
 
 .card-overview {
   display: grid;
-  grid-template-columns: minmax(15rem, 20rem) minmax(0, 1.35fr) minmax(0, 1fr);
-  grid-template-areas: "wallet recent installments";
-  gap: 0;
+  grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  grid-template-areas: "wallet recent";
 }
 
 .card-overview__wallet {
   grid-area: wallet;
-  padding-right: 1.75rem;
+  min-width: 0;
+  padding-right: 2rem;
 }
 
-.card-overview__wallet .credit-card-visual__stats > .credit-card-visual__minor:last-child {
-  display: none;
+.card-overview .credit-card-visual {
+  gap: 1.5rem;
 }
 
-.card-overview__wallet .credit-card-visual__limit {
+.card-overview .credit-card-visual__stats {
+  gap: 1.25rem;
+}
+
+.card-overview .credit-card-visual__key {
+  align-items: end;
+  gap: 0.75rem 1rem;
+}
+
+.card-overview .credit-card-visual__key .credit-card-visual__stat:first-child .credit-card-visual__stat-value {
+  font-size: 1.375rem;
+}
+
+.card-overview .credit-card-visual__key .credit-card-visual__stat:nth-child(2) {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.card-overview .credit-card-visual__key .credit-card-visual__stat:nth-child(2) .credit-card-visual__stat-value {
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.card-overview .credit-card-visual__stat-label {
+  font-size: 0.8125rem;
+}
+
+.card-overview .credit-card-visual__limit {
+  gap: 0.625rem;
+  padding-block: 1.25rem 0;
   border-bottom: 0;
-  padding-bottom: 0;
+}
+
+.card-overview .credit-card-visual__limit .credit-card-visual__stat {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0;
+}
+
+.card-overview .credit-card-visual__limit .credit-card-visual__stat-value {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.card-overview .credit-card-visual__limit-labels {
+  font-size: 0.8125rem;
 }
 
 .card-overview__section {
   display: flex;
   flex-direction: column;
-  gap: 0.875rem;
+  gap: 0.75rem;
   min-width: 0;
-  padding-left: 1.75rem;
+  padding-left: 2rem;
   border-left: 1px solid var(--color-border);
 }
 
 .card-overview__section--recent {
   grid-area: recent;
-  padding-right: 1.75rem;
-}
-
-.card-overview__section--installments {
-  grid-area: installments;
 }
 
 .card-overview__head {
@@ -170,48 +235,45 @@
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 0.25rem 0.75rem;
+  gap: 0.25rem 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .card-overview__title {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   font-weight: 500;
 }
 
 .card-overview__note {
   color: var(--color-text-tertiary);
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
 
 .card-overview__rows {
   display: flex;
   flex-direction: column;
-  margin: 0;
+  margin: -0.75rem 0 0;
   padding: 0;
   list-style: none;
 }
 
 .card-overview__row {
   display: grid;
-  grid-template-columns: 3.75rem minmax(0, 1fr) auto;
+  grid-template-columns: 4rem minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.875rem;
-  padding-block: 0.7rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.card-overview__row:first-child,
-.card-overview__installment:first-child {
-  border-top: 0;
-  padding-top: 0.25rem;
+  gap: 1rem;
+  min-height: 4rem;
+  padding-block: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
 }
 
 .card-overview__date {
-  color: var(--color-text-secondary);
-  font-size: 0.8rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -219,22 +281,22 @@
 .card-overview__info {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.2rem;
   min-width: 0;
 }
 
 .card-overview__name {
   overflow: hidden;
   color: var(--color-text-primary);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .card-overview__meta {
   overflow: hidden;
-  color: var(--color-text-secondary);
-  font-size: 0.78rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -243,12 +305,12 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.25rem;
+  gap: 0.3rem;
 }
 
 .card-overview__amount {
   color: var(--color-text-primary);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -258,137 +320,71 @@
   color: var(--color-income);
 }
 
-.card-overview__summary {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin: 0;
-  padding: 0.75rem 0.875rem;
-  border-radius: var(--radius-md);
-  background-color: var(--color-surface-alt);
-  color: var(--color-text-secondary);
-  font-size: 0.8rem;
-}
-
-.card-overview__summary strong {
-  color: var(--color-text-primary);
-  font-size: 1.05rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.card-overview__installment {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.5rem 0.875rem;
-  padding-block: 0.7rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.card-overview__progress {
-  grid-column: 1 / -1;
-  height: 3px;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  background-color: var(--color-border);
-}
-
-.card-overview__progress > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background-color: var(--color-text-tertiary);
-}
-
 .card-overview__hint {
   margin: 0;
+  padding-block: 1rem;
   color: var(--color-text-secondary);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
 .card-overview__error {
   margin: 0;
+  padding-block: 1rem;
   color: var(--color-accent-soft);
-  font-size: 0.85rem;
-}
-
-.card-overview__more {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 0.8rem;
-}
-
-.card-overview__more a,
-.card-overview__link {
-  color: var(--color-text-primary);
-  font-size: 0.82rem;
-  text-decoration: underline;
-  text-decoration-color: var(--color-border-strong);
-  text-underline-offset: 0.2em;
+  font-size: 0.875rem;
 }
 
 .card-overview__link {
   align-self: flex-start;
   margin-top: auto;
+  padding-top: 0.5rem;
+  color: var(--color-text-primary);
+  font-size: 0.8125rem;
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  text-underline-offset: 0.25em;
 }
 
-.card-overview__more a:hover,
 .card-overview__link:hover {
   text-decoration-color: currentColor;
 }
 
-.card-overview__more a:focus-visible,
 .card-overview__link:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
   border-radius: 2px;
 }
 
-@media (max-width: 1200px) {
-  .card-overview {
-    grid-template-columns: minmax(15rem, 20rem) minmax(0, 1fr);
-    grid-template-areas:
-      "wallet recent"
-      "wallet installments";
-  }
-
-  .card-overview__section--recent {
-    padding-right: 0;
-    padding-bottom: 1.75rem;
-  }
-
-  .card-overview__section--installments {
-    padding-top: 1.75rem;
-    border-top: 1px solid var(--color-border);
-  }
-}
-
-@media (max-width: 760px) {
+@container dh-card (max-width: 49rem) {
   .card-overview {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "wallet"
-      "recent"
-      "installments";
-    row-gap: 1.5rem;
-  }
-
-  .card-overview__section--recent {
-    padding-bottom: 0;
+      "recent";
+    row-gap: 1.75rem;
   }
 
   .card-overview__wallet {
+    max-width: 26rem;
     padding-right: 0;
   }
 
-  .card-overview__section,
-  .card-overview__section--installments {
+  .card-overview__section {
     padding-left: 0;
-    padding-top: 1.5rem;
+    padding-top: 1.75rem;
     border-left: 0;
     border-top: 1px solid var(--color-border);
+  }
+}
+
+@container dh-card (max-width: 23rem) {
+  .card-overview__wallet {
+    max-width: none;
+  }
+
+  .card-overview__row {
+    grid-template-columns: 3.25rem minmax(0, 1fr) auto;
+    gap: 0.75rem;
   }
 }

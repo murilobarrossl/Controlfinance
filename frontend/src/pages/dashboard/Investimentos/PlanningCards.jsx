@@ -1,25 +1,16 @@
 import { useState } from "react";
-import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
-import BankLogo from "../../../components/ui/BankLogo/BankLogo.jsx";
+import { InstitutionLogo, InvestmentIcon } from "./InvestmentMarks.jsx";
+import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import { CloseIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
-import {
-  addToReserve,
-  createGoal,
-  deleteGoal,
-  discardLegacyReserve,
-  setReserve as setReserveAmount,
-  setReserveAccount,
-  updateGoalProgress,
-  withdrawFromReserve,
-} from "../../../api/planning.js";
+import { createGoal, deleteGoal, removeReserveAccount, setGoalResource, setReserveResource } from "../../../api/planning.js";
 import { formatCurrency } from "../../../utils/financeMath.js";
+import { formatMoney, goalOf, isReserve } from "../../../utils/importedInvestments.js";
 import useSaving from "./useSaving.js";
-import { classifyInvestmentReserve } from "../../../api/investments.js";
-import { formatMoney, sumMoney } from "../../../utils/importedInvestments.js";
+import { summarize } from "./planningSummary.js";
 
-const EMPTY_GOAL_FORM = { name: "", targetAmount: "", currentAmount: "", deadline: "" };
+const EMPTY_GOAL_FORM = { name: "", targetAmount: "", deadline: "" };
 
 // O <input type="date"> grava "AAAA-MM-DD". new Date() lê isso como meia-noite UTC, o que no
 // fuso do Brasil vira o dia anterior: formata direto da string pra o prazo não "voltar" um dia.
@@ -28,432 +19,241 @@ function formatIsoDate(iso) {
   return `${day}/${month}/${year}`;
 }
 
-function parseAmount(raw) {
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : NaN;
+const optionLabel = (item) => `${item.name} · ${item.institution.name}${item.accountNumber ? ` · conta ${item.accountNumber}` : ""}`;
+
+// Só entra no seletor o que ainda não conta para nenhum destino.
+const freeItems = (items, planning) => items.filter((item) => !isReserve(item, planning.reserve, planning.goals) && !goalOf(item, planning.goals));
+
+function ResourceRow({ entry, onRemove, removeLabel, saving }) {
+  const item = entry.item;
+  const amounts = (item?.amounts ?? []).filter(Boolean);
+  return (
+    <li className="inv-link">
+      {item ? <InvestmentIcon item={item} /> : <span className="inv-mark" aria-hidden="true" />}
+      <span className="inv-link__titles">
+        <span className="inv-link__name">{item ? item.name : entry.status === "loading" ? <Skeleton width="8rem" height="0.9rem" /> : "Investimento indisponível"}</span>
+        <span className="inv-link__meta">
+          {entry.status === "loading" ? null
+            : !item ? "Não está mais disponível nesta conexão"
+            : entry.legacy ? "Conta bancária"
+            : <><InstitutionLogo institution={item.institution} /><span className="inv-row__institution-text">{item.institution.name}{item.accountNumber ? ` · conta ${item.accountNumber}` : ""}</span></>}
+        </span>
+      </span>
+      <span className="inv-link__value">
+        {entry.status === "loading" ? <Skeleton width="5rem" height="1rem" />
+          : amounts.length ? amounts.map((money, index) => <span className="inv-real__amount" key={index}>{formatMoney(money)}</span>)
+          : item ? "Não informado" : null}
+        {item && amounts.length > 0 && item.currentAmountAvailable === false && <small>Último saldo informado</small>}
+      </span>
+      <button type="button" className="inv-link__remove" onClick={onRemove} disabled={saving} aria-label={removeLabel}>
+        <CloseIcon />
+      </button>
+    </li>
+  );
 }
 
-function ReserveAccountPicker({ items, planning }) {
-  const { saving, error, run } = useSaving();
-  const reserve = planning.reserve;
-  const selected = reserve?.importedInvestmentId ? `investment:${reserve.importedInvestmentId}`
-    : reserve?.importedReservedBalanceId ? `reserved:${reserve.importedReservedBalanceId}` : reserve?.bankAccountId ?? "";
+function AddResource({ id, label, candidates, onAdd, saving }) {
+  if (!candidates.length) return null;
+  return (
+    <label className="inv-link__add" htmlFor={id}>
+      <span className="investimentos__field-label">{label}</span>
+      <select id={id} value="" disabled={saving}
+        onChange={(e) => { const item = candidates.find((candidate) => candidate.key === e.target.value); if (item) onAdd(item); }}>
+        <option value="">Escolha um investimento</option>
+        {candidates.map((item) => <option key={item.key} value={item.key}>{optionLabel(item)}</option>)}
+      </select>
+    </label>
+  );
+}
 
-  async function handleChange(e) {
-    const key = e.target.value;
-    const item = items.find((entry) => (entry.key ?? entry.account?.id) === key);
-    await run(async () => planning.setReserve(item?.key
-      ? await classifyInvestmentReserve(item, true) : await setReserveAccount(key || null)));
-  }
+export function EmergencyReserveCard({ planning, items, itemsLoading, entries, summary }) {
+  const { saving, error, run } = useSaving();
+  const candidates = freeItems(items, planning);
+  const remove = (entry) => run(async () => planning.replace(entry.legacy
+    ? await removeReserveAccount()
+    : await setReserveResource({ id: entry.id, reserved: entry.reserved }, false)));
 
   return (
-    <div className="investimentos__form investimentos__form--compact">
-      <label className="investimentos__field">
-        <span className="investimentos__field-label">Investimento usado como reserva</span>
-        <select value={selected} onChange={handleChange} disabled={saving}>
-          <option value="">Nenhum: anotar um valor à mão</option>
-          {selected && !items.some((entry) => (entry.key ?? entry.account?.id) === selected) && <option value={selected} disabled>Recurso vinculado · dados não carregados</option>}
-          {items.map((item) => (
-            <option key={item.key ?? item.account.id} value={item.key ?? item.account.id}>
-              {item.name ?? item.account.name} · {item.institution.name}{item.accountNumber ? ` · conta ${item.accountNumber}` : ""}
-            </option>
+    <section className="inv-plan" aria-labelledby="inv-plan-reserve">
+      <h3 id="inv-plan-reserve" className="inv-plan__title">Reserva de emergência</h3>
+
+      {entries.length > 0 ? (
+        <ul className="inv-links">
+          {entries.map((entry) => (
+            <ResourceRow key={entry.key} entry={entry} saving={saving} onRemove={() => remove(entry)}
+              removeLabel={`Tirar ${entry.item?.name ?? "investimento indisponível"} da reserva`} />
           ))}
-        </select>
-      </label>
-      {error && (
-        <p className="investimentos__error investimentos__error--form" role="alert">
-          {error}
+        </ul>
+      ) : itemsLoading ? (
+        <Skeleton width="100%" height="3rem" />
+      ) : (
+        <p className="investimentos__hint">{candidates.length ? "Nenhum investimento na reserva." : "Nenhum investimento disponível para a reserva."}</p>
+      )}
+
+      {entries.length > 1 && (
+        <p className="inv-links__total">
+          <span>Total</span>
+          <strong>{summary.loading ? <Skeleton width="6rem" height="1.25rem" />
+            : summary.totals.length ? summary.totals.map((money) => <span className="inv-real__amount" key={money.currency}>{formatMoney(money)}</span>)
+            : "Não informado"}</strong>
         </p>
       )}
-    </div>
+
+      <AddResource id="inv-plan-reserve-add" label="Adicionar à reserva" candidates={candidates} saving={saving}
+        onAdd={(item) => run(async () => planning.replace(await setReserveResource(item, true)))} />
+      {error && <p className="investimentos__error" role="alert">{error}</p>}
+    </section>
   );
 }
 
-function LinkedReserve({ item }) {
-  const { account, institution, modality } = item;
+function GoalProgress({ goal, entries }) {
+  const summary = summarize(entries);
+  if (!entries.length) {
+    return (
+      <p className="inv-goal__figures">
+        <span className="inv-goal__saved inv-goal__saved--empty">Nenhum investimento vinculado</span>
+        <span className="inv-goal__target">Objetivo {formatCurrency(goal.targetAmount)}</span>
+      </p>
+    );
+  }
+  if (summary.loading) return <Skeleton width="60%" height="1.25rem" />;
+
+  const brl = summary.totals.find((money) => money.currency === "BRL");
+  const saved = brl ? Number(brl.amount) : 0;
+  const progress = goal.targetAmount > 0 ? Math.min(100, (saved / goal.targetAmount) * 100) : 0;
+  const remaining = Math.max(0, goal.targetAmount - saved);
+  const otherCurrencies = summary.totals.some((money) => money.currency !== "BRL");
   return (
-    <div className="investimentos__reserve-linked">
-      <BankLogo name={institution.name} logoUrl={institution.logoUrl} color={institution.color} />
-      <div className="investimentos__reserve-linked-info">
-        <span className="investimentos__reserve-linked-name">{item.name ?? account.name}</span>
-        <span className="investimentos__reserve-linked-meta">
-          {modality.label} · {institution.name}{item.accountNumber ? ` · conta ${item.accountNumber}` : ""}
-        </span>
+    <>
+      <p className="inv-goal__figures">
+        <span className="inv-goal__saved">{brl ? formatMoney(brl) : formatCurrency(0)}</span>
+        <span className="inv-goal__target">de {formatCurrency(goal.targetAmount)}</span>
+        <span className="inv-goal__percent">{Math.round(progress)}%</span>
+      </p>
+      <div className="investimentos__progress" role="progressbar" aria-label={`Progresso da meta ${goal.name}`}
+        aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
+        <div className="investimentos__progress-fill" style={{ width: `${progress}%` }} />
       </div>
-      <span className="investimentos__reserve-linked-value">{item.key
-        ? item.amounts.length ? item.amounts.map((money, index) => <span className="inv-real__amount" key={index}>{formatMoney(money)}</span>) : "Não informado"
-        : formatCurrency(account.balance)}</span>
-      {item.key && !item.currentAmountAvailable && <small className="investimentos__hint">Último valor informado</small>}
-    </div>
+      <p className="inv-goal__meta">
+        {remaining > 0 ? `Faltam ${formatCurrency(remaining)}` : "Meta atingida"}
+        {summary.withoutAmount > 0 && ` · ${summary.withoutAmount === 1 ? "1 investimento" : `${summary.withoutAmount} investimentos`} sem saldo informado`}
+        {summary.stale && " · inclui último saldo informado"}
+        {otherCurrencies && " · valores em outra moeda não entram na soma"}
+      </p>
+    </>
   );
 }
 
-export function EmergencyReserveCard({ planning, items, reserveItems }) {
-  const { reserve, legacyReserveAmount, setReserve, clearLegacyReserveNotice } = planning;
-  const currentAmount = reserve?.currentAmount ?? 0;
-  const linked = reserve?.bankAccountId || reserve?.importedInvestmentId || reserve?.importedReservedBalanceId;
-  const [panel, setPanel] = useState(null); // null | "add" | "remove"
-  const [amountInput, setAmountInput] = useState("");
-  const [confirmingClear, setConfirmingClear] = useState(false);
-  const { saving, error, setError, run } = useSaving();
+function Goal({ goal, entries, candidates, planning }) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const { saving, error, run } = useSaving();
 
-  function closePanel() {
-    setPanel(null);
-    setAmountInput("");
-    setConfirmingClear(false);
-    setError(null);
-  }
-
-  function togglePanel(next) {
-    setAmountInput("");
-    setConfirmingClear(false);
-    setError(null);
-    setPanel((prev) => (prev === next ? null : next));
-  }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    const amount = parseAmount(amountInput);
-    if (!(amount > 0)) {
-      setError("Informe um valor maior que zero.");
-      return;
-    }
-    const ok = await run(async () => setReserve(await (panel === "add" ? addToReserve(amount) : withdrawFromReserve(amount))));
-    if (ok) closePanel();
-  }
-
-  async function handleClear() {
-    const ok = await run(async () => setReserve(await setReserveAmount(0)));
-    if (ok) closePanel();
-  }
-
-  async function applyLegacyAmount() {
-    const ok = await run(async () => setReserve(await setReserveAmount(legacyReserveAmount)));
-    if (ok) {
-      discardLegacyReserve();
-      clearLegacyReserveNotice();
-    }
-  }
-
-  function keepAccountAmount() {
-    discardLegacyReserve();
-    clearLegacyReserveNotice();
+  async function handleDelete() {
+    const ok = await run(async () => {
+      await deleteGoal(goal.id);
+      planning.updateGoals((list) => list.filter((g) => g.id !== goal.id));
+    });
+    if (ok) setConfirmingDelete(false);
   }
 
   return (
-    <Card title="Reserva de emergência">
-      {(items.length > 0 || linked) && <ReserveAccountPicker items={items} planning={planning} />}
+    <li className="inv-goal">
+      <div className="inv-goal__header">
+        <span className="inv-goal__name">{goal.name}</span>
+        {goal.deadline && <span className="inv-goal__deadline">até {formatIsoDate(goal.deadline)}</span>}
+        <button type="button" className="inv-link__remove inv-goal__delete" onClick={() => setConfirmingDelete(true)}
+          aria-label={`Remover meta ${goal.name}`} aria-expanded={confirmingDelete}>
+          <CloseIcon />
+        </button>
+      </div>
 
-      {reserveItems.length > 0 ? (
-        <>
-          {reserveItems.map((item) => <LinkedReserve key={item.key ?? item.account.id} item={item} />)}
-          {reserveItems.length > 1 && reserveItems.every((item) => item.key) && (
-            <p className="investimentos__reserve-total">
-              <span>Total da reserva</span>
-              <strong>{sumMoney(reserveItems.flatMap((item) => item.amounts ?? [])).map(formatMoney).join(" · ") || "Não informado"}</strong>
-            </p>
-          )}
-          <p className="investimentos__fineprint">
-            O valor da reserva acompanha o saldo que o banco informa. Caixinhas chamadas “Reserva de emergência” entram automaticamente; para tirar uma, abra o produto e desmarque.
-            {currentAmount > 0 && ` O valor anotado antes, de ${formatCurrency(currentAmount)}, continua guardado e volta se você desmarcar.`}
-          </p>
-        </>
-      ) : linked ? (
-        <p className="investimentos__hint">A classificação foi preservada. O recurso vinculado ainda não foi carregado ou não está disponível nesta conexão.</p>
-      ) : (
-        <>
-          <p className="investimentos__reserve-value">{formatCurrency(currentAmount)}</p>
+      <GoalProgress goal={goal} entries={entries} />
 
-          {legacyReserveAmount != null && (
-            <div className="investimentos__confirm investimentos__confirm--notice" role="status">
-              <p>
-                Este navegador tem uma reserva anotada antes, de {formatCurrency(legacyReserveAmount)}, diferente da salva
-                na sua conta.
-              </p>
-              <div className="investimentos__actions">
-                <Button as="button" type="button" variant="primary" size="sm" onClick={applyLegacyAmount} disabled={saving}>
-                  Usar {formatCurrency(legacyReserveAmount)}
-                </Button>
-                <Button as="button" type="button" variant="outline" size="sm" onClick={keepAccountAmount} disabled={saving}>
-                  Manter {formatCurrency(currentAmount)}
-                </Button>
-              </div>
-            </div>
-          )}
+      {entries.length > 0 && (
+        <ul className="inv-links inv-links--compact">
+          {entries.map((entry) => (
+            <ResourceRow key={entry.key} entry={entry} saving={saving}
+              removeLabel={`Desvincular ${entry.item?.name ?? "investimento indisponível"} da meta ${goal.name}`}
+              onRemove={() => run(async () => planning.replace(await setGoalResource(goal.id, { id: entry.id, reserved: entry.reserved }, false)))} />
+          ))}
+        </ul>
+      )}
 
+      <AddResource id={`inv-goal-${goal.id}-add`} label="Vincular investimento" candidates={candidates} saving={saving}
+        onAdd={(item) => run(async () => planning.replace(await setGoalResource(goal.id, item, true)))} />
+
+      {confirmingDelete && (
+        <div className="investimentos__confirm" role="alert">
+          <p>Remover a meta “{goal.name}”? Os investimentos vinculados não são afetados.</p>
           <div className="investimentos__actions">
-            <Button as="button" type="button" variant="primary" size="sm" onClick={() => togglePanel("add")}>
-              Adicionar à reserva
+            <Button as="button" type="button" variant="primary" size="sm" onClick={handleDelete} disabled={saving}>
+              {saving ? "Removendo…" : "Remover"}
             </Button>
-            <Button as="button" type="button" variant="secondary" size="sm" onClick={() => togglePanel("remove")}>
-              Retirar da reserva
+            <Button as="button" type="button" variant="outline" size="sm" onClick={() => setConfirmingDelete(false)} disabled={saving}>
+              Manter
             </Button>
           </div>
-
-          {panel && (
-            <form className="investimentos__form investimentos__form--inline" onSubmit={handleSubmit}>
-              <label className="investimentos__field">
-                <span className="investimentos__field-label">{panel === "add" ? "Valor a adicionar" : "Valor a retirar"}</span>
-                <CurrencyInput placeholder="Ex: 300,00" value={amountInput} onChange={(e) => setAmountInput(e.target.value)} />
-              </label>
-              <div className="investimentos__actions">
-                <Button
-                  as="button"
-                  type="submit"
-                  variant={panel === "add" ? "primary" : "secondary"}
-                  size="sm"
-                  disabled={confirmingClear || saving}
-                >
-                  {saving && !confirmingClear ? "Salvando…" : panel === "add" ? "Adicionar" : "Retirar"}
-                </Button>
-                {panel === "remove" && !confirmingClear && (
-                  <Button as="button" type="button" variant="outline" size="sm" onClick={() => setConfirmingClear(true)} disabled={saving}>
-                    Zerar reserva
-                  </Button>
-                )}
-                <Button as="button" type="button" variant="outline" size="sm" onClick={closePanel} disabled={saving}>
-                  Cancelar
-                </Button>
-              </div>
-              {confirmingClear && (
-                <div className="investimentos__confirm" role="alert">
-                  <p>Zerar a reserva de {formatCurrency(currentAmount)}? Não dá para desfazer.</p>
-                  <div className="investimentos__actions">
-                    <Button as="button" type="button" variant="primary" size="sm" onClick={handleClear} disabled={saving}>
-                      {saving ? "Salvando…" : "Zerar"}
-                    </Button>
-                    <Button as="button" type="button" variant="outline" size="sm" onClick={() => setConfirmingClear(false)} disabled={saving}>
-                      Manter
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </form>
-          )}
-
-          {error && (
-            <p className="investimentos__error" role="alert">
-              {error}
-            </p>
-          )}
-        </>
+        </div>
       )}
-    </Card>
+      {error && <p className="investimentos__error" role="alert">{error}</p>}
+    </li>
   );
 }
 
-export function GoalsCard({ planning }) {
-  const { goals, updateGoals } = planning;
+export function GoalsCard({ planning, items, entries }) {
   const [goalForm, setGoalForm] = useState(EMPTY_GOAL_FORM);
-  const [editingGoalId, setEditingGoalId] = useState(null);
-  const [progressInput, setProgressInput] = useState("");
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
   const create = useSaving();
-  const change = useSaving();
+  const candidates = freeItems(items, planning);
 
   async function handleCreateGoal(e) {
     e.preventDefault();
     const name = goalForm.name.trim();
-    const targetAmount = parseAmount(goalForm.targetAmount);
+    const targetAmount = Number(goalForm.targetAmount);
     if (!name || !(targetAmount > 0)) {
-      create.setError("Informe o nome da meta e um valor alvo maior que zero.");
+      create.setError("Informe o nome da meta e um objetivo maior que zero.");
       return;
     }
-
     const ok = await create.run(async () => {
-      const goal = await createGoal({
-        name,
-        targetAmount,
-        currentAmount: Math.max(0, parseAmount(goalForm.currentAmount) || 0),
-        deadline: goalForm.deadline || null,
-      });
-      updateGoals((list) => [goal, ...list]);
+      const goal = await createGoal({ name, targetAmount, deadline: goalForm.deadline || null });
+      planning.updateGoals((list) => [goal, ...list]);
     });
     if (ok) setGoalForm(EMPTY_GOAL_FORM);
   }
 
-  async function handleDeleteGoal(id) {
-    const ok = await change.run(async () => {
-      await deleteGoal(id);
-      updateGoals((list) => list.filter((goal) => goal.id !== id));
-    });
-    if (ok) setConfirmingDeleteId(null);
-  }
-
-  function startProgressEdit(goal) {
-    change.setError(null);
-    setConfirmingDeleteId(null);
-    setEditingGoalId(goal.id);
-    setProgressInput(String(goal.currentAmount));
-  }
-
-  async function handleSaveProgress(e, id) {
-    e.preventDefault();
-    const amount = Math.max(0, parseAmount(progressInput) || 0);
-    const ok = await change.run(async () => {
-      const updated = await updateGoalProgress(id, amount);
-      updateGoals((list) => list.map((goal) => (goal.id === id ? updated : goal)));
-    });
-    if (ok) setEditingGoalId(null);
-  }
-
   return (
-    <Card title="Metas de economia">
-      <form className="investimentos__form" onSubmit={handleCreateGoal}>
+    <section className="inv-plan" aria-labelledby="inv-plan-goals">
+      <h3 id="inv-plan-goals" className="inv-plan__title">Metas de economia</h3>
+      {planning.goals.length === 0 ? (
+        <p className="investimentos__hint">Nenhuma meta criada.</p>
+      ) : (
+        <ul className="inv-goals">
+          {planning.goals.map((goal) => (
+            <Goal key={goal.id} goal={goal} entries={entries[goal.id] ?? []} candidates={candidates} planning={planning} />
+          ))}
+        </ul>
+      )}
+
+      <form className="investimentos__form inv-plan__new" onSubmit={handleCreateGoal} aria-labelledby="inv-plan-new-goal">
+        <h4 id="inv-plan-new-goal" className="inv-plan__subtitle">Nova meta</h4>
         <label className="investimentos__field">
-          <span className="investimentos__field-label">Nome da meta</span>
-          <input
-            type="text"
-            placeholder="Ex: Viagem pra praia"
-            maxLength={100}
-            value={goalForm.name}
-            onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })}
-            required
-          />
+          <span className="investimentos__field-label">Nome</span>
+          <input type="text" placeholder="Ex: Viagem de férias" maxLength={100} value={goalForm.name}
+            onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })} required />
         </label>
         <label className="investimentos__field">
-          <span className="investimentos__field-label">Valor alvo</span>
-          <CurrencyInput
-            placeholder="Ex: 5.000,00"
-            value={goalForm.targetAmount}
-            onChange={(e) => setGoalForm({ ...goalForm, targetAmount: e.target.value })}
-            required
-          />
-        </label>
-        <label className="investimentos__field">
-          <span className="investimentos__field-label">Já guardado (opcional)</span>
-          <CurrencyInput
-            placeholder="Ex: 1.200,00"
-            value={goalForm.currentAmount}
-            onChange={(e) => setGoalForm({ ...goalForm, currentAmount: e.target.value })}
-          />
+          <span className="investimentos__field-label">Objetivo</span>
+          <CurrencyInput placeholder="Ex: 5.000,00" value={goalForm.targetAmount}
+            onChange={(e) => setGoalForm({ ...goalForm, targetAmount: e.target.value })} required />
         </label>
         <label className="investimentos__field">
           <span className="investimentos__field-label">Prazo (opcional)</span>
-          <input
-            type="date"
-            value={goalForm.deadline}
-            onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })}
-          />
+          <input type="date" value={goalForm.deadline} onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })} />
         </label>
         <Button as="button" type="submit" variant="primary" size="md" disabled={create.saving}>
           {create.saving ? "Salvando…" : "Criar meta"}
         </Button>
-        {create.error && (
-          <p className="investimentos__error investimentos__error--form" role="alert">
-            {create.error}
-          </p>
-        )}
+        {create.error && <p className="investimentos__error investimentos__error--form" role="alert">{create.error}</p>}
       </form>
-
-      {goals.length === 0 ? (
-        <p className="investimentos__hint">Nenhuma meta criada ainda.</p>
-      ) : (
-        <ul className="investimentos__goals">
-          {goals.map((goal) => {
-            const progress = goal.targetAmount > 0 ? Math.min(100, (goal.currentAmount / goal.targetAmount) * 100) : 0;
-            const remaining = Math.max(0, goal.targetAmount - goal.currentAmount);
-            const active = confirmingDeleteId === goal.id || editingGoalId === goal.id;
-            return (
-              <li key={goal.id} className="investimentos__goal">
-                <div className="investimentos__goal-header">
-                  <span className="investimentos__goal-name">{goal.name}</span>
-                  <span className="investimentos__goal-percent">{Math.round(progress)}%</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      change.setError(null);
-                      setEditingGoalId(null);
-                      setConfirmingDeleteId(goal.id);
-                    }}
-                    aria-label={`Remover meta ${goal.name}`}
-                    aria-expanded={confirmingDeleteId === goal.id}
-                  >
-                    <CloseIcon />
-                  </button>
-                </div>
-                <div
-                  className="investimentos__progress"
-                  role="progressbar"
-                  aria-label={`Progresso da meta ${goal.name}`}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(progress)}
-                >
-                  <div className="investimentos__progress-fill" style={{ width: `${progress}%` }} />
-                </div>
-                <div className="investimentos__goal-footer">
-                  <span className="investimentos__goal-meta">
-                    {formatCurrency(goal.currentAmount)} de {formatCurrency(goal.targetAmount)}
-                    {remaining > 0 ? ` · faltam ${formatCurrency(remaining)}` : " · meta atingida"}
-                    {goal.deadline && ` · até ${formatIsoDate(goal.deadline)}`}
-                  </span>
-                  {editingGoalId !== goal.id && (
-                    <button type="button" className="investimentos__link-button" onClick={() => startProgressEdit(goal)}>
-                      Atualizar valor guardado
-                    </button>
-                  )}
-                </div>
-                {confirmingDeleteId === goal.id && (
-                  <div className="investimentos__confirm" role="alert">
-                    <p>Remover a meta “{goal.name}”? Não dá para desfazer.</p>
-                    <div className="investimentos__actions">
-                      <Button
-                        as="button"
-                        type="button"
-                        variant="primary"
-                        size="sm"
-                        onClick={() => handleDeleteGoal(goal.id)}
-                        disabled={change.saving}
-                      >
-                        {change.saving ? "Removendo…" : "Remover"}
-                      </Button>
-                      <Button
-                        as="button"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setConfirmingDeleteId(null)}
-                        disabled={change.saving}
-                      >
-                        Manter
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {editingGoalId === goal.id && (
-                  <form className="investimentos__form investimentos__form--inline" onSubmit={(e) => handleSaveProgress(e, goal.id)}>
-                    <label className="investimentos__field">
-                      <span className="investimentos__field-label">Valor guardado</span>
-                      <CurrencyInput value={progressInput} onChange={(e) => setProgressInput(e.target.value)} />
-                    </label>
-                    <div className="investimentos__actions">
-                      <Button as="button" type="submit" variant="primary" size="sm" disabled={change.saving}>
-                        {change.saving ? "Salvando…" : "Salvar"}
-                      </Button>
-                      <Button
-                        as="button"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setEditingGoalId(null)}
-                        disabled={change.saving}
-                      >
-                        Cancelar
-                      </Button>
-                    </div>
-                  </form>
-                )}
-                {active && change.error && (
-                  <p className="investimentos__error" role="alert">
-                    {change.error}
-                  </p>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </Card>
+    </section>
   );
 }

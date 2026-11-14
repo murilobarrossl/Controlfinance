@@ -20,84 +20,85 @@ public class PlanningController(AppDbContext db) : ApiControllerBase
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct) => Ok(await LoadAsync(ct));
 
-    [HttpPost("reserve/add")]
-    public Task<IActionResult> AddToReserve(ReserveAmountDto dto, CancellationToken ct) =>
-        UpdateReserveAsync(r => r.CurrentAmount = Math.Min(MaxAmount, r.CurrentAmount + dto.Amount), ct);
-
-    [HttpPost("reserve/withdraw")]
-    public Task<IActionResult> WithdrawFromReserve(ReserveAmountDto dto, CancellationToken ct) =>
-        UpdateReserveAsync(r => r.CurrentAmount = Math.Max(0, r.CurrentAmount - dto.Amount), ct);
-
-    [HttpPut("reserve")]
-    public Task<IActionResult> SetReserve(ReserveAmountDto dto, CancellationToken ct) =>
-        UpdateReserveAsync(r => r.CurrentAmount = dto.Amount, ct);
-
+    // A reserva agora é formada só por investimentos e caixinhas. Uma conta vinculada antes continua
+    // aparecendo até o usuário removê-la, mas não dá para vincular uma nova.
     [HttpPut("reserve/account")]
     public async Task<IActionResult> SetReserveAccount(SetReserveAccountDto dto, CancellationToken ct)
     {
-        if (dto.BankAccountId is { } accountId && !await IsOwnInvestmentAccountAsync(accountId, ct))
-            return NotFound(new { message = "Conta não encontrada." });
+        if (dto.BankAccountId is not null)
+            return BadRequest(new { message = "Escolha um investimento ou uma caixinha para a reserva." });
 
-        return await UpdateReserveAsync(reserve =>
-        {
-            reserve.BankAccountId = dto.BankAccountId;
-            reserve.ImportedInvestmentId = null;
-            reserve.ImportedReservedBalanceId = null;
-        }, ct);
+        await db.EmergencyReserves.Where(r => r.UserId == UserId)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.BankAccountId, (Guid?)null).SetProperty(r => r.UpdatedAt, DateTime.UtcNow), ct);
+        return Ok(await LoadAsync(ct));
     }
 
     [HttpPut("reserve/imported")]
-    public async Task<IActionResult> SetImportedReserve(SetImportedReserveDto dto, CancellationToken ct)
+    public async Task<IActionResult> SetImportedReserve(AllocationChangeDto dto, CancellationToken ct)
     {
-        if (dto.InvestmentId.HasValue == dto.ReservedBalanceId.HasValue) return BadRequest(new { message = "Selecione um investimento ou uma caixinha." });
-        await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
-        var resourceId = (dto.InvestmentId ?? dto.ReservedBalanceId)!.Value;
-        var names = dto.InvestmentId.HasValue
-            ? await db.ImportedInvestments.Where(x => x.Id == resourceId && x.UserId == UserId
-                && db.PolpIntegrations.Any(p => p.Id == x.IntegrationId && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus))
-                .Select(x => x.Name).ToListAsync(ct)
-            : await db.ImportedReservedBalances.Where(x => x.Id == resourceId && x.UserId == UserId
-                && db.PolpIntegrations.Any(p => p.Id == x.IntegrationId && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus))
-                .Select(x => x.Name).ToListAsync(ct);
-        if (names.Count == 0) return NotFound(new { message = "Investimento não encontrado." });
-        var reserve = await db.EmergencyReserves.SingleOrDefaultAsync(x => x.UserId == UserId, ct);
-        if (reserve is null) { reserve = new EmergencyReserve { UserId = UserId }; db.EmergencyReserves.Add(reserve); }
-        if (EmergencyReserveNames.IsAuto(names[0]))
+        if (dto.InvestmentId.HasValue == dto.ReservedBalanceId.HasValue)
+            return BadRequest(new { message = "Selecione um investimento ou uma caixinha." });
+        var resource = await FindResourceAsync(dto, ct);
+        var allocation = await FindAllocationAsync(dto, ct);
+        if (resource is null)
         {
-            EmergencyReserveNames.SetExcluded(reserve, resourceId, !dto.Enabled);
-            if (!dto.Enabled && (reserve.ImportedInvestmentId == resourceId || reserve.ImportedReservedBalanceId == resourceId))
+            // Investimento que saiu da conexão: ainda dá para desfazer o vínculo, nunca para criar um.
+            if (dto.Enabled) return NotFound(new { message = "Investimento não encontrado." });
+            if (allocation is { GoalId: null }) db.PlanningAllocations.Remove(allocation);
+            return await SaveAllocationAsync(ct);
+        }
+
+        var reserve = await db.EmergencyReserves.SingleOrDefaultAsync(r => r.UserId == UserId, ct);
+        if (reserve is null) { reserve = new EmergencyReserve { UserId = UserId }; db.EmergencyReserves.Add(reserve); }
+
+        if (dto.Enabled)
+        {
+            if (allocation?.GoalId is { } goalId) return await AllocatedToGoalAsync(goalId, ct);
+            if (resource.Auto) EmergencyReserveNames.SetExcluded(reserve, resource.Id, false);
+            else if (allocation is null) db.PlanningAllocations.Add(NewAllocation(dto, null));
+        }
+        else
+        {
+            if (allocation is { GoalId: null }) db.PlanningAllocations.Remove(allocation);
+            if (resource.Auto) EmergencyReserveNames.SetExcluded(reserve, resource.Id, true);
+        }
+
+        reserve.UpdatedAt = DateTime.UtcNow;
+        return await SaveAllocationAsync(ct);
+    }
+
+    [HttpPut("goals/{id:guid}/allocations")]
+    public async Task<IActionResult> SetGoalAllocation(Guid id, AllocationChangeDto dto, CancellationToken ct)
+    {
+        if (!await db.SavingsGoals.AnyAsync(g => g.Id == id && g.UserId == UserId, ct))
+            return NotFound(new { message = "Meta não encontrada." });
+        if (dto.InvestmentId.HasValue == dto.ReservedBalanceId.HasValue)
+            return BadRequest(new { message = "Selecione um investimento ou uma caixinha." });
+        var resource = await FindResourceAsync(dto, ct);
+        var allocation = await FindAllocationAsync(dto, ct);
+        if (resource is null && dto.Enabled) return NotFound(new { message = "Investimento não encontrado." });
+        if (dto.Enabled)
+        {
+            if (allocation is not null && allocation.GoalId != id)
+                return allocation.GoalId is { } other ? await AllocatedToGoalAsync(other, ct) : InReserve();
+            if (allocation is null)
             {
-                reserve.ImportedInvestmentId = null;
-                reserve.ImportedReservedBalanceId = null;
+                // Caixinha chamada "Reserva de emergência" entra na reserva sozinha: só pode ir para uma
+                // meta depois de sair da reserva, senão contaria nos dois lugares.
+                if (resource!.Auto)
+                {
+                    var reserve = await db.EmergencyReserves.AsNoTracking().SingleOrDefaultAsync(r => r.UserId == UserId, ct);
+                    if (reserve is null || !EmergencyReserveNames.Excluded(reserve).Contains(resource.Id)) return InReserve();
+                }
+                db.PlanningAllocations.Add(NewAllocation(dto, id));
             }
         }
-        else if (dto.Enabled)
+        else if (allocation is not null && allocation.GoalId == id)
         {
-            reserve.BankAccountId = null;
-            reserve.ImportedInvestmentId = dto.InvestmentId;
-            reserve.ImportedReservedBalanceId = dto.ReservedBalanceId;
+            db.PlanningAllocations.Remove(allocation);
         }
-        else if ((dto.InvestmentId.HasValue && reserve.ImportedInvestmentId == dto.InvestmentId)
-            || (dto.ReservedBalanceId.HasValue && reserve.ImportedReservedBalanceId == dto.ReservedBalanceId))
-        {
-            reserve.ImportedInvestmentId = null;
-            reserve.ImportedReservedBalanceId = null;
-        }
-        reserve.UpdatedAt = DateTime.UtcNow;
-        try
-        {
-            await db.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
-            return Ok(EmergencyReserveDto.FromEntity(reserve));
-        }
-        catch (DbUpdateException)
-        {
-            return Conflict(new { message = "A classificação mudou. Atualize a página e tente novamente." });
-        }
-        catch (System.Data.Common.DbException)
-        {
-            return Conflict(new { message = "A classificação mudou. Atualize a página e tente novamente." });
-        }
+
+        return await SaveAllocationAsync(ct);
     }
 
     [HttpPut("investments/{accountId:guid}/rate")]
@@ -147,24 +148,11 @@ public class PlanningController(AppDbContext db) : ApiControllerBase
             UserId = UserId,
             Name = name,
             TargetAmount = dto.TargetAmount,
-            CurrentAmount = dto.CurrentAmount,
             Deadline = dto.Deadline,
         };
         db.SavingsGoals.Add(goal);
         await db.SaveChangesAsync(ct);
-        return Ok(SavingsGoalDto.FromEntity(goal));
-    }
-
-    [HttpPut("goals/{id:guid}/progress")]
-    public async Task<IActionResult> UpdateGoalProgress(Guid id, UpdateGoalProgressDto dto, CancellationToken ct)
-    {
-        var goal = await db.SavingsGoals.FirstOrDefaultAsync(g => g.Id == id && g.UserId == UserId, ct);
-        if (goal is null) return NotFound(new { message = "Meta não encontrada." });
-
-        goal.CurrentAmount = dto.CurrentAmount;
-        goal.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return Ok(SavingsGoalDto.FromEntity(goal));
+        return Ok(new SavingsGoalDto(goal.Id, goal.Name, goal.TargetAmount, goal.Deadline, goal.CreatedAt, [], []));
     }
 
     [HttpDelete("goals/{id:guid}")]
@@ -174,27 +162,16 @@ public class PlanningController(AppDbContext db) : ApiControllerBase
         return deleted == 0 ? NotFound(new { message = "Meta não encontrada." }) : NoContent();
     }
 
-    // Leva para a conta o que estava só no localStorage antes desta tabela existir. Nunca sobrescreve:
-    // a reserva só é criada se a conta ainda não tem uma, e uma meta só entra se o id dela ainda não
-    // existe. O cliente apaga do navegador apenas o que esta resposta confirma como guardado.
+    // Leva para a conta as metas que estavam só no localStorage antes desta tabela existir. Nunca
+    // sobrescreve: uma meta só entra se o id dela ainda não existe. O valor "já guardado" digitado no
+    // navegador não vem junto, porque o progresso agora sai só dos investimentos vinculados. O cliente
+    // apaga do navegador apenas o que esta resposta confirma como guardado.
     [HttpPost("import")]
     public async Task<IActionResult> ImportLegacy(ImportLegacyPlanningDto dto, CancellationToken ct)
     {
-        var reserveImported = false;
-        if (dto.ReserveAmount is { } amount && amount >= 0 && amount <= MaxAmount
-            && !await db.EmergencyReserves.AnyAsync(r => r.UserId == UserId, ct))
-        {
-            db.EmergencyReserves.Add(new EmergencyReserve { UserId = UserId, CurrentAmount = amount });
-            reserveImported = true;
-        }
-
         var legacyGoals = (dto.Goals ?? []).Where(g => g.Id != Guid.Empty).DistinctBy(g => g.Id).ToList();
         var legacyIds = legacyGoals.Select(g => g.Id).ToList();
-        var existing = await db.SavingsGoals
-            .Where(g => legacyIds.Contains(g.Id))
-            .Select(g => new { g.Id, g.UserId })
-            .ToListAsync(ct);
-        var takenIds = existing.Select(e => e.Id).ToHashSet();
+        var takenIds = (await db.SavingsGoals.Where(g => legacyIds.Contains(g.Id)).Select(g => g.Id).ToListAsync(ct)).ToHashSet();
         var count = await db.SavingsGoals.CountAsync(g => g.UserId == UserId, ct);
 
         foreach (var legacy in legacyGoals)
@@ -210,7 +187,6 @@ public class PlanningController(AppDbContext db) : ApiControllerBase
                 UserId = UserId,
                 Name = name.Length > MaxNameLength ? name[..MaxNameLength] : name,
                 TargetAmount = legacy.TargetAmount,
-                CurrentAmount = Math.Clamp(legacy.CurrentAmount, 0, MaxAmount),
                 Deadline = legacy.Deadline,
                 CreatedAt = legacy.CreatedAt?.ToUniversalTime() ?? DateTime.UtcNow,
             });
@@ -226,27 +202,63 @@ public class PlanningController(AppDbContext db) : ApiControllerBase
             // Duas abas importando ao mesmo tempo: a outra já gravou. Nada se perde, o cliente só
             // apaga do navegador o que aparece como guardado na resposta.
             db.ChangeTracker.Clear();
-            reserveImported = false;
         }
 
         var planning = await LoadAsync(ct);
         var stored = planning.Goals.Select(g => g.Id).Where(legacyIds.Contains).ToList();
-        return Ok(new ImportLegacyPlanningResultDto(planning, reserveImported, stored));
+        return Ok(new ImportLegacyPlanningResultDto(planning, stored));
     }
 
-    private async Task<IActionResult> UpdateReserveAsync(Action<EmergencyReserve> apply, CancellationToken ct)
-    {
-        var reserve = await db.EmergencyReserves.FirstOrDefaultAsync(r => r.UserId == UserId, ct);
-        if (reserve is null)
-        {
-            reserve = new EmergencyReserve { UserId = UserId };
-            db.EmergencyReserves.Add(reserve);
-        }
+    private sealed record PlanningResource(Guid Id, bool Auto);
 
-        apply(reserve);
-        reserve.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return Ok(EmergencyReserveDto.FromEntity(reserve));
+    // Só recursos do próprio usuário, de conexões que não estão sendo desfeitas.
+    private async Task<PlanningResource?> FindResourceAsync(AllocationChangeDto dto, CancellationToken ct)
+    {
+        if (dto.InvestmentId.HasValue == dto.ReservedBalanceId.HasValue) return null;
+        var id = (dto.InvestmentId ?? dto.ReservedBalanceId)!.Value;
+        var names = dto.InvestmentId.HasValue
+            ? await db.ImportedInvestments.Where(x => x.Id == id && x.UserId == UserId
+                && db.PolpIntegrations.Any(p => p.Id == x.IntegrationId && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus))
+                .Select(x => x.Name).ToListAsync(ct)
+            : await db.ImportedReservedBalances.Where(x => x.Id == id && x.UserId == UserId
+                && db.PolpIntegrations.Any(p => p.Id == x.IntegrationId && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus))
+                .Select(x => x.Name).ToListAsync(ct);
+        return names.Count == 0 ? null : new PlanningResource(id, EmergencyReserveNames.IsAuto(names[0], dto.ReservedBalanceId.HasValue));
+    }
+
+    private Task<PlanningAllocation?> FindAllocationAsync(AllocationChangeDto dto, CancellationToken ct) =>
+        dto.InvestmentId is { } investmentId
+            ? db.PlanningAllocations.SingleOrDefaultAsync(a => a.UserId == UserId && a.ImportedInvestmentId == investmentId, ct)
+            : db.PlanningAllocations.SingleOrDefaultAsync(a => a.UserId == UserId && a.ImportedReservedBalanceId == dto.ReservedBalanceId, ct);
+
+    private PlanningAllocation NewAllocation(AllocationChangeDto dto, Guid? goalId) => new()
+    {
+        UserId = UserId,
+        GoalId = goalId,
+        ImportedInvestmentId = dto.InvestmentId,
+        ImportedReservedBalanceId = dto.ReservedBalanceId,
+    };
+
+    private async Task<IActionResult> AllocatedToGoalAsync(Guid goalId, CancellationToken ct)
+    {
+        var name = await db.SavingsGoals.Where(g => g.Id == goalId && g.UserId == UserId).Select(g => g.Name).FirstOrDefaultAsync(ct);
+        return Conflict(new { message = name is null ? "Este investimento já está vinculado a uma meta." : $"Este investimento já está vinculado à meta “{name}”." });
+    }
+
+    private ConflictObjectResult InReserve() => Conflict(new { message = "Este investimento já faz parte da reserva de emergência." });
+
+    private async Task<IActionResult> SaveAllocationAsync(CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // O índice único por recurso barrou duas abas vinculando o mesmo investimento ao mesmo tempo.
+            return Conflict(new { message = "Este investimento acabou de ser vinculado em outro lugar. Atualize a página." });
+        }
+        return Ok(await LoadAsync(ct));
     }
 
     // Cartão é BankAccount também, mas não guarda dinheiro: não pode virar reserva nem ter taxa.
@@ -276,15 +288,20 @@ public class PlanningController(AppDbContext db) : ApiControllerBase
             .Where(g => g.UserId == UserId)
             .OrderByDescending(g => g.CreatedAt)
             .ToListAsync(ct);
-
+        var allocations = await db.PlanningAllocations.AsNoTracking().Where(a => a.UserId == UserId).ToListAsync(ct);
         var rateProfiles = await db.InvestmentRateProfiles
             .AsNoTracking()
             .Where(p => p.UserId == UserId)
             .ToListAsync(ct);
 
+        List<Guid> Investments(Guid? goalId) => allocations.Where(a => a.GoalId == goalId && a.ImportedInvestmentId != null)
+            .OrderBy(a => a.CreatedAt).Select(a => a.ImportedInvestmentId!.Value).ToList();
+        List<Guid> Balances(Guid? goalId) => allocations.Where(a => a.GoalId == goalId && a.ImportedReservedBalanceId != null)
+            .OrderBy(a => a.CreatedAt).Select(a => a.ImportedReservedBalanceId!.Value).ToList();
+
         return new PlanningDto(
-            reserve is null ? null : EmergencyReserveDto.FromEntity(reserve),
-            goals.Select(SavingsGoalDto.FromEntity).ToList(),
+            new EmergencyReserveDto(reserve?.BankAccountId, reserve is null ? [] : EmergencyReserveNames.Excluded(reserve), Investments(null), Balances(null)),
+            goals.Select(g => new SavingsGoalDto(g.Id, g.Name, g.TargetAmount, g.Deadline, g.CreatedAt, Investments(g.Id), Balances(g.Id))).ToList(),
             rateProfiles.Select(InvestmentRateProfileDto.FromEntity).ToList());
     }
 }

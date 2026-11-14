@@ -1,4 +1,3 @@
-import { StarIcon } from "../../ui/icons/FeatureIcons.jsx";
 import { formatCurrency, formatDate, formatPercentage } from "../../../utils/financeMath.js";
 import CardFace from "../CardFace/CardFace.jsx";
 import { formatDueDay, formatDataAge } from "../../../utils/invoiceDue.js";
@@ -6,8 +5,7 @@ import { cardLimits, isInvoiceOverdue } from "../../../utils/cardLimits.js";
 import LimitBar from "../LimitBar/LimitBar.jsx";
 import "./CreditCardVisual.css";
 
-// `card` é o RecognizedCardDto do backend, já achatado — sem entidade separada por trás: quando
-// `isSynced` é true, isto É a BankAccount sincronizada da Polp, não um cadastro à parte. Campos
+// `card` é o RecognizedCardDto do backend: a própria BankAccount sincronizada da Polp. Campos
 // que a Polp não mandou (creditLimit/closingDay/dueDay) vêm null e aparecem como "não informado":
 // nada é preenchido à mão. Sem número de cartão fabricado — `number` só aparece
 // quando a própria Polp manda um (mascarado).
@@ -15,7 +13,6 @@ export default function CreditCardVisual({
   card,
   cardholderName,
   onClick,
-  onSetPrimary,
   showKeyStats = true,
   showFace = true,
 }) {
@@ -23,20 +20,6 @@ export default function CreditCardVisual({
   const FaceTag = onClick ? "button" : "div";
   const pastDue = isInvoiceOverdue(card);
   const dataAge = pastDue ? formatDataAge(card.connectionLastSyncedAt) : null;
-
-  const primaryButton = (
-    <button
-      type="button"
-      className={`credit-card-visual__star ${card.isPrimary ? "credit-card-visual__star--active" : ""}`}
-      onClick={card.isPrimary ? undefined : onSetPrimary}
-      aria-pressed={Boolean(card.isPrimary)}
-      aria-disabled={card.isPrimary || undefined}
-      aria-label="Cartão principal"
-      title={card.isPrimary ? "Cartão principal" : "Definir como cartão principal"}
-    >
-      <StarIcon filled={card.isPrimary} />
-    </button>
-  );
 
   return (
     <div className="credit-card-visual">
@@ -52,12 +35,6 @@ export default function CreditCardVisual({
       )}
 
       <div className="credit-card-visual__stats">
-        {!showFace && onSetPrimary && (
-          <div className="credit-card-visual__minor credit-card-visual__primary">
-            <span className="credit-card-visual__stat-label">Cartão principal</span>
-            {primaryButton}
-          </div>
-        )}
         {showKeyStats && (
         <div className="credit-card-visual__key">
           <div className="credit-card-visual__stat">
@@ -104,11 +81,6 @@ export default function CreditCardVisual({
             </span>
           </div>
         )}
-
-        <div className="credit-card-visual__minor">
-          <span className="credit-card-visual__stat-label">Parcelas ativas</span>
-          <span className="credit-card-visual__minor-value">{card.installments ? card.installments.length : "—"}</span>
-        </div>
       </div>
     </div>
   );
