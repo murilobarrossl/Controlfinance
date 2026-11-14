@@ -33,15 +33,8 @@ if (secretErrors.Count > 0)
 // ──────────────────────────────────────────
 //  BANCO DE DADOS
 // ──────────────────────────────────────────
-// Pooler do Supabase em modo sessão limita clientes; sem teto, picos recebem EMAXCONNSESSION.
-if (builder.Configuration.GetValue<int?>("Database:MaxPoolSize") is { } maxPool
-    && builder.Configuration.GetConnectionString("DefaultConnection") is { Length: > 0 } rawConnection)
-{
-    var npgsql = new Npgsql.NpgsqlConnectionStringBuilder(rawConnection) { MaxPoolSize = maxPool };
-    if (builder.Configuration.GetValue<int?>("Database:ConnectionIdleLifetimeSeconds") is { } idle)
-        npgsql.ConnectionIdleLifetime = idle;
-    builder.Configuration["ConnectionStrings:DefaultConnection"] = npgsql.ConnectionString;
-}
+// Centraliza timeout e limites do pool, preservando parâmetros explícitos da conexão.
+builder.Configuration["ConnectionStrings:DefaultConnection"] = StartupDatabaseConnection.Configure(builder.Configuration);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -246,6 +239,10 @@ if (ConfigSecrets.IsPolpEnabled(app.Configuration) && !ConfigSecrets.IsWebhookSi
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    // Mantém a conexão aberta durante a inicialização; a repetição cobre somente Open,
+    // sem reexecutar alterações cujo resultado no servidor possa ser incerto.
+    await StartupDatabaseConnection.OpenAsync(
+        ct => db.Database.OpenConnectionAsync(ct), app.Logger, app.Lifetime.ApplicationStopping);
 
     // Precisa saber se a migration do Radar de Recorrências ainda não tinha rodado nessa base
     // ANTES de aplicar (Migrate() abaixo já marca ela como aplicada). É o gatilho do backfill

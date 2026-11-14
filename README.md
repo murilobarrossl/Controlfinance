@@ -86,6 +86,22 @@ Segredos nunca vão para o git. O `backend/appsettings.json` versionado só tem 
 `backend/appsettings.Local.json` (tem precedência sobre os demais arquivos) ou com variáveis de
 ambiente usando `__` no lugar de `:` (ver `backend/.env.example`).
 
+### Conexão com banco remoto
+
+Executar a API na própria máquina não exige PostgreSQL local quando `DefaultConnection`
+aponta para um banco remoto. Cada desenvolvedor configura o arquivo local ignorado pelo Git,
+com o endpoint, porta, credenciais e SSL exigidos pelo ambiente autorizado.
+
+A conexão usa timeout de 30 segundos quando a connection string não define `Timeout`.
+`Database:ConnectionTimeoutSeconds` permite sobrescrever esse valor. A inicialização repete
+somente a abertura da conexão, no máximo três vezes, para falhas transitórias. Credenciais
+recusadas não são repetidas. Migrations e backfills não são repetidos por esse mecanismo.
+
+Depois de conectar, a inicialização continua aplicando migrations automaticamente ao banco
+configurado. Portanto, executar `dotnet run` contra produção pode alterar o banco de produção.
+Uma falha persistente de rede ou autenticação precisa ser corrigida na conexão/infraestrutura;
+as tentativas não substituem essa correção.
+
 Para ativar a Polp, acrescente ao `appsettings.Local.json`:
 
 ```json
