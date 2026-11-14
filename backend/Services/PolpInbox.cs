@@ -39,6 +39,22 @@ public sealed class PolpInbox(IServiceScopeFactory scopes, TimeProvider clock) :
             using var scope = scopes.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+            // O UPDATE vem antes do INSERT porque o caso comum é re-enfileirar um aviso que já está
+            // na fila (a reconciliação varre as integrações a cada rodada): tentar inserir primeiro
+            // funcionava, mas deixava um erro de índice único no log do EF a cada evento repetido,
+            // afogando o log e o monitoramento com falha que não é falha. Se existe um igual
+            // pendente, basta avisar o worker (ReceivedAt muda) que chegou de novo. A prioridade só
+            // sobe: um aviso da Polp igual a uma reconciliação na fila não pode esperar atrás das
+            // outras reconciliações.
+            var priority = evt.Priority;
+            var touched = await db.PolpWebhookEvents
+                .Where(e => e.DedupKey == key
+                         && (e.Status == PolpWebhookEventStatus.Pending || e.Status == PolpWebhookEventStatus.Processing))
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(e => e.ReceivedAt, now)
+                    .SetProperty(e => e.Priority, e => e.Priority < priority ? e.Priority : priority), ct);
+            if (touched > 0) return false;
+
             db.PolpWebhookEvents.Add(new PolpWebhookEvent
             {
                 Event = evt.Event,
@@ -57,23 +73,12 @@ public sealed class PolpInbox(IServiceScopeFactory scopes, TimeProvider clock) :
                 await db.SaveChangesAsync(ct);
                 return true;
             }
+            // Corrida: outra instância inseriu o mesmo aviso entre o UPDATE e o INSERT. Sem depender
+            // do código de erro de cada banco — a próxima rodada reencontra a linha e a atualiza.
             catch (DbUpdateException) when (round <= MaxEnqueueRounds)
             {
                 db.ChangeTracker.Clear();
             }
-
-            // Sem depender do código de erro de cada banco: se existe um igual pendente, a falha
-            // foi o índice único e basta avisar o worker (ReceivedAt muda) que chegou de novo. A
-            // prioridade só sobe: um aviso da Polp igual a uma reconciliação na fila não pode
-            // esperar atrás das outras reconciliações.
-            var priority = evt.Priority;
-            var touched = await db.PolpWebhookEvents
-                .Where(e => e.DedupKey == key
-                         && (e.Status == PolpWebhookEventStatus.Pending || e.Status == PolpWebhookEventStatus.Processing))
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(e => e.ReceivedAt, now)
-                    .SetProperty(e => e.Priority, e => e.Priority < priority ? e.Priority : priority), ct);
-            if (touched > 0) return false;
         }
     }
 }
