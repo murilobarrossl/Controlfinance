@@ -1,22 +1,26 @@
+/* Tile escuro um degrau acima da superfície, com contorno fino: dá a todas as instituições o
+   mesmo recipiente sem o brilho de uma placa branca no tema escuro. Sem padding, a marca usa a
+   área inteira (os arquivos da Polp já trazem a própria margem, e os ícones quadrados, como o do
+   Itaú, preenchem o tile); object-fit: contain preserva a proporção original. */
 .bank-logo {
   flex-shrink: 0;
-  border-radius: 6px;
-  object-fit: contain;
-  background-color: #ffffff;
-  padding: 3px;
-}
-
-.bank-logo--transparent {
-  background-color: transparent;
+  display: block;
+  box-sizing: border-box;
+  width: var(--bank-logo-size, 32px);
+  height: var(--bank-logo-size, 32px);
   padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: calc(var(--bank-logo-size, 32px) * 0.22);
+  background-color: var(--color-surface-hover);
+  object-fit: contain;
 }
 
 .bank-logo--fallback {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
   color: #ffffff;
-  font-size: 0.65rem;
+  font-size: calc(var(--bank-logo-size, 32px) * 0.36);
   font-weight: 700;
+  line-height: 1;
 }

@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { getCreditCardsSummary } from "../../../api/creditCards.js";
 import { getTransactions } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
-import { useDashboardHeaderSlot } from "../../../context/DashboardHeaderContext.jsx";
 import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
@@ -14,27 +12,22 @@ import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import { CardIcon, WalletIcon, BellIcon, HistoryIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
-import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import LimitBar from "../../../components/dashboard/LimitBar/LimitBar.jsx";
 import { formatCurrency, formatDate, formatPercentage } from "../../../utils/financeMath.js";
 import { summarizeCards, groupCards } from "../../../utils/cardGroups.js";
 import { buildUpcoming } from "../../../utils/upcomingDues.js";
 import { formatDueDay, formatDataAge } from "../../../utils/invoiceDue.js";
-import { cardLimits, isInvoiceOverdue } from "../../../utils/cardLimits.js";
+import { isInvoiceOverdue } from "../../../utils/cardLimits.js";
 import CardStatement from "./CardStatement.jsx";
+import CardDetail from "./CardDetail.jsx";
 import CardFace from "../../../components/dashboard/CardFace/CardFace.jsx";
-import CardPicker from "../../../components/dashboard/CardPicker/CardPicker.jsx";
-import { cardBrand, cardPickerOption, connectorsByName as buildConnectorsMap } from "../../../utils/cardBrand.js";
+import { cardBrand, connectorsByName as buildConnectorsMap } from "../../../utils/cardBrand.js";
 import "./Cartoes.css";
 import usePageTitle from "../../../hooks/usePageTitle.js";
 
 const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
 const EMPTY_LIST = [];
 const TRANSACTIONS_CAP = 2000;
-
-function formatDateTime(value) {
-  return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-}
 
 function Section({ id, title, aside, children }) {
   return (
@@ -54,14 +47,14 @@ export default function Cartoes() {
   usePageTitle("Cartões");
   const { user } = useAuth();
   const { connectors } = useAccount();
-  const headerSlot = useDashboardHeaderSlot();
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [loadedKey, setLoadedKey] = useState(null);
   const loading = loadedKey !== reloadKey;
-  // Os quatro números do topo podem somar todos os cartões ("all") ou mostrar só um deles (id).
-  const [summaryScope, setSummaryScope] = useState("all");
+  // O topo e os próximos vencimentos somam sempre todos os cartões; a seleção só abre o painel do
+  // cartão e escolhe o extrato.
+  const [selectedId, setSelectedId] = useState(null);
 
   const cards = data?.cards ?? EMPTY_LIST;
   const pendingTransactions = data?.pendingTransactions ?? EMPTY_LIST;
@@ -95,9 +88,9 @@ export default function Cartoes() {
 
   const upcoming = useMemo(() => buildUpcoming(cards, pendingTransactions), [cards, pendingTransactions]);
 
-  // Se o cartão escolhido deixou de existir (banco desconectado), volta pra "todos" sozinho.
-  const scopeCard = useMemo(() => cards.find((c) => c.id === summaryScope) ?? null, [cards, summaryScope]);
-  const summary = useMemo(() => summarizeCards(scopeCard ? [scopeCard] : cards), [scopeCard, cards]);
+  // Se o cartão escolhido deixou de existir (banco desconectado), a seleção some sozinha.
+  const selectedCard = useMemo(() => cards.find((c) => c.id === selectedId) ?? null, [cards, selectedId]);
+  const summary = useMemo(() => summarizeCards(cards), [cards]);
   const { groups } = useMemo(() => groupCards(cards), [cards]);
 
   const connectorsMap = useMemo(() => buildConnectorsMap(connectors), [connectors]);
@@ -105,18 +98,12 @@ export default function Cartoes() {
 
   const noCards = !loading && cards.length === 0;
   const orderedCards = groups.flatMap((group) => group.cards);
-  const pickerOptions = [
-    { value: "all", title: "Todos os cartões", subtitle: `Soma de ${cards.length} cartões` },
-    ...orderedCards.map((card) => cardPickerOption(card, brandOf(card))),
-  ];
-  const oldestSync = (scopeCard ? [scopeCard] : cards)
+  const oldestSync = cards
     .filter((c) => c.connectionLastSyncedAt)
     .map((c) => c.connectionLastSyncedAt)
     .sort((a, b) => new Date(a) - new Date(b))[0];
   const dataAge = formatDataAge(oldestSync);
-  const scopeLabel = scopeCard
-    ? `${brandOf(scopeCard).name} · ${scopeCard.name}`
-    : cards.length === 1 ? "1 cartão" : `Soma de ${cards.length} cartões`;
+  const scopeLabel = cards.length === 1 ? "1 cartão" : `Soma de ${cards.length} cartões`;
   const scopeNote = [scopeLabel, dataAge].filter(Boolean).join(" · ");
 
   const valueSkeleton = <Skeleton width="7rem" height="1.5rem" />;
@@ -126,7 +113,7 @@ export default function Cartoes() {
     if (summary.usagePercent == null) return null;
     const percent = formatPercentage(summary.usagePercent);
     if (summary.overLimitCards === 0) return `${percent} do limite`;
-    if (scopeCard || cards.length === 1) return `Excedido em ${formatCurrency(summary.overAmount)} · ${percent} do limite`;
+    if (cards.length === 1) return `Excedido em ${formatCurrency(summary.overAmount)} · ${percent} do limite`;
     const which = summary.overLimitCards === 1 ? "1 cartão acima" : `${summary.overLimitCards} cartões acima`;
     return `${which} do limite, em ${formatCurrency(summary.overAmount)} · ${percent} do limite total`;
   })();
@@ -140,10 +127,8 @@ export default function Cartoes() {
   })();
 
   function renderCardTile(card) {
-    const selected = scopeCard?.id === card.id;
-    const { available, usagePercent, overLimit, overAmount } = cardLimits(card);
+    const selected = selectedCard?.id === card.id;
     const pastDue = isInvoiceOverdue(card);
-    const group = groups.find((g) => g.cards.includes(card));
     return [
       <li key={card.id} className={`cartoes__tile${selected ? " cartoes__tile--selected" : ""}`}>
         <button
@@ -151,7 +136,7 @@ export default function Cartoes() {
           className="cartoes__tile-button"
           aria-expanded={selected}
           aria-controls={`cartao-${card.id}`}
-          onClick={() => setSummaryScope(selected ? "all" : card.id)}
+          onClick={() => setSelectedId(selected ? null : card.id)}
         >
           <CardFace card={card} holder={user?.name} />
           <span className="cartoes__tile-stats">
@@ -165,33 +150,11 @@ export default function Cartoes() {
                 {!card.invoiceDueDate ? "—" : pastDue ? formatDueDay(card.invoiceDueDate) : formatDate(card.invoiceDueDate)}
               </strong>
             </span>
-            <span className="cartoes__tile-stat cartoes__tile-stat--wide">
-              <span>Limite disponível</span>
-              <strong>{available != null ? formatCurrency(available) : "—"}</strong>
-              <LimitBar usagePercent={usagePercent} size="sm" />
-              {usagePercent != null && (
-                <span className={`cartoes__tile-limit-note${overLimit ? " cartoes__tile-limit-note--over" : ""}`}>
-                  {overLimit
-                    ? `Excedido em ${formatCurrency(overAmount)} · ${formatPercentage(usagePercent)} usado`
-                    : `${formatPercentage(usagePercent)} do limite usado`}
-                </span>
-              )}
-            </span>
           </span>
         </button>
       </li>,
       selected && (
-        <li key={`${card.id}-detalhe`} id={`cartao-${card.id}`} className="cartoes__tile-detail">
-          <p className="cartoes__tile-updated">
-            Atualizado em {group?.lastSyncedAt ? formatDateTime(group.lastSyncedAt) : "—"}
-          </p>
-          <CreditCardVisual
-            card={card}
-            cardholderName={user?.name}
-            showKeyStats={false}
-            showFace={false}
-          />
-        </li>
+        <CardDetail key={`${card.id}-detalhe`} id={`cartao-${card.id}`} card={card} bankName={brandOf(card).name} />
       ),
     ];
   }
@@ -214,21 +177,6 @@ export default function Cartoes() {
     <div className="cartoes">
       <SectionHeading title="Cartões" level={1} />
 
-      {!loading &&
-        cards.length > 1 &&
-        headerSlot &&
-        createPortal(
-          <div className="dashboard-toolbar__scope">
-            <CardPicker
-              id="cartoes-escopo"
-              labelId="cartoes-escopo-rotulo"
-              options={pickerOptions}
-              value={scopeCard?.id ?? "all"}
-              onChange={setSummaryScope}
-            />
-          </div>,
-          headerSlot,
-        )}
 
       {noCards ? (
         <Card className="cartoes__empty">
@@ -308,8 +256,8 @@ export default function Cartoes() {
           id="cartoes-lista"
           title="Seus cartões"
           aside={
-            !loading && cards.length > 1 && (
-              <span className="cartoes__section-note">Selecione um cartão para ver só os números e o extrato dele.</span>
+            !loading && !selectedCard && (
+              <span className="cartoes__section-note">Clique em um cartão para ver detalhes e o extrato dele.</span>
             )
           }
         >
@@ -322,8 +270,8 @@ export default function Cartoes() {
       )}
 
       {!loading && cards.length > 0 &&
-        (scopeCard ? (
-          <CardStatement key={scopeCard.id} card={scopeCard} getBrand={brandOf} />
+        (selectedCard ? (
+          <CardStatement key={selectedCard.id} card={selectedCard} getBrand={brandOf} />
         ) : (
           <Section id="cartoes-extrato" title="Extrato do cartão">
             <p className="cartoes__hint">Selecione um cartão acima para ver o extrato.</p>

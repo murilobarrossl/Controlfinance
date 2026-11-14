@@ -738,14 +738,6 @@
   white-space: nowrap;
 }
 
-.inv-institution-logo {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  object-fit: contain;
-}
-
 /* Ícone do tipo de produto: só contorno, no tom do texto secundário, para identificar sem competir
    com o nome nem com o valor. */
 .inv-mark {
@@ -1835,4 +1827,15 @@
 /* Linhas ocupam a largura toda: o anel de foco vai para dentro para não colar na linha vizinha. */
 .inv-row__button:focus-visible {
   outline-offset: -2px;
+}
+
+.investimentos__refresh {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.investimentos__refresh-status {
+  color: var(--color-text-tertiary);
+  font-size: 0.8125rem;
 }

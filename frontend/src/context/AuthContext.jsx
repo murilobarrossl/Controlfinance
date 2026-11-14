@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentUser } from "../api/auth.js";
 import { setCsrfToken } from "../api/client.js";
 import { clearSessionLocalData, getCurrentUserId, setCurrentUserId } from "../utils/authToken.js";
@@ -13,7 +13,11 @@ export function AuthProvider({ children }) {
   const [status, setStatus] = useState("loading"); // loading | authenticated | anonymous | error
   const [sessionError, setSessionError] = useState(null);
 
+  const sessionVersion = useRef(0);
+  const pendingCheck = useRef(null);
+
   const applySession = useCallback((data) => {
+    sessionVersion.current += 1;
     setSessionError(null);
     setCsrfToken(data?.csrfToken);
     setUser(data?.user ?? null);
@@ -21,31 +25,41 @@ export function AuthProvider({ children }) {
     setStatus(data?.user ? "authenticated" : "anonymous");
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    getCurrentUser()
+  // Uma falha de transporte não prova ausência de sessão. Reutilizamos a consulta
+  // em andamento e ignoramos respostas anteriores a um login/logout explícito.
+  const checkSession = useCallback(() => {
+    if (pendingCheck.current) return pendingCheck.current;
+    const version = sessionVersion.current;
+    const request = getCurrentUser()
       .then((data) => {
-        if (cancelled) return;
+        if (version !== sessionVersion.current) return;
         applySession(data);
       })
       .catch((err) => {
-        if (cancelled) return;
-        setCsrfToken(null);
+        if (version !== sessionVersion.current) return;
         if (err.status === 401) {
-          setSessionError(null);
-          setStatus("anonymous");
+          applySession(null);
         } else {
-          // A failed session lookup does not prove the user is logged out.
           const unavailable = !err.status || err.status >= 500 || [408, 429].includes(err.status);
           setSessionError(err.status === 403 ? 403 : unavailable ? 503 : 500);
-          setStatus("error");
+          setStatus((previous) => previous === "authenticated" ? previous : "error");
         }
+      })
+      .finally(() => {
+        if (pendingCheck.current === request) pendingCheck.current = null;
       });
-
-    return () => {
-      cancelled = true;
-    };
+    pendingCheck.current = request;
+    return request;
   }, [applySession]);
+
+  useEffect(() => {
+    checkSession();
+  }, [checkSession]);
+
+  const retrySession = useCallback(() => {
+    setStatus((previous) => previous === "authenticated" ? previous : "loading");
+    return checkSession();
+  }, [checkSession]);
 
   // Chamado com a resposta de /auth/login ou /auth/register ({ user, csrfToken }); o cookie
   // de sessão já foi gravado pelo próprio navegador.
@@ -56,6 +70,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
+    sessionVersion.current += 1;
     clearSessionLocalData(getCurrentUserId());
     setSessionError(null);
     setCsrfToken(null);
@@ -64,8 +79,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, status, sessionError, isAuthenticated: status === "authenticated", login, logout, updateUser }),
-    [user, status, sessionError, login, logout, updateUser],
+    () => ({ user, status, sessionError, isAuthenticated: status === "authenticated", login, logout, updateUser, retrySession }),
+    [user, status, sessionError, login, logout, updateUser, retrySession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

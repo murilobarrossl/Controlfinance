@@ -31,9 +31,9 @@ function ResourceRow({ entry, onRemove, removeLabel, saving }) {
     <li className="inv-link">
       {item ? <InvestmentIcon item={item} /> : <span className="inv-mark" aria-hidden="true" />}
       <span className="inv-link__titles">
-        <span className="inv-link__name">{item ? item.name : entry.status === "loading" ? <Skeleton width="8rem" height="0.9rem" /> : "Investimento indisponível"}</span>
+        <span className="inv-link__name">{item ? item.name : entry.status === "loading" ? <Skeleton width="8rem" height="0.9rem" /> : entry.status === "error" ? "Não foi possível carregar agora" : "Investimento indisponível"}</span>
         <span className="inv-link__meta">
-          {entry.status === "loading" ? null
+          {entry.status === "loading" || entry.status === "error" ? null
             : !item ? "Não está mais disponível nesta conexão"
             : entry.legacy ? "Conta bancária"
             : <><InstitutionLogo institution={item.institution} /><span className="inv-row__institution-text">{item.institution.name}{item.accountNumber ? ` · conta ${item.accountNumber}` : ""}</span></>}
@@ -94,6 +94,7 @@ export function EmergencyReserveCard({ planning, items, itemsLoading, entries, s
         <p className="inv-links__total">
           <span>Total</span>
           <strong>{summary.loading ? <Skeleton width="6rem" height="1.25rem" />
+            : summary.failed ? "Indisponível"
             : summary.totals.length ? summary.totals.map((money) => <span className="inv-real__amount" key={money.currency}>{formatMoney(money)}</span>)
             : "Não informado"}</strong>
         </p>
@@ -117,6 +118,7 @@ function GoalProgress({ goal, entries }) {
     );
   }
   if (summary.loading) return <Skeleton width="60%" height="1.25rem" />;
+  if (summary.failed) return <p className="inv-goal__figures"><span className="inv-goal__saved inv-goal__saved--empty">Saldo indisponível no momento</span><span className="inv-goal__target">Objetivo {formatCurrency(goal.targetAmount)}</span></p>;
 
   const brl = summary.totals.find((money) => money.currency === "BRL");
   const saved = brl ? Number(brl.amount) : 0;

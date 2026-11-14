@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
@@ -8,6 +8,7 @@ import { ChevronDownIcon, InfoIcon, CloseIcon } from "../../../components/ui/ico
 import { useAccount } from "../../../context/AccountContext.jsx";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { formatMoney, isReserve, MODALITIES, normalizeInvestment } from "../../../utils/importedInvestments.js";
+import { requestInvestmentsRefresh } from "../../../api/investments.js";
 import usePlanning from "./usePlanning.js";
 import useLinkedResources from "./useLinkedResources.js";
 import { legacyAccountEntry, summarize, summaryNote } from "./planningSummary.js";
@@ -22,6 +23,8 @@ function Amounts({ item }) {
   if (!item.amounts.length) return "Não informado";
   return item.amounts.map((money, index) => <span className="inv-real__amount" key={index}>{formatMoney(money)}</span>);
 }
+const MANUAL_REFRESH_INTERVAL_MS = 30000;
+const REFRESH_FEEDBACK_MS = 4000;
 const PENDING_STATES = new Set(["checking", "awaiting_sync", "sync_delayed", "pending_authorization"]);
 const dismissedKey = (owner) => `investmentsSyncNoteDismissed:${owner}`;
 function readDismissed(owner) {
@@ -75,6 +78,29 @@ export default function Investimentos() {
     if (shift) window.scrollBy({ top: shift, behavior: "instant" });
   }, [selected]);
   const [dismissedState, setDismissed] = useState(null);
+  // Chave da atualização pedida pelo botão: "concluída" é essa chave já em vigor e nada mais carregando.
+  const [refreshRequest, setRefreshRequest] = useState(null);
+  const [refreshNotice, setRefreshNotice] = useState(null);
+  const lastManualRefresh = useRef(0);
+  const [requesting, setRequesting] = useState(false);
+  // O intervalo vale no servidor (InvestmentRefreshController), que sobrevive a sair e voltar da aba;
+  // a checagem local só poupa a chamada quando já se sabe a resposta.
+  const requestRefresh = async () => {
+    if (requesting) return;
+    if (Date.now() - lastManualRefresh.current < MANUAL_REFRESH_INTERVAL_MS) { setRefreshNotice("Dados atualizados há pouco"); return; }
+    setRequesting(true);
+    setRefreshNotice(null);
+    try {
+      await requestInvestmentsRefresh();
+      lastManualRefresh.current = Date.now();
+      setRefreshRequest(dataRefreshKey + 1);
+      bumpDataRefresh();
+    } catch (error) {
+      setRefreshNotice(error.status === 429 ? "Dados atualizados há pouco" : error.status === 503 ? "Muitos acessos agora. Tente em instantes." : "Não foi possível atualizar agora");
+    } finally {
+      setRequesting(false);
+    }
+  };
   const dismissed = dismissedState?.owner === owner ? dismissedState.ids : readDismissed(owner);
   const dismissSyncNote = () => {
     const ids = allConnections.map((c) => c.id);
@@ -83,13 +109,15 @@ export default function Investimentos() {
   };
   const connections = useMemo(() => effectiveConnectionId ? allConnections.filter((c) => c.id === effectiveConnectionId) : allConnections,
     [allConnections, effectiveConnectionId]);
+  const investmentData = catalog.investments.data;
+  const reservedData = catalog["reserved-balances"].data;
   const items = useMemo(() => {
     const numbers = new Map(accounts.map((account) => [account.id, account.number]));
-    const reserves = catalog["reserved-balances"].data
+    const reserves = reservedData
       .map((row) => ({ ...normalizeInvestment(row, true, allConnections), accountNumber: numbers.get(row.bankAccountId) ?? null }))
       .sort((a, b) => (a.accountNumber ?? "").localeCompare(b.accountNumber ?? ""));
-    return [...catalog.investments.data.map((row) => normalizeInvestment(row, false, allConnections)), ...reserves];
-  }, [catalog.investments.data, catalog["reserved-balances"].data, allConnections, accounts]);
+    return [...investmentData.map((row) => normalizeInvestment(row, false, allConnections)), ...reserves];
+  }, [investmentData, reservedData, allConnections, accounts]);
   const groups = Object.values(MODALITIES).map((modality) => ({ modality, items: items.filter((item) => item.modality.key === modality.key) })).filter((group) => group.items.length);
   const resolve = useLinkedResources(planning, items, allConnections, `${dataRefreshKey}:${catalog.refreshSequence}`);
   const legacyAccount = accounts.find((account) => account.id === planning.reserve?.bankAccountId);
@@ -105,11 +133,25 @@ export default function Investimentos() {
   const datasets = [catalog.investments, catalog["reserved-balances"]];
   const loading = datasets.some((dataset) => dataset.status === "loading") || connectionsStatus === "loading";
   const failed = datasets.some((dataset) => dataset.status === "error") || connectionsStatus === "error";
+  const limited = datasets.some((dataset) => dataset.limited);
+  const busy = datasets.some((dataset) => dataset.busy);
+  const refreshing = requesting || connectionsRefreshing || datasets.some((dataset) => dataset.refreshing || dataset.status === "loading");
+  const refreshDone = refreshRequest !== null && refreshRequest === dataRefreshKey && !refreshing;
+  useEffect(() => {
+    if (!refreshDone) return;
+    const timer = setTimeout(() => setRefreshRequest(null), REFRESH_FEEDBACK_MS);
+    return () => clearTimeout(timer);
+  }, [refreshDone]);
+  useEffect(() => {
+    if (!refreshNotice) return;
+    const timer = setTimeout(() => setRefreshNotice(null), REFRESH_FEEDBACK_MS);
+    return () => clearTimeout(timer);
+  }, [refreshNotice]);
   const confirmedEmpty = !loading && !failed && !connectionsRefreshing && !items.length && connections.length > 0
     && datasets.every((dataset) => !dataset.cursor && !dataset.refreshing)
     && connections.every((connection) => connection.status === "none_reported" && connection.reservedStatus === "none_reported");
   const reserveValue = planning.status === "loading" || reserveSummary.loading ? <Skeleton width="7rem" height="1.75rem" />
-    : planning.status === "error" ? "Indisponível"
+    : planning.status === "error" || reserveSummary.failed ? "Indisponível"
     : !reserveSummary.count ? <span className="inv-summary__empty">Nenhum investimento</span>
     : reserveSummary.totals.length ? reserveSummary.totals.map((money) => <span className="inv-real__amount" key={money.currency}>{formatMoney(money)}</span>) : "Não informado";
   if (allConnections.length === 0) {
@@ -122,12 +164,15 @@ export default function Investimentos() {
   const emptyText = failed ? "Tente atualizar os dados novamente." : confirmedEmpty ? "Produtos que não foram compartilhados pelo banco não aparecem aqui, o que não significa saldo zero." : connections.length ? "Eles aparecem aqui assim que o banco enviar os dados." : "Os investimentos aparecem depois que um banco é conectado e envia os dados.";
   return <div className="investimentos">
     <header className="investimentos__header">
-      <div className="inv-real__heading"><SectionHeading title="Investimentos" level={1} /><Button as="button" type="button" variant="outline" size="sm" onClick={bumpDataRefresh}>Atualizar dados</Button></div>
+      <div className="inv-real__heading"><SectionHeading title="Investimentos" level={1} /><div className="investimentos__refresh"><span className="investimentos__refresh-status" role="status">{refreshNotice ?? (refreshDone && !failed ? "Dados atualizados" : "")}</span>
+        <Button as="button" type="button" variant="outline" size="sm" onClick={requestRefresh} disabled={refreshing} aria-busy={refreshing}>{refreshing ? "Atualizando…" : "Atualizar dados"}</Button></div></div>
       {connections.some((c) => PENDING_STATES.has(c.status) || PENDING_STATES.has(c.reservedStatus))
         && allConnections.some((c) => !dismissed.includes(c.id))
         && <div className="investimentos__sync-note" role="status"><InfoIcon /><p>Estamos recebendo seus investimentos do banco. Alguns podem levar um tempo para aparecer.</p>
           <button type="button" className="investimentos__sync-note-close" aria-label="Fechar aviso" onClick={dismissSyncNote}><CloseIcon /></button></div>}
-      {failed && <div className="investimentos__failure" role="alert"><p>Não foi possível atualizar parte dos dados. Os valores exibidos mantêm a data em que foram informados.</p><Button as="button" type="button" variant="outline" size="sm" onClick={bumpDataRefresh}>Tentar novamente</Button></div>}
+      {(failed || limited || busy) && <div className="investimentos__failure" role="alert"><p>{limited ? "Muitas atualizações em pouco tempo. Os valores exibidos continuam com a data em que foram informados; tente de novo em instantes."
+        : busy ? "Muitos acessos neste momento. Os valores exibidos continuam com a data em que foram informados; tente de novo em instantes."
+        : "Não foi possível atualizar parte dos dados. Os valores exibidos mantêm a data em que foram informados."}</p><Button as="button" type="button" variant="outline" size="sm" onClick={requestRefresh} disabled={refreshing}>Tentar novamente</Button></div>}
       <dl className="inv-summary">
         <div className="inv-summary__item"><dt>Reserva de emergência</dt>
           <dd className="inv-summary__value">{reserveValue}</dd>

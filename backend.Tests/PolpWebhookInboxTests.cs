@@ -105,14 +105,26 @@ public class PolpWebhookInboxTests
 
     [Theory]
     [InlineData("nao e json")]
-    [InlineData("""{"event":"accounts","resource_id":"nao-e-guid"}""")]
-    [InlineData("""{"event":"accounts","resource_id":123}""")]
+    [InlineData("""{"event":"accounts","resource_id":"nao e id"}""")]
+    [InlineData("""{"event":"accounts","resource_id":true}""")]
+    [InlineData("""{"event":"accounts","resource_id":""}""")]
     [InlineData("null")]
     public async Task Corpo_invalido_400(string body)
     {
         using var h = new InboxHarness();
         Assert.Equal(400, Status(await Receive(h, body: body)));
         Assert.Empty(h.Rows());
+    }
+
+    // Ids de investimento da Polp são opacos: nem todo exemplo documentado é UUID.
+    [Theory]
+    [InlineData("""{"event":"investments","resource_id":"inv_123-ABC"}""")]
+    [InlineData("""{"event":"investments","resource_id":123}""")]
+    public async Task Id_opaco_de_investimento_e_aceito(string body)
+    {
+        using var h = new InboxHarness();
+        Assert.Equal(200, Status(await Receive(h, body: body)));
+        Assert.Single(h.Rows());
     }
 
     [Fact]

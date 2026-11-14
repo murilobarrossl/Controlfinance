@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import Button from "../../components/ui/Button/Button.jsx";
+import BankLogo from "../../components/ui/BankLogo/BankLogo.jsx";
 import { ShieldIcon, SyncIcon } from "../../components/ui/icons/FeatureIcons.jsx";
 import { EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
 import { getConnectors, createIntegration, getIntegrationStatus } from "../../api/polp.js";
@@ -403,9 +404,7 @@ export default function ConnectBankPage() {
                             className="connect-bank__connector-stripe"
                             style={{ backgroundColor: stripeColor }}
                           />
-                          {logoUrl && (
-                            <img src={logoUrl} alt="" className="connect-bank__connector-icon" referrerPolicy="no-referrer" />
-                          )}
+                          <BankLogo name={connector.name} logoUrl={logoUrl} color={rawColor} size={40} />
                           <span className="connect-bank__connector-name">{connector.name}</span>
                           {connectingId === connector.id && (
                             <span className="connect-bank__connector-status">

@@ -6,11 +6,14 @@ using ControlFinance.API.Services;
 using ControlFinance.API.Services.Investments;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace ControlFinance.API.Controllers;
 
 [ApiController]
+[EnableRateLimiting(InvestmentReadRateLimit.Policy)]
+[InvestmentReadMetrics]
 [Route("api/investments")]
 [Authorize]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]

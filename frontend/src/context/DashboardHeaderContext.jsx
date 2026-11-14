@@ -4,7 +4,6 @@ import { createContext, useContext } from "react";
 // lugar do seletor global de contas, mantendo o estado dele dentro da própria aba.
 export const DashboardHeaderSlotContext = createContext(null);
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useDashboardHeaderSlot() {
   return useContext(DashboardHeaderSlotContext);
 }

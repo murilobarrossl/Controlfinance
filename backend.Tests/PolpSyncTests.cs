@@ -571,6 +571,11 @@ public class PolpReconciliationTests
 
     private static readonly DateTimeOffset Midnight = new(2026, 11, 4, 0, 0, 0, TimeSpan.Zero);
 
+    // A rodada também enfileira TransactionDetails, ConsentMetadata e InvestmentDiscovery (recuperação
+    // de investimentos); estes testes verificam só o agendamento de Reconcile/Backfill.
+    private static List<PolpInboxEvent> Scheduled(RecordingInbox inbox) =>
+        inbox.Events.Where(e => e.Event is PolpInternalEvents.Reconcile or PolpInternalEvents.Backfill).ToList();
+
     [Fact]
     public async Task Intervalo_1_enfileira_todas_com_prioridade_baixa_reconcile_para_sincronizadas_backfill_para_incompletas_e_nada_para_pendentes()
     {
@@ -583,9 +588,10 @@ public class PolpReconciliationTests
 
         Assert.True(await service.RunOnceAsync(default));
 
-        Assert.Equal(2, inbox.Events.Count);
+        Assert.Equal(2, Scheduled(inbox).Count);
         Assert.Contains(new PolpInboxEvent(PolpInternalEvents.Reconcile, "consents", synced.PolpIntegrationId.ToString(), null, PolpInboxPriority.Low), inbox.Events);
         Assert.Contains(new PolpInboxEvent(PolpInternalEvents.Backfill, "consents", incomplete.PolpIntegrationId.ToString(), null, PolpInboxPriority.Low), inbox.Events);
+        Assert.All(inbox.Events, e => Assert.Equal(PolpInboxPriority.Low, e.Priority));
         Assert.False(jobLock.IsHeld(JobLockKeys.PolpReconciliation));
     }
 
@@ -628,12 +634,12 @@ public class PolpReconciliationTests
         for (var round = 0; round < 96; round++)
         {
             t.Clock.UtcNow = Midnight.AddMinutes(15 * round).AddSeconds(1);
-            var before = inbox.Events.Count;
+            var before = Scheduled(inbox).Count;
             Assert.True(await service.RunOnceAsync(default));
-            perRound.Add(inbox.Events.Count - before);
+            perRound.Add(Scheduled(inbox).Count - before);
         }
 
-        var counts = inbox.Events.GroupBy(e => e.ResourceId).ToDictionary(g => g.Key!, g => g.Count());
+        var counts = Scheduled(inbox).GroupBy(e => e.ResourceId).ToDictionary(g => g.Key!, g => g.Count());
         Assert.Equal(active.Select(a => a.PolpIntegrationId.ToString()).OrderBy(x => x), counts.Keys.OrderBy(x => x));
         Assert.All(counts.Values, c => Assert.Equal(1, c));
         Assert.DoesNotContain(pending.PolpIntegrationId.ToString(), counts.Keys);
@@ -655,7 +661,7 @@ public class PolpReconciliationTests
         var expected = active.Where(a => service.Schedule.Bucket(a.Id) == round).Select(a => a.PolpIntegrationId.ToString()).OrderBy(x => x).ToList();
         Assert.Contains(active[0].PolpIntegrationId.ToString(), expected);
         Assert.True(expected.Count < active.Count);
-        Assert.Equal(expected, inbox.Events.Select(e => e.ResourceId!).OrderBy(x => x));
+        Assert.Equal(expected, Scheduled(inbox).Select(e => e.ResourceId!).OrderBy(x => x));
     }
 
     [Fact]

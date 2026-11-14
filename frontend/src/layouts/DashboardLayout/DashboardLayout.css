@@ -1,4 +1,10 @@
 .dashboard-layout {
+  /* Escala estrutural (rem preserva o zoom e o tamanho de fonte do usuário). */
+  --dash-space-sm: 0.75rem;
+  --dash-space-md: 1rem;
+  --dash-space-lg: 1.5rem;
+  --dash-space-xl: 2rem;
+  --dash-header-height: max(2.5rem, var(--dash-toolbar-height, 0px));
   --dash-container: 80rem;
   --dash-gutter: 2.5rem;
   --dash-edge: max(var(--dash-gutter), calc((100% - var(--dash-container)) / 2 + var(--dash-gutter)));
@@ -19,6 +25,20 @@
   background-color: var(--color-surface-alt);
   border-bottom: 1px solid var(--color-border);
   box-shadow: var(--shadow-nav);
+}
+
+/* O Safari 26 desenha a página também atrás da barra de abas translúcida, acima do top: 0. Sem
+   isto, o conteúdo que já passou do cabeçalho continua aparecendo ali (e no puxão da rolagem no
+   topo). O fundo do cabeçalho se estende para cima, fora da área visível, e cobre essa faixa sem
+   depender da detecção automática de cabeçalho fixo do Safari. */
+.dashboard-nav::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 100%;
+  height: 100vh;
+  background-color: inherit;
+  pointer-events: none;
 }
 
 .dashboard-nav__logo {
@@ -106,7 +126,7 @@
   flex-wrap: wrap;
   gap: 0.75rem;
   min-height: 2.5rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: var(--dash-space-lg);
 }
 
 .dashboard-toolbar:not(:has(> :not(.dashboard-toolbar__slot:empty))) {
@@ -143,7 +163,7 @@
 }
 
 .dashboard-content .section-heading {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0;
 }
 
 .dashboard-content .section-heading__title {
@@ -369,16 +389,35 @@
     margin-bottom: 0;
   }
 
-  .dashboard-content > * > .section-heading:first-child {
-    max-width: min(40rem, calc(100% - var(--dash-toolbar-space, 0px)));
-  }
-
-  .dashboard-content .dashboard-home__header {
+  /* Reserva toda a linha do cabeçalho, incluindo controles locais e a altura real
+     da barra quando os seletores quebram de linha. */
+  .dashboard-content > * > .section-heading:first-child,
+  .dashboard-content .dashboard-home__header,
+  .dashboard-content .receitas-despesas__header,
+  .dashboard-content .inv-real__heading {
+    min-height: var(--dash-header-height);
     padding-right: var(--dash-toolbar-space, 0px);
   }
 
+  .dashboard-content > * > .section-heading:first-child {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    max-width: none;
+  }
+
+  .dashboard-content .categorias__header > .section-heading {
+    display: flex;
+    align-items: center;
+    min-height: var(--dash-header-height);
+    max-width: none;
+    width: 100%;
+    padding-right: var(--dash-toolbar-space, 0px);
+  }
+
+  /* Avisos permanecem no fluxo, abaixo da faixa ocupada pela barra. */
   .dashboard-content > .dashboard-notice {
-    margin-right: var(--dash-toolbar-space, 0px);
+    margin-top: calc(var(--dash-header-height) + var(--dash-space-lg));
   }
 }
 
@@ -445,4 +484,50 @@
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
+}
+
+/* Apenas estrutura de página; espaçamentos internos dos componentes são preservados. */
+.dashboard-content > :is(.dashboard-home, .cartoes, .receitas-despesas, .relatorios, .categorias, .privacidade),
+.dashboard-content .investimentos__header,
+.dashboard-content .categorias__header {
+  gap: var(--dash-space-lg);
+}
+
+.dashboard-content :is(.dashboard-home__stats, .dashboard-home__grid, .cartoes__summary, .receitas-despesas__halves, .categorias__grid) {
+  gap: var(--dash-space-md);
+}
+
+.dashboard-content .range-picker {
+  flex-wrap: wrap;
+  gap: var(--dash-space-sm);
+}
+
+.dashboard-toolbar > *,
+.dashboard-toolbar .account-switcher,
+.dashboard-toolbar .account-switcher__trigger {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dashboard-toolbar .account-switcher__name {
+  min-width: 0;
+}
+
+.dashboard-content .investimentos {
+  gap: var(--dash-space-xl);
+}
+
+.dashboard-content .cartoes__section {
+  padding-top: var(--dash-space-lg);
+}
+
+.dashboard-content :is(.dashboard-home__header, .receitas-despesas__header, .inv-real__heading) > .section-heading {
+  min-width: 0;
+}
+
+@media (min-width: 56.3125em) {
+  /* Estados sem cabeçalho também precisam ficar abaixo dos seletores. */
+  .dashboard-toolbar ~ :is(.no-bank-account, .receitas-despesas__error, .dashboard-home__error) {
+    margin-top: calc(var(--dash-header-height) + var(--dash-space-lg));
+  }
 }

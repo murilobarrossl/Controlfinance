@@ -36,7 +36,7 @@ export function PageLoading({ embedded = false }) {
 }
 
 export default function ErrorPage({ code = 500, embedded = false, onRetry, onNavigate }) {
-  const { isAuthenticated, status } = useAuth();
+  const { isAuthenticated, status, retrySession } = useAuth();
   const headingId = useId();
   const heading = useRef(null);
   const errorCode = Object.hasOwn(ERRORS, code) ? code : 500;
@@ -62,11 +62,13 @@ export default function ErrorPage({ code = 500, embedded = false, onRetry, onNav
         <div className="error-page__actions">
           {status === "loading" ? (
             <Button type="button" disabled>Verificando sessão…</Button>
+          ) : status === "error" ? (
+            <Button type="button" onClick={retrySession}>Verificar sessão novamente</Button>
           ) : (
             <Button as={Link} to={destination} replace onClick={onNavigate}>{returnLabel}</Button>
           )}
           {error.retry && (
-            <Button type="button" variant="outline" onClick={onRetry ?? (() => window.location.reload())}>
+            <Button type="button" variant="outline" onClick={status === "error" ? retrySession : onRetry ?? (() => window.location.reload())}>
               Tentar novamente
             </Button>
           )}

@@ -4,17 +4,18 @@ import { ShieldIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { setReserveResource } from "../../../api/planning.js";
 import { dateLabel, formatExact, formatMoney, formatContractNumber, goalOf, isReserve, moneyField, STATE_TEXT, validMoney } from "../../../utils/importedInvestments.js";
 import { useInvestmentResource } from "./useInvestmentResource.js";
+import { useAccount } from "../../../context/AccountContext.jsx";
 import useSaving from "./useSaving.js";
 import InvestmentYieldChart from "./InvestmentYieldChart.jsx";
 
-export const MOVEMENT_NAMES = {
+const MOVEMENT_NAMES = {
   APLICACAO: "Aplicação", RESGATE: "Resgate", COMPRA: "Compra", VENDA: "Venda", VENCIMENTO: "Vencimento",
   PAGAMENTO_JUROS: "Pagamento de juros", AMORTIZACAO: "Amortização", DIVIDENDOS: "Dividendos", JCP: "Juros sobre capital próprio",
   ALUGUEIS: "Aluguel de ativos", COME_COTAS: "Come-cotas", CANCELAMENTO: "Cancelamento", PREMIO: "Prêmio", MULTA: "Multa", MORA: "Juros de mora",
   TRANSFERENCIA_COTAS: "Transferência de cotas", TRANSFERENCIA_CUSTODIA: "Transferência de custódia", TRANSFERENCIA_TITULARIDADE: "Transferência de titularidade",
 };
 const MONTH_NAMES = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
-export function currentMonth() {
+function currentMonth() {
   const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 function MoneyRow({ label, document, field, className }) {
@@ -150,7 +151,8 @@ function Movements({ dataset, onMore, retry }) {
 }
 export default function ImportedInvestmentDetail({ item, planning, owner }) {
   const [month, setMonth] = useState(currentMonth);
-  const state = useInvestmentResource(item, owner, month);
+  const { dataRefreshKey } = useAccount();
+  const state = useInvestmentResource(item, owner, month, dataRefreshKey);
   const resource = state.resource;
   const document = item.reserved ? resource?.document : resource?.position?.document;
   const contract = resource?.contract?.values ?? {};
@@ -168,6 +170,7 @@ export default function ImportedInvestmentDetail({ item, planning, owner }) {
       <div className="inv-detail__actions"><button type="button" className="investimentos__link-button" onClick={state.retry} disabled={state.loading}>Atualizar detalhamento</button><ReserveResourceButton item={item} planning={planning} /></div>
     </div>
     {actualStatus !== "available" && <p className="investimentos__hint" role="status">{STATE_TEXT[actualStatus] ?? "Aguardando confirmação dos dados."}</p>}
+    {state.throttled && <p className="investimentos__hint" role="status">Muitas consultas agora. Os dados exibidos são os da última atualização.</p>}
     {resource?.synchronization?.some((s) => s.status === "Error" || s.status === "Blocked") && <p className="investimentos__hint" role="status">Parte dos dados não pôde ser atualizada.</p>}
     {state.loading && !resource ? <p className="investimentos__hint" role="status">Carregando detalhamento…</p> : state.error ? <p className="investimentos__hint" role="alert">{state.removed ? "Este investimento não está mais disponível nesta conexão. Atualize a lista de investimentos." : "Não foi possível carregar este investimento agora."}</p> : resource && <>
       <header className="inv-hero">

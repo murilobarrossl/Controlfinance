@@ -4,6 +4,7 @@ using ControlFinance.API.Models;
 using ControlFinance.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace ControlFinance.API.Controllers;
@@ -18,6 +19,8 @@ public class PlanningController(AppDbContext db) : ApiControllerBase
     private const decimal MaxAmount = 999_999_999_999.99m;
 
     [HttpGet]
+    [EnableRateLimiting(InvestmentReadRateLimit.Policy)]
+    [InvestmentReadMetrics]
     public async Task<IActionResult> Get(CancellationToken ct) => Ok(await LoadAsync(ct));
 
     // A reserva agora é formada só por investimentos e caixinhas. Uma conta vinculada antes continua

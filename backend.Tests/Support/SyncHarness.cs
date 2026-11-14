@@ -9,10 +9,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace ControlFinance.API.Tests.Support;
 
 // IPolpService roteirizado: devolve o que o teste montou, registra cada chamada (com a janela) e
-// permite falhar ou rodar um gancho no meio da fase de leitura.
+// permite falhar ou rodar um gancho no meio da fase de leitura. Como a API real, carimba cada item
+// com o recurso/consentimento consultado; um id explícito no teste é mantido, para simular uma
+// resposta que traz item de outro recurso.
 public sealed class ScriptedPolp : IPolpService
 {
-    public PolpConsentDto Consent { get; set; } = new() { Status = "AUTHORISED", ExecutionStatus = "SUCCESS" };
+    public PolpConsentDto Consent { get; set; } = new() { Status = "AUTHORISED", ExecutionStatus = "SUCCESS", InstitutionId = SyncHarness.TestInstitution };
     public List<PolpAccountDto> Accounts { get; } = [];
     public List<PolpCreditCardDto> Cards { get; } = [];
     public Dictionary<Guid, List<PolpBillDto>> Bills { get; } = [];
@@ -44,37 +46,39 @@ public sealed class ScriptedPolp : IPolpService
     public async Task<PolpConsentDto> GetConsentAsync(Guid consentId, CancellationToken ct = default)
     {
         await Read("consent", consentId, null);
+        if (Consent.Id == Guid.Empty) Consent.Id = consentId;
+        if (Consent.InstitutionId == Guid.Empty) Consent.InstitutionId = SyncHarness.TestInstitution;
         return Consent;
     }
 
     public Task<List<PolpAccountDto>> GetAccountsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default)
     {
         Calls.Add(("accounts", consentId, window?.Query));
-        return Task.FromResult(Accounts.ToList());
+        return Task.FromResult(Accounts.Select(a => { if (a.ConsentId == Guid.Empty) a.ConsentId = consentId; return a; }).ToList());
     }
 
     public Task<List<PolpCreditCardDto>> GetCreditCardsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default)
     {
         Calls.Add(("cards", consentId, window?.Query));
-        return Task.FromResult(Cards.ToList());
+        return Task.FromResult(Cards.Select(c => { if (c.ConsentId == Guid.Empty) c.ConsentId = consentId; return c; }).ToList());
     }
 
     public async Task<List<PolpBillDto>> GetBillsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default)
     {
         await Read("bills", creditCardId, window);
-        return Bills.GetValueOrDefault(creditCardId)?.ToList() ?? [];
+        return Bills.GetValueOrDefault(creditCardId)?.Select(b => { if (b.CreditCardId == Guid.Empty) b.CreditCardId = creditCardId; return b; }).ToList() ?? [];
     }
 
     public async Task<List<PolpAccountTransactionDto>> GetAccountTransactionsAsync(Guid accountId, PolpQueryWindow? window = null, CancellationToken ct = default)
     {
         await Read("account-transactions", accountId, window);
-        return AccountTransactions.GetValueOrDefault(accountId)?.ToList() ?? [];
+        return AccountTransactions.GetValueOrDefault(accountId)?.Select(t => { if (t.AccountId == Guid.Empty) t.AccountId = accountId; return t; }).ToList() ?? [];
     }
 
     public async Task<List<PolpCardTransactionDto>> GetCardTransactionsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default)
     {
         await Read("card-transactions", creditCardId, window);
-        return CardTransactions.GetValueOrDefault(creditCardId)?.ToList() ?? [];
+        return CardTransactions.GetValueOrDefault(creditCardId)?.Select(t => { if (t.CreditCardId == Guid.Empty) t.CreditCardId = creditCardId; return t; }).ToList() ?? [];
     }
 
     public Task<PolpAccountDto> SyncBalanceAsync(Guid accountId, CancellationToken ct = default) => throw new NotSupportedException();
@@ -131,6 +135,9 @@ public sealed class RecordingInbox : IPolpInbox
 
 public static class SyncHarness
 {
+    // Instituição das conexões de teste: o consentimento devolvido pelo ScriptedPolp traz a mesma.
+    public static readonly Guid TestInstitution = Guid.Parse("3b7e9d21-5c4a-4f08-8e6d-1a2b3c4d5e6f");
+
     public static PolpSyncService Sync(TestDb t, IPolpService polp, IIntegrationLock? integrationLock = null, IConfiguration? config = null) =>
         new(t.Db, polp, config ?? new ConfigurationBuilder().Build(),
             new InstitutionNameResolver(polp, new MemoryCache(new MemoryCacheOptions()), NullLogger<InstitutionNameResolver>.Instance),
@@ -144,7 +151,7 @@ public static class SyncHarness
     {
         var integration = new PolpIntegration
         {
-            UserId = t.User.Id, PolpIntegrationId = Guid.NewGuid(), InstitutionId = Guid.NewGuid(),
+            UserId = t.User.Id, PolpIntegrationId = Guid.NewGuid(), InstitutionId = TestInstitution,
             InstitutionName = "Banco Teste", Status = status, SyncedLocally = synced
         };
         t.Db.PolpIntegrations.Add(integration);

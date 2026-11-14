@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { loadPlanning } from "../../../api/planning.js";
 import { isAbortError } from "../../../api/client.js";
+import { isThrottled } from "../../../api/investments.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
+import { useAccount } from "../../../context/AccountContext.jsx";
 
 const INITIAL = { status: "loading", reserve: null, goals: [], rateProfiles: {} };
 
@@ -13,22 +15,28 @@ const fromServer = (planning) => ({ reserve: planning.reserve ?? null, goals: pl
 
 export default function usePlanning() {
   const owner = useAuth()?.user?.id;
+  const { dataRefreshKey } = useAccount();
   const [state, setState] = useState(() => ({ ...INITIAL, owner }));
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    setState((prev) => prev.owner === owner ? prev : { ...INITIAL, owner });
     loadPlanning({ signal: controller.signal })
       .then((planning) => {
         if (controller.signal.aborted) return;
         setState({ owner, status: "ready", ...fromServer(planning) });
       })
       .catch((err) => {
-        if (!isAbortError(err) && !controller.signal.aborted) setState((prev) => ({ ...prev, status: "error" }));
+        if (!isAbortError(err) && !controller.signal.aborted) {
+          setState((prev) => {
+            // Uma troca de usuário não pode reaproveitar o planejamento anterior.
+            const current = prev.owner === owner ? prev : { ...INITIAL, owner };
+            return current.status === "ready" && isThrottled(err) ? current : { ...current, status: "error" };
+          });
+        }
       });
     return () => controller.abort();
-  }, [reloadKey, owner]);
+  }, [reloadKey, owner, dataRefreshKey]);
 
   const retry = useCallback(() => {
     setState((prev) => ({ ...prev, status: "loading" }));

@@ -7,8 +7,10 @@ export function summarize(entries) {
   return {
     count: entries.length,
     loading: entries.some((entry) => entry.status === "loading"),
+    // Item que não pôde ser lido agora: o total ficaria parcial, então não é exibido.
+    failed: entries.some((entry) => entry.status === "error"),
     totals: sumMoney(ready.flatMap(amountsOf)),
-    withoutAmount: entries.length - ready.filter((entry) => amountsOf(entry).length).length,
+    withoutAmount: entries.filter((entry) => entry.status !== "error").length - ready.filter((entry) => amountsOf(entry).length).length,
     stale: ready.some((entry) => amountsOf(entry).length && entry.item.currentAmountAvailable === false),
   };
 }

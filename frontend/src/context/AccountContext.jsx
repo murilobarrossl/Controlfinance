@@ -190,9 +190,9 @@ function OwnedAccountProvider({ children }) {
           color: connector?.color ? (connector.color.startsWith("#") ? connector.color : `#${connector.color}`) : null };
       }).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))];
   }, [connections, connectors]);
-  const effectiveConnectionScope = connectionScopes.find((s) => s.connectionId === effectiveConnectionId)
+  const effectiveConnectionScope = useMemo(() => connectionScopes.find((s) => s.connectionId === effectiveConnectionId)
     ?? (effectiveConnectionId ? { key: `conn:${effectiveConnectionId}`, connectionId: effectiveConnectionId,
-      name: "Instituição selecionada", label: "Instituição selecionada", kindLabel: "Instituição" } : connectionScopes[0]);
+      name: "Instituição selecionada", label: "Instituição selecionada", kindLabel: "Instituição" } : connectionScopes[0]), [connectionScopes, effectiveConnectionId]);
   const connectionScopeGroups = useMemo(() => connectionScopes.map((s) => ({ key: s.key, connectionId: null, items: [s] })), [connectionScopes]);
   const setSelectedConnection = useCallback((key) => {
     if (key === "connections:all") { setSelectedScope(key); return; }

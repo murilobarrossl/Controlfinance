@@ -70,6 +70,7 @@ builder.Services.AddScoped<SessionValidator>();
 builder.Services.AddScoped<AccessLogService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 builder.Services.AddSingleton<RateLimitService>();
+builder.Services.AddInvestmentReadRateLimit(builder.Configuration);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IJobLock, PostgresJobLock>();
 builder.Services.AddSingleton<IIntegrationLock, IntegrationLock>();
@@ -359,6 +360,8 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseCsrfProtection();
 app.UseAuthorization();
+// Depois da autenticação: o limite das leituras de Investimentos é por usuário, então precisa do "sub".
+app.UseRateLimiter();
 app.MapControllers();
 
 app.Run();

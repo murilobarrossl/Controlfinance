@@ -228,6 +228,74 @@ public class PolpCurrentInvoiceTests
         Assert.Equal(Day(2026, 12, 10), card.InvoiceDueDate);
     }
 
+    private static PolpBillPaymentDto Payment(string date, string amount) => new() { PaymentDate = date, Amount = amount };
+
+    // O sync recusa itens de outro recurso; Bill/CardTx do harness não preenchem o id do cartão.
+    private static List<PolpBillDto> Own(Scenario s, params PolpBillDto[] bills)
+    {
+        foreach (var b in bills) b.CreditCardId = s.CardId;
+        return [.. bills];
+    }
+
+    private static List<PolpCardTransactionDto> Own(Scenario s, params PolpCardTransactionDto[] txs)
+    {
+        foreach (var t in txs) t.CreditCardId = s.CardId;
+        return [.. txs];
+    }
+
+    // Formato do sandbox: o pagamento do ciclo vem no payments[] da própria fatura, sem
+    // PAGAMENTO_FATURA nas transações do cartão.
+    [Fact]
+    public async Task Vencida_paga_pelo_payments_da_propria_fatura_da_lugar_a_fatura_em_aberto()
+    {
+        using var s = new Scenario(new DateTimeOffset(2026, 11, 14, 15, 0, 0, TimeSpan.Zero));
+        var older = ScriptedPolp.Bill("2026-09-17T03:00:00.000000Z", "2026-09-24T03:00:00.000000Z", "1871.77");
+        older.Payments = [Payment("2026-09-24", "1871.77")];
+        var last = ScriptedPolp.Bill("2026-10-17T03:00:00.000000Z", "2026-10-24T03:00:00.000000Z", "8829.51");
+        last.BillMinimumAmount = ScriptedPolp.Money("1324.43");
+        last.Payments = [Payment("2026-10-24", "8829.51")];
+        s.Polp.Bills[s.CardId] = Own(s, last, older);
+        s.Polp.CardTransactions[s.CardId] = Own(s, ScriptedPolp.CardTx("2026-11-11T15:40:26.000Z", "158.45"));
+
+        await s.SyncCard();
+
+        var card = s.Card();
+        Assert.Equal(158.45m, card.CurrentInvoiceAmount);
+        Assert.Equal(Day(2026, 11, 24), card.InvoiceDueDate);
+    }
+
+    [Fact]
+    public async Task Payment_anterior_ao_fechamento_nao_quita_a_fatura()
+    {
+        using var s = new Scenario(new DateTimeOffset(2026, 11, 15, 15, 0, 0, TimeSpan.Zero));
+        var bill = ScriptedPolp.Bill("2026-10-28", "2026-11-10", "500.00");
+        bill.Payments = [Payment("2026-10-10", "500.00")];
+        s.Polp.Bills[s.CardId] = Own(s, bill);
+
+        await s.SyncCard();
+
+        var card = s.Card();
+        Assert.Equal(500m, card.CurrentInvoiceAmount);
+        Assert.Equal(Day(2026, 11, 10), card.InvoiceDueDate);
+    }
+
+    [Fact]
+    public async Task Mesmo_pagamento_no_payments_e_nas_transacoes_nao_conta_em_dobro()
+    {
+        using var s = new Scenario(Now);
+        var bill = ScriptedPolp.Bill("2026-10-28", "2026-11-10", "500.00");
+        bill.Payments = [Payment("2026-11-02", "300.00")];
+        s.Polp.Bills[s.CardId] = Own(s, bill);
+        s.Polp.CardTransactions[s.CardId] =
+            Own(s, ScriptedPolp.CardTx("2026-11-02T15:00:00.000Z", "300.00", credit: true, type: "PAGAMENTO_FATURA"));
+
+        await s.SyncCard();
+
+        var card = s.Card();
+        Assert.Equal(500m, card.CurrentInvoiceAmount);
+        Assert.Equal(Day(2026, 11, 10), card.InvoiceDueDate);
+    }
+
     [Fact]
     public async Task Evento_bills_usa_as_transacoes_ja_gravadas_e_nao_busca_transacoes()
     {

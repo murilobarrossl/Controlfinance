@@ -75,10 +75,12 @@ function DashboardLayoutContent() {
     if (!content) return undefined;
     if (!toolbar) {
       content.style.removeProperty("--dash-toolbar-space");
+      content.style.removeProperty("--dash-toolbar-height");
       return undefined;
     }
     const observer = new ResizeObserver(() => {
       const width = toolbar.offsetWidth;
+      content.style.setProperty("--dash-toolbar-height", `${toolbar.offsetHeight}px`);
       content.style.setProperty("--dash-toolbar-space", width > 0 ? `calc(${width}px + 1.5rem)` : "0px");
     });
     observer.observe(toolbar);

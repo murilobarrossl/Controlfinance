@@ -23,7 +23,7 @@ public class PolpWebhookProcessor(
         if (investmentFamily is not null && investmentImports is not null)
         {
             EnsureEnabled();
-            if (Guid.TryParse(evt.ResourceId, out var removedId) && await RemovedPolpResources.IsRemovedAsync(db, removedId, ct)) return;
+            if (Guid.TryParse(evt.ResourceId, out var removedId) && await IsRemovedAsync(evt, removedId, ct)) return;
             await investmentImports.HandleEventAsync(investmentFamily, evt.ResourceId ?? "", evt.Event.EndsWith(".transactions"), window, ct);
             return;
         }
@@ -33,7 +33,7 @@ public class PolpWebhookProcessor(
             case "consents":
             {
                 var remoteId = ResourceId(evt);
-                if (await RemovedPolpResources.IsRemovedAsync(db, remoteId, ct)) return;
+                if (await IsRemovedAsync(evt, remoteId, ct)) return;
                 var isPrimary = await db.PolpIntegrations.AnyAsync(p => p.PolpIntegrationId == remoteId, ct);
                 if (!isPrimary && consentMetadata is not null && await consentMetadata.HandleConsentEventAsync(remoteId, ct)) return;
                 var local = await IntegrationAsync(evt, ct);
@@ -124,7 +124,7 @@ public class PolpWebhookProcessor(
                 if (investmentImports is not null)
                 {
                     EnsureEnabled();
-                    if (await RemovedPolpResources.IsRemovedAsync(db, ResourceId(evt), ct)) return;
+                    if (await IsRemovedAsync(evt, ResourceId(evt), ct)) return;
                     await investmentImports.HandleReservedAsync(evt.ResourceId ?? "", window, ct);
                 }
                 break;

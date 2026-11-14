@@ -118,7 +118,7 @@ function PickerOption({ option }) {
   return (
     <span className="card-picker__content">
       {option.logo ? (
-        <BankLogo name={option.logo.name} logoUrl={option.logo.logoUrl} color={option.logo.color} size={28} />
+        <BankLogo name={option.logo.name} logoUrl={option.logo.logoUrl} color={option.logo.color} size={32} />
       ) : (
         <span className="card-picker__icon" aria-hidden="true">
           <CardIcon />

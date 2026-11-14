@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { investmentDetail } from "../../../api/investments.js";
+import { investmentDetail, isThrottled } from "../../../api/investments.js";
 import { normalizeInvestment } from "../../../utils/importedInvestments.js";
 
 const refsOf = (owner) => [
@@ -22,7 +22,12 @@ export default function useLinkedResources(planning, items, connections, refresh
     for (const ref of missingKey.split("|").map((key) => ({ key, reserved: key.startsWith("reserved:"), id: key.slice(key.indexOf(":") + 1) }))) {
       investmentDetail(ref.id, controller.signal, ref.reserved)
         .then((data) => { if (!controller.signal.aborted) setFetched((prev) => ({ ...prev, [ref.key]: { refreshKey, data } })); })
-        .catch(() => { if (!controller.signal.aborted) setFetched((prev) => ({ ...prev, [ref.key]: { refreshKey, data: null } })); });
+        .catch((error) => {
+          if (controller.signal.aborted) return;
+          // Recusa por limite não quer dizer que o investimento sumiu: mantém o que já estava na tela.
+          setFetched((prev) => ({ ...prev, [ref.key]: isThrottled(error) && prev[ref.key]?.data ? { ...prev[ref.key], refreshKey }
+            : { refreshKey, data: null, throttled: isThrottled(error) } }));
+        });
     }
     return () => controller.abort();
   }, [missingKey, refreshKey]);
@@ -32,6 +37,7 @@ export default function useLinkedResources(planning, items, connections, refresh
     if (item) return { ...ref, status: "ready", item };
     const entry = fetched[ref.key];
     if (!entry || entry.refreshKey !== refreshKey) return { ...ref, status: "loading" };
-    return entry.data ? { ...ref, status: "ready", item: normalizeInvestment(entry.data, ref.reserved, connections) } : { ...ref, status: "missing" };
+    if (entry.data) return { ...ref, status: "ready", item: normalizeInvestment(entry.data, ref.reserved, connections) };
+    return { ...ref, status: entry.throttled ? "error" : "missing" };
   }), [loaded, fetched, refreshKey, connections]);
 }

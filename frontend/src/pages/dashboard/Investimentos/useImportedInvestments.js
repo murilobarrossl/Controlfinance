@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { investmentPage } from "../../../api/investments.js";
+import { investmentPage, isThrottled } from "../../../api/investments.js";
 import { isAbortError } from "../../../api/client.js";
 
 const KINDS = ["investments", "reserved-balances"];
@@ -44,7 +44,7 @@ export default function useImportedInvestments(owner, refreshKey, integrationId 
         setState((prev) => ({ ...prev, owner, scope: integrationId, [kind]: { ...empty(), data: [...rows.values()], cursor, status: "ready", pages: loadedPages } }));
       } catch (error) {
         if (!isAbortError(error) && generation.current === current && !request.signal.aborted)
-          setState((prev) => ({ ...prev, [kind]: { ...prev[kind], status: "error", loadingMore: false, refreshing: false } }));
+          setState((prev) => ({ ...prev, [kind]: { ...prev[kind], status: prev[kind].data.length && isThrottled(error) ? prev[kind].status : "error", limited: error.status === 429, busy: error.status === 503, loadingMore: false, refreshing: false } }));
       }
     });
     Promise.allSettled(reads).then(() => { if (generation.current === current) refreshing.current = false; });

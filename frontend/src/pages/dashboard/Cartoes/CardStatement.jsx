@@ -143,7 +143,7 @@ export default function CardStatement({ card, getBrand }) {
             Extrato do cartão
           </h2>
           <p className="cartoes__statement-current">
-            <BankLogo name={brand.name} logoUrl={brand.logoUrl} color={brand.color} size={20} />
+            <BankLogo name={brand.name} logoUrl={brand.logoUrl} color={brand.color} size={24} />
             <span>
               <strong>{brand.name}</strong> · {card.name}
             </span>

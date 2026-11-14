@@ -219,16 +219,6 @@
   flex-shrink: 0;
 }
 
-.connect-bank__connector-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  flex-shrink: 0;
-  object-fit: contain;
-  background-color: #ffffff;
-  padding: 3px;
-}
-
 .connect-bank__connector-name {
   flex: 1;
 }

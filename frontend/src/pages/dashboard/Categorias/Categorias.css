@@ -40,12 +40,6 @@
   margin-bottom: 0;
 }
 
-@media (min-width: 56.3125em) {
-  .categorias__header .section-heading {
-    max-width: min(40rem, calc(100% - var(--dash-toolbar-space, 0px)));
-  }
-}
-
 .categorias__period {
   display: flex;
   flex-wrap: wrap;

@@ -29,6 +29,8 @@ public class FakePolpProxy : DispatchProxy
         {
             LastCreateRequest = (CreatePolpConsentRequest)args![0]!;
             if (CreateConsentError is not null) throw CreateConsentError;
+            // A API real devolve o consentimento da instituição pedida.
+            if (Consent is not null) Consent.InstitutionId = LastCreateRequest.InstitutionId;
         }
         return method.Name switch
         {
@@ -64,9 +66,13 @@ public class PolpControllerInboxTests
         return (controller, fake);
     }
 
+    // Instituição das conexões de teste: o consentimento consultado precisa trazer a mesma.
+    private static readonly Guid TestInstitution = Guid.Parse("6f1c2a4e-0d5b-4e7a-9a43-2b8f1c7d9e10");
+
     private static PolpConsentDto Consent(Guid id, string status) => new()
     {
         Id = id,
+        InstitutionId = TestInstitution,
         Status = status,
         ExecutionStatus = "AWAITING_RESOURCES",
         Institution = new PolpConsentInstitutionDto { Name = "Banco Teste" }
@@ -80,7 +86,7 @@ public class PolpControllerInboxTests
     {
         var integration = new PolpIntegration
         {
-            UserId = h.T.User.Id, PolpIntegrationId = Guid.NewGuid(), InstitutionId = Guid.NewGuid(),
+            UserId = h.T.User.Id, PolpIntegrationId = Guid.NewGuid(), InstitutionId = TestInstitution,
             InstitutionName = "Banco Teste", Status = status, ExecutionStatus = executionStatus,
             SyncedLocally = synced, EnrichmentPending = enrichmentPending,
             UpdatedAt = updatedAt ?? DateTime.UtcNow
@@ -349,8 +355,10 @@ public class PolpControllerInboxTests
         Assert.Single(db.ConsentRecords.Where(c => c.UserId == h.T.User.Id));
     }
 
+    // Enquanto a revogação anterior está pendente, o avoidDuplicates da Polp pode devolver o mesmo
+    // consentimento: reaproveitá-lo traria de volta uma conexão que o usuário mandou desfazer.
     [Fact]
-    public async Task Reconexao_do_mesmo_consentimento_limpa_o_marcador_e_o_evento_seguinte_e_processado()
+    public async Task Reconexao_de_consentimento_em_revogacao_e_recusada_e_mantem_o_marcador()
     {
         using var h = new InboxHarness();
         h.T.User.DocumentHash = h.T.Encryption.ComputeLookupHash(Cpf);
@@ -362,14 +370,15 @@ public class PolpControllerInboxTests
         var (controller, polp) = Build(h);
         polp.Consent = Consent(consentId, "AUTHORISED");
 
-        Json(await controller.Connect(
-            new PolpConnectDto(Guid.NewGuid().ToString(), Cpf, LegalDocuments.BankConnectionNoticeVersion), default));
+        var result = await controller.Connect(
+            new PolpConnectDto(Guid.NewGuid().ToString(), Cpf, LegalDocuments.BankConnectionNoticeVersion), default);
 
+        Assert.IsType<ConflictObjectResult>(result);
+        Assert.Empty(h.Rows());
         using (var db = h.NewContext())
-            Assert.Equal([otherId], db.RemovedPolpResources.Select(r => r.PolpId).ToList());
-
-        var scripted = new ScriptedPolp();
-        await SyncHarness.Processor(h.T, scripted).Process("consents", consentId);
-        Assert.Contains(scripted.Calls, c => c is ("consent", var id, _) && id == consentId);
+        {
+            Assert.Equal(new[] { consentId, otherId }.OrderBy(x => x), db.RemovedPolpResources.Select(r => r.PolpId).AsEnumerable().OrderBy(x => x));
+            Assert.False(db.PolpIntegrations.Any(p => p.PolpIntegrationId == consentId));
+        }
     }
 }

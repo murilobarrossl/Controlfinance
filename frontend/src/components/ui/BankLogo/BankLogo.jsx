@@ -1,18 +1,17 @@
 import { useState } from "react";
-import { getLogoStyle } from "../../../utils/logoStyles.js";
 import { cardTextColor } from "../../../utils/cardColors.js";
 import "./BankLogo.css";
 
-// Logo pequena da instituição, vinda do próprio conector da Polp (logoUrl), o mesmo usado na tela
-// de conectar banco. Sem logo (ou se a imagem falhar), mostra as iniciais do banco na cor dele, em
-// vez de uma imagem quebrada.
-export default function BankLogo({ name = "", logoUrl, color, size = 28 }) {
+// Logo pequena da instituição, vinda do próprio conector da Polp (logoUrl). Sem logo (ou se a
+// imagem falhar), mostra as iniciais do banco na cor dele, em vez de uma imagem quebrada; com
+// fallback="none" não mostra nada, para quando o nome do banco já está ao lado e as iniciais
+// ficariam ilegíveis no tamanho usado.
+export default function BankLogo({ name = "", logoUrl, color, size = 32, fallback = "initials" }) {
   const [failed, setFailed] = useState(false);
-  const { transparent, size: customSize } = getLogoStyle(name);
-  const finalSize = customSize ?? size;
-  const style = { width: finalSize, height: finalSize };
+  const style = { "--bank-logo-size": `${size}px` };
 
   if (!logoUrl || failed) {
+    if (fallback === "none") return null;
     const initials = name
       .split(/\s+/)
       .filter(Boolean)
@@ -37,8 +36,10 @@ export default function BankLogo({ name = "", logoUrl, color, size = 28 }) {
     <img
       src={logoUrl}
       alt=""
-      className={`bank-logo ${transparent ? "bank-logo--transparent" : ""}`}
+      className="bank-logo"
       style={style}
+      width={size}
+      height={size}
       onError={() => setFailed(true)}
       loading="lazy"
       referrerPolicy="no-referrer"
