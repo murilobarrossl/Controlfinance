@@ -48,23 +48,23 @@ export const MODALITIES = {
   other: { key: "other", groupLabel: "Outros investimentos", label: "Investimento", color: "var(--color-income)" },
 };
 export const STATE_TEXT = {
-  checking: "Confirmando os dados da conexão bancária",
-  resource_access_unconfirmed: "A permissão de investimentos está registrada; o acesso aos recursos ainda não foi confirmado",
-  available: "Dados disponíveis",
-  awaiting_sync: "Aguardando sincronização dos investimentos",
-  sync_delayed: "A atualização está atrasada. O sistema tentará novamente automaticamente.",
-  temporarily_unavailable: "Dados temporariamente indisponíveis na instituição. Uma nova consulta será feita automaticamente.",
-  information_not_provided: "Informação ainda não fornecida pela instituição",
-  pending_authorization: "Aguardando autorização no banco",
-  authorization_required: "Permissão de investimentos não concedida nesta conexão",
-  not_authorized: "O acesso a este recurso ainda não foi confirmado pela instituição",
-  expired: "Autorização expirada",
-  revoked: "Autorização revogada",
-  rejected: "Autorização recusada",
-  temporary_error: "Não foi possível atualizar os investimentos agora. Os últimos dados conhecidos foram preservados.",
-  resource_unavailable: "A instituição informou investimentos indisponíveis",
-  none_reported: "A instituição não informou investimentos após a consulta completa",
-  historical_source: "Dados de uma autorização anterior",
+  checking: "Confirmando os dados com o banco.",
+  resource_access_unconfirmed: "O banco ainda não confirmou o acesso aos investimentos.",
+  available: "Dados disponíveis.",
+  awaiting_sync: "Aguardando os dados do banco.",
+  sync_delayed: "A atualização está atrasada.",
+  temporarily_unavailable: "Dados temporariamente indisponíveis no banco.",
+  information_not_provided: "Informação ainda não enviada pelo banco.",
+  pending_authorization: "Aguardando autorização no banco.",
+  authorization_required: "O acesso aos investimentos não foi autorizado nesta conexão.",
+  not_authorized: "O banco ainda não confirmou o acesso a este investimento.",
+  expired: "Autorização expirada.",
+  revoked: "Autorização revogada.",
+  rejected: "Autorização recusada.",
+  temporary_error: "Não foi possível atualizar agora. Os últimos dados conhecidos foram mantidos.",
+  resource_unavailable: "O banco informou investimentos indisponíveis.",
+  none_reported: "O banco não informou investimentos.",
+  historical_source: "Dados de uma autorização anterior.",
 };
 export function normalizeInvestment(resource, reserved, connections) {
   const connection = connections.find((c) => c.id === resource.integrationId);
@@ -81,7 +81,7 @@ export function normalizeInvestment(resource, reserved, connections) {
   let state = connection ? reserved ? connection.reservedStatus : connection.status : "awaiting_sync";
   if (!reserved && connection?.investmentConsentId && connection.investmentConsentId !== resource.sourceConsentId) state = "historical_source";
   return { ...resource, key: `${reserved ? "reserved" : "investment"}:${resource.id}`, reserved, name, modality,
-    institution: { name: connection?.institutionName || "Instituição conectada" }, connection, state, amounts, document,
+    institution: { name: connection?.institutionName || "Instituição conectada", logoUrl: connection?.institutionLogoUrl ?? null }, connection, state, amounts, document,
     balanceLabel: reserved ? "Saldo reservado" : gross ? "Saldo bruto" : net ? "Saldo líquido" : "Saldo não informado",
     referenceValue: reference && ["funds", "variable-incomes"].includes(resource.family) ? reference.slice(0, 10)
       : reference ?? document?.values?.reference_date_time ?? document?.values?.reference_date ?? resource.position?.referenceAt,
@@ -90,17 +90,25 @@ export function normalizeInvestment(resource, reserved, connections) {
       && resource.catalogPresence?.status !== "not_reported_in_last_full_scan",
   };
 }
-// Mesma regra de EmergencyReserveNames.IsAuto (backend).
-export function isEmergencyReserveName(name) {
-  return typeof name === "string"
-    && name.normalize("NFD").replace(/\p{Mn}/gu, "").toLowerCase().split(/\s+/).filter(Boolean).join(" ") === "reserva de emergencia";
+// Mesma regra de EmergencyReserveNames.IsAuto (backend): caixinha com a palavra "reserva" no nome,
+// aplicação só com o nome exato "Reserva de emergência".
+export function isEmergencyReserveName(name, reservedBalance = false) {
+  if (typeof name !== "string") return false;
+  const words = name.normalize("NFD").replace(/\p{Mn}/gu, "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return reservedBalance ? words.some((word) => word === "reserva" || word === "reservas") : words.join(" ") === "reserva de emergencia";
 }
+const idsFor = (item, owner) => (item.reserved ? owner?.reservedBalanceIds : owner?.investmentIds) ?? [];
 export function isLinkedReserve(item, reserve) {
-  return item.reserved ? reserve?.importedReservedBalanceId === item.id : reserve?.importedInvestmentId === item.id;
+  return idsFor(item, reserve).includes(item.id);
 }
-export function isReserve(item, reserve) {
+export function goalOf(item, goals) {
+  return (goals ?? []).find((goal) => idsFor(item, goal).includes(item.id)) ?? null;
+}
+// Caixinha chamada "Reserva de emergência" entra sozinha, a menos que o usuário a tenha tirado da
+// reserva ou vinculado a uma meta.
+export function isReserve(item, reserve, goals) {
   if (isLinkedReserve(item, reserve)) return true;
-  return isEmergencyReserveName(item.name) && !(reserve?.excludedAutoIds ?? []).includes(item.id);
+  return isEmergencyReserveName(item.name, item.reserved) && !(reserve?.excludedAutoIds ?? []).includes(item.id) && !goalOf(item, goals);
 }
 export function sumMoney(values) {
   const totals = new Map();

@@ -5,10 +5,9 @@ import { isAbortError } from "../../../api/client.js";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
-import { formatCurrency, roundMoney } from "../../../utils/financeMath.js";
+import { formatCurrency } from "../../../utils/financeMath.js";
 
 const RECENT_LIMIT = 5;
-const INSTALLMENTS_LIMIT = 4;
 const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
 
 function formatShortDate(value) {
@@ -115,55 +114,8 @@ function RecentTransactions({ card, refreshKey }) {
   );
 }
 
-function Installments({ installments }) {
-  if (installments.length === 0) {
-    return <p className="card-overview__hint">Nenhuma compra parcelada em aberto neste cartão.</p>;
-  }
-
-  const monthlyTotal = roundMoney(installments.reduce((sum, i) => sum + i.installmentAmount, 0));
-  const visible = installments.slice(0, INSTALLMENTS_LIMIT);
-  const hidden = installments.length - visible.length;
-
-  return (
-    <>
-      <p className="card-overview__summary">
-        <span>Soma das parcelas por mês</span>
-        <strong>{formatCurrency(monthlyTotal)}</strong>
-      </p>
-      <ul className="card-overview__rows">
-        {visible.map((i) => {
-          const progress = Math.min(100, Math.max(0, (i.currentInstallment / i.totalInstallments) * 100));
-          return (
-            <li key={i.id} className="card-overview__installment">
-              <span className="card-overview__info">
-                <span className="card-overview__name" title={i.description}>
-                  {i.description}
-                </span>
-                <span className="card-overview__meta">
-                  Parcela {i.currentInstallment} de {i.totalInstallments} · próxima {formatShortDate(i.nextDueDate)}
-                </span>
-              </span>
-              <span className="card-overview__amount">{formatCurrency(i.installmentAmount)}</span>
-              <span className="card-overview__progress" aria-hidden="true">
-                <span style={{ width: `${progress}%` }} />
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-      {hidden > 0 && (
-        <p className="card-overview__more">
-          + {hidden} {hidden === 1 ? "parcelamento" : "parcelamentos"} em{" "}
-          <Link to="/dashboard/cartoes">Cartões</Link>
-        </p>
-      )}
-    </>
-  );
-}
-
 export default function CardOverview({ card, cardholderName, onOpenCards, refreshKey }) {
-  const installments = card.installments ?? [];
-  const syncedAt = card.isSynced ? formatSyncedAt(card.connectionLastSyncedAt) : null;
+  const syncedAt = formatSyncedAt(card.connectionLastSyncedAt);
 
   return (
     <div className="card-overview">
@@ -178,29 +130,10 @@ export default function CardOverview({ card, cardholderName, onOpenCards, refres
           </h4>
           {syncedAt && <span className="card-overview__note">Banco sincronizado em {syncedAt}</span>}
         </header>
-        {card.isSynced ? (
-          <RecentTransactions card={card} refreshKey={refreshKey} />
-        ) : (
-          <p className="card-overview__hint">Cartões cadastrados manualmente não recebem lançamentos.</p>
-        )}
-        {card.isSynced && (
-          <Link to="/dashboard/cartoes" className="card-overview__link">
-            Ver extrato completo
-          </Link>
-        )}
-      </section>
-
-      <section
-        className="card-overview__section card-overview__section--installments"
-        aria-labelledby="card-overview-installments"
-      >
-        <header className="card-overview__head">
-          <h4 id="card-overview-installments" className="card-overview__title">
-            Parcelas ativas
-          </h4>
-          {installments.length > 0 && <span className="card-overview__note">{installments.length} em aberto</span>}
-        </header>
-        <Installments installments={installments} />
+        <RecentTransactions card={card} refreshKey={refreshKey} />
+        <Link to="/dashboard/cartoes" className="card-overview__link">
+          Ver extrato completo
+        </Link>
       </section>
     </div>
   );

@@ -158,6 +158,7 @@ public class PolpCounterpartyDto
 {
     [JsonPropertyName("name")] public string? Name { get; set; }
     [JsonPropertyName("alias")] public string? Alias { get; set; }
+    [JsonPropertyName("tax_id")] public string? TaxId { get; set; }
 }
 
 public class PolpAccountTransactionDto
@@ -169,6 +170,11 @@ public class PolpAccountTransactionDto
     // CREDITO | DEBITO
     [JsonPropertyName("credit_debit_type")] public string? CreditDebitType { get; set; }
     [JsonPropertyName("transaction_amount")] public PolpMoney? TransactionAmount { get; set; }
+    [JsonPropertyName("type")] public string? Type { get; set; }
+    // Agência e CPF/CNPJ da contraparte não são desserializados (minimização).
+    [JsonPropertyName("partie_compe_code")] public string? PartieCompeCode { get; set; }
+    [JsonPropertyName("partie_number")] public string? PartieNumber { get; set; }
+    [JsonPropertyName("partie_person_type")] public string? PartiePersonType { get; set; }
     // Preenchidos depois, de forma assíncrona (webhook accounts.transactions de novo).
     [JsonPropertyName("counterparty")] public PolpCounterpartyDto? Counterparty { get; set; }
     [JsonPropertyName("category_ref")] public string? CategoryRef { get; set; }
@@ -186,6 +192,7 @@ public class PolpCardTransactionDto
     [JsonPropertyName("transaction_type")] public string? TransactionType { get; set; }
     // Valor em reais; "amount" é o original (moeda estrangeira).
     [JsonPropertyName("brazilian_amount")] public PolpMoney? BrazilianAmount { get; set; }
+    [JsonPropertyName("amount")] public PolpMoney? OriginalAmount { get; set; }
     // "0001-01-01" enquanto a transação não foi lançada em fatura (inclui parcelas futuras).
     [JsonPropertyName("bill_post_date")] public string? BillPostDate { get; set; }
     [JsonPropertyName("bill_id")] public Guid? BillId { get; set; }

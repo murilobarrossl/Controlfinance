@@ -102,33 +102,6 @@ public sealed class TestDb : IDisposable
         return t;
     }
 
-    public CreditCard AddCard(decimal limit, decimal used, int closingDay = 5, int dueDay = 15)
-    {
-        var card = new CreditCard
-        {
-            UserId = User.Id, Name = "Cartao", CreditLimit = limit, UsedLimit = used,
-            ClosingDay = closingDay, DueDay = dueDay
-        };
-        Db.CreditCards.Add(card);
-        Db.SaveChanges();
-        return card;
-    }
-
-    public Installment AddInstallment(CreditCard? card, BankAccount? account, decimal installmentAmount,
-        int current, int total, DateTime nextDueDate, decimal? totalAmount = null, int? dueDay = null)
-    {
-        var i = new Installment
-        {
-            UserId = User.Id, CreditCardId = card?.Id, BankAccountId = account?.Id,
-            Description = "Compra", TotalAmount = totalAmount ?? installmentAmount * total,
-            TotalInstallments = total, CurrentInstallment = current, InstallmentAmount = installmentAmount, DueDay = dueDay,
-            NextDueDate = DateTime.SpecifyKind(nextDueDate, DateTimeKind.Utc)
-        };
-        Db.Installments.Add(i);
-        Db.SaveChanges();
-        return i;
-    }
-
     public void Dispose()
     {
         _services.Dispose();

@@ -215,7 +215,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
     }
 
     /// <summary>
-    /// Apaga contas e tudo que depende delas. Transaction e Installment têm FK com SetNull pra
+    /// Apaga contas e tudo que depende delas. Transaction tem FK com SetNull pra
     /// BankAccount (não cascade), então apagar só a conta deixaria o extrato inteiro órfão no
     /// banco — por isso cada tabela é apagada explicitamente, numa transação só.
     /// </summary>
@@ -233,9 +233,6 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
         await db.InvestmentSyncSchedules.Where(s => s.UserId == userId && s.Resource == "account.reserved_balances" && remoteAccounts.Contains(s.ExternalId)).ExecuteDeleteAsync(ct);
         await db.RecurrenceDecisions
             .Where(r => r.UserId == userId && accountIds.Contains(r.BankAccountId))
-            .ExecuteDeleteAsync(ct);
-        await db.Installments
-            .Where(i => i.UserId == userId && i.BankAccountId != null && accountIds.Contains(i.BankAccountId.Value))
             .ExecuteDeleteAsync(ct);
         await db.Transactions
             .Where(t => t.UserId == userId && t.BankAccountId != null && accountIds.Contains(t.BankAccountId.Value))

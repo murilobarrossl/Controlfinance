@@ -5,55 +5,36 @@ import { readLegacyGoals, removeLegacyGoals } from "../utils/investmentStorage.j
 const post = (endpoint, payload, signal) =>
   apiFetch(endpoint, { method: "POST", body: JSON.stringify(payload), signal });
 
-function sameAmount(a, b) {
-  return typeof a === "number" && typeof b === "number" && Math.abs(a - b) < 0.005;
-}
-
-// Reserva e metas ficavam só no localStorage. Na primeira carga depois da migração, o que houver no
-// navegador vai para a conta (o servidor nunca sobrescreve o que já tem) e só então sai daqui.
-// legacyReserveAmount volta preenchido quando este navegador tem uma reserva diferente da já salva
-// na conta: nada é descartado sem o usuário decidir.
+// Reserva e metas ficavam só no localStorage. Na primeira carga depois da migração, as metas do
+// navegador vão para a conta (o servidor nunca sobrescreve o que já tem) e só então saem daqui. O
+// valor anotado da reserva e o "já guardado" das metas não vão: o planejamento mostra só saldos
+// informados pelos bancos, então esses números digitados são descartados.
 export async function loadPlanning({ signal } = {}) {
-  const legacyReserve = readLegacyReserveAmount();
-  const legacyGoals = readLegacyGoals().filter((goal) => goal.name.trim() && goal.targetAmount > 0);
+  if (readLegacyReserveAmount() != null) clearLegacyReserve();
+  const legacyGoals = readLegacyGoals().filter((goal) => goal.name.trim() && goal.targetAmount > 0)
+    .map(({ id, name, targetAmount, deadline, createdAt }) => ({ id, name, targetAmount, deadline, createdAt }));
 
-  if (legacyReserve == null && legacyGoals.length === 0) {
-    return { planning: await apiFetch("/planning", { signal }), legacyReserveAmount: null };
-  }
+  if (legacyGoals.length === 0) return apiFetch("/planning", { signal });
 
-  const result = await post("/planning/import", { reserveAmount: legacyReserve, goals: legacyGoals }, signal);
+  const result = await post("/planning/import", { goals: legacyGoals }, signal);
   removeLegacyGoals(result.storedGoalIds ?? []);
-
-  let legacyReserveAmount = null;
-  if (legacyReserve != null) {
-    const accountAmount = result.planning.reserve?.currentAmount;
-    if (result.reserveImported || legacyReserve === 0 || sameAmount(accountAmount, legacyReserve)) clearLegacyReserve();
-    else legacyReserveAmount = legacyReserve;
-  }
-
-  return { planning: result.planning, legacyReserveAmount };
+  return result.planning;
 }
 
-export const discardLegacyReserve = () => clearLegacyReserve();
-
-export const hasLegacyPlanning = () => readLegacyReserveAmount() != null || readLegacyGoals().length > 0;
-
-export const addToReserve = (amount) => post("/planning/reserve/add", { amount });
-
-export const withdrawFromReserve = (amount) => post("/planning/reserve/withdraw", { amount });
-
-export const setReserve = (amount) =>
-  apiFetch("/planning/reserve", { method: "PUT", body: JSON.stringify({ amount }) });
-
-export const createGoal = (payload) => post("/planning/goals", payload);
-
-export const updateGoalProgress = (id, currentAmount) =>
-  apiFetch(`/planning/goals/${id}/progress`, { method: "PUT", body: JSON.stringify({ currentAmount }) });
+export const createGoal = ({ name, targetAmount, deadline }) => post("/planning/goals", { name, targetAmount, deadline });
 
 export const deleteGoal = (id) => apiFetch(`/planning/goals/${id}`, { method: "DELETE" });
 
-export const setReserveAccount = (bankAccountId) =>
-  apiFetch("/planning/reserve/account", { method: "PUT", body: JSON.stringify({ bankAccountId }) });
+const allocation = (item, enabled) => JSON.stringify({ investmentId: item.reserved ? null : item.id, reservedBalanceId: item.reserved ? item.id : null, enabled });
+
+// As duas respostas trazem o planejamento inteiro: mexer num vínculo pode liberar o item de outro destino.
+export const setReserveResource = (item, enabled) => apiFetch("/planning/reserve/imported", { method: "PUT", body: allocation(item, enabled) });
+
+export const setGoalResource = (goalId, item, enabled) =>
+  apiFetch(`/planning/goals/${goalId}/allocations`, { method: "PUT", body: allocation(item, enabled) });
+
+export const removeReserveAccount = () =>
+  apiFetch("/planning/reserve/account", { method: "PUT", body: JSON.stringify({ bankAccountId: null }) });
 
 export const setInvestmentRate = (accountId, { kind, value, incomeTaxExempt }) =>
   apiFetch(`/planning/investments/${accountId}/rate`, {

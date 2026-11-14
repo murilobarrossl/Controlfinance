@@ -57,6 +57,7 @@
 | Nome e descrição de transações | Texto puro (inclui nomes de terceiros em transferências) | Cifrado (`NameEncrypted`). Busca e ordenação por nome passam a ser feitas em memória | `AppDbContext.cs`, `TransactionsController.cs`, `PrivacyBackfill.cs` |
 | Dados de contas "desconectadas" | Ficavam guardados para sempre (`IsActive = false`) | Apagados na desconexão; os já existentes são apagados pela migration `PurgeDisconnectedAccountData` | `PolpDisconnectService.cs`, `BankAccountsController.cs`, `20261030120100_PurgeDisconnectedAccountData.cs` |
 | JSON bruto da Polp em log | Contas, cartões, faturas e extrato completo, em `Information` | Nenhum corpo de resposta da Polp vai para log ou exceção | `PolpService.cs` |
+| Cartões e parcelamentos cadastrados à mão | Tabelas `CreditCards` e `Installments` (valores e descrição do parcelamento cifrados) | Cadastro manual removido; cartões vêm só do banco conectado. As tabelas e os dados existentes são apagados pela migration `RemoveManualCardsAndInstallments` | `CreditCardsController.cs`, `CreditCardSummaryBuilder.cs`, `20261114034352_RemoveManualCardsAndInstallments.cs` |
 | Token de sessão no navegador | JWT no `localStorage` | Cookie `httpOnly`. O navegador guarda só um id técnico do usuário, para separar metas e reserva por pessoa | `client.js`, `AuthContext.jsx`, `authToken.js`, `SessionCookie.cs` |
 
 ### A.3 Dados que deixaram de ser enviados
@@ -73,8 +74,8 @@
 
 | Funcionalidade | Endpoint | Tela |
 |---|---|---|
-| Desconectar banco: apaga contas, cartões, extrato, parcelamentos e decisões dessa conexão, para a sincronização e pede `DELETE /integrations/{id}` à Polp. Informa se a Polp **aceitou** ou se ficou **pendente** | `DELETE /api/polp/integrations/{id}` | Seletor de contas e Privacidade e dados |
-| Remover conta manual (com lançamentos e parcelamentos; antes era só ocultada) | `DELETE /api/bank-accounts/{id}` | Seletor de contas |
+| Desconectar banco: apaga contas, cartões, extrato e decisões dessa conexão, para a sincronização e pede `DELETE /integrations/{id}` à Polp. Informa se a Polp **aceitou** ou se ficou **pendente** | `DELETE /api/polp/integrations/{id}` | Seletor de contas e Privacidade e dados |
+| Remover conta manual (com lançamentos; antes era só ocultada) | `DELETE /api/bank-accounts/{id}` | Seletor de contas |
 | Excluir conta (pede a senha de novo) | `POST /api/account/deletion` | Privacidade e dados |
 | Cópia dos dados (JSON) | `GET /api/account/export` | Privacidade e dados |
 | Preferências de e-mail: lembrete (ligado por padrão) e aviso mensal (desligado; só com opt-in) | `PUT /api/account/notifications` | Privacidade e dados |
@@ -186,7 +187,7 @@ E-MAILS AUTOMÁTICOS
 Banco de dados ──► API: conta quantas pendências ──► Resend: e-mail + "N contas vencem em breve"
 
 DESCARTE
-Desconectar banco ──► apaga contas/transações/parcelamentos daquela conexão ──► DELETE na Polp
+Desconectar banco ──► apaga contas/transações daquela conexão ──► DELETE na Polp
   (falha → status DISCONNECT_PENDING, sem dados, retentativa de hora em hora)
 Excluir conta ──► DELETE na Polp para cada conexão (falha → PendingProviderDeletion só com id)
             ──► apaga Installments + Users (cascade: contas, transações, categorias, cartões,
@@ -385,7 +386,7 @@ Nada foi compilado, executado ou testado. Nenhuma operação foi feita em produ�
 
 | Segredo vazado | O que fica exposto | O que fica protegido |
 |---|---|---|
-| Chave de cifragem ativa | Campos cifrados por ela (valores, nomes de transações, descrições de parcelamento, dígitos de conta, IP de acesso) **se o atacante também tiver o banco** | Hash do CPF (segredo independente); senhas (bcrypt) |
+| Chave de cifragem ativa | Campos cifrados por ela (valores, nomes de transações, dígitos de conta, IP de acesso) **se o atacante também tiver o banco** | Hash do CPF (segredo independente); senhas (bcrypt) |
 | Chave de busca | Teste de CPFs contra `DocumentHash` (o espaço de CPFs é pequeno) **se o atacante tiver o banco** | Todos os campos cifrados |
 | `Encryption:Key` legado | Tudo que ainda estiver no formato legado | O que já foi rotacionado para o anel novo |
 | `JwtSettings:SecretKey` | Emissão de sessões falsas | Dados em repouso. Mitigação: trocar o segredo invalida todas as sessões |
@@ -406,7 +407,7 @@ Nada foi compilado, executado ou testado. Nenhuma operação foi feita em produ�
 **Implementado** (`DataRetentionService.cs`, `PolpSyncService.cs`, `AccountController.cs`, `Privacidade.jsx`):
 - `DataRetention:SyncedHistoryMonths` (vazio por padrão = sem prazo, comportamento atual);
 - quando configurado, transações importadas mais antigas que o corte (e já resolvidas) deixam de ser importadas e são apagadas uma vez por dia;
-- **não afeta** lançamentos manuais, parcelamentos (entidade própria), categorias, contas e transações pendentes;
+- **não afeta** lançamentos manuais, categorias, contas e transações pendentes;
 - o prazo em vigor aparece para o usuário em Privacidade e dados (`GET /api/account/data-policy`).
 
 **Impacto funcional:**
@@ -641,3 +642,42 @@ Os responsáveis e contatos estão como `[PENDENTE]`, para não serem inventados
 5. **Comunicação à ANPD e aos titulares:** prazo de 3 dias úteis (Res. CD/ANPD 15/2024, conforme fontes secundárias; o texto oficial ainda precisa ser lido, J.5.3), contado em dobro para agente de pequeno porte (Res. 2/2022 art. 14, II, com redação da Res. 15/2024, verificado na página oficial). O conteúdo mínimo está no LGPD art. 48, § 1º, I a VI. Canal da ANPD: `[PENDENTE: confirmar formulário vigente no site da ANPD]`.
 6. **Registro do incidente por 5 anos**, inclusive dos não comunicados (Res. 15/2024, conforme fontes secundárias).
 7. **Revisão:** causa, correção técnica e atualização deste relatório.
+
+# Etapa 3 — 13/11/2026: detalhes da transação
+
+A tela de detalhes (`/dashboard/relatorios/:id`, `GET /api/transactions/{id}`) só lê o que o sync já gravou: abrir um lançamento não gera consulta à Polp. Para ela, o sync passou a guardar campos que a Polp já enviava e eram descartados:
+
+| Campo | Guardado como | Motivo |
+|---|---|---|
+| `transaction_date_time` com horário | `BankDateTime` (UTC); nulo se só data ou meia-noite exata | Mostrar o horário sem inventá-lo |
+| `type` (conta) / `transaction_type` (cartão) | Código, texto puro | Tipo da operação (Pix, TED, compra, estorno…) |
+| `transaction_name` | Cifrado | Descrição original, mesmo após renomear |
+| `counterparty.alias` e `counterparty.name` | Dois campos cifrados (nome comercial e razão social) | Outra parte, sem confundir marca com titular jurídico |
+| `counterparty.tax_id` | Cifrado, só se tiver 14 dígitos (CNPJ) | Documento do recebedor, como nos comprovantes; CNPJ é cadastro público. CPF nunca é guardado |
+| `partie_person_type` | Código (`PESSOA_NATURAL`/`PESSOA_JURIDICA`) | "Pessoa física/jurídica", substituto mínimo do CPF/CNPJ mascarado dos comprovantes |
+| `partie_compe_code` | Código, texto puro | Banco da outra parte (dado da instituição, não da pessoa) |
+| `partie_number` | Só 4 últimos dígitos, cifrado | Conta da outra parte, mesma regra das contas do usuário |
+| `identification_number` (cartão) | Só 4 últimos dígitos, cifrado | Cartão usado (titular ou adicional) |
+| `charge_identificator`/`charge_number` | Inteiros | Parcela X de Y |
+| `amount` (cartão, moeda ≠ BRL) | Cifrado + código da moeda | Compra internacional |
+| `bill_forecast_date` (cartão) | `AAAA-MM` | Mês da fatura |
+
+Sem contraparte da Polp (ex.: Pix para pessoa física, que não tem CNPJ para enriquecer), a tela lê o nome da descrição original só em padrões reconhecíveis (`DescribedCounterparty`) e o rotula como "lido da descrição". Nada é gravado à parte, e o nome editável do lançamento nunca é usado.
+
+Linhas importadas antes desta etapa não tinham os campos. A reconciliação enfileira uma vez por conexão (`PolpIntegration.TransactionDetailsVersion`) uma releitura do histórico já guardado na Polp. Não cria consentimento novo nem chama o banco do usuário.
+
+Continuam **sem** ser guardados: `partie_cnpj_cpf`, `partie_branch_code`, `code_ispb`, `payee_mcc`, os campos `*_additional_info`, `payment_type` e `fee_type`. A API da Polp não tem campo de status de efetivação; a tela diz "Registrada no extrato" e não "concluída". Política de Privacidade e tela Privacidade e dados atualizadas (versão `2026-11-13`); exportação inclui os novos campos; desconexão, exclusão e retenção já apagam as linhas inteiras.
+
+## L. Comunicação da mudança aos usuários (13/11/2026)
+
+| Questão | Fundamento | Conclusão | Incerteza |
+|---|---|---|---|
+| Precisa de novo consentimento? | LGPD art. 7º, V e IX; art. 9º, § 2º; RC 1/2020 art. 10, § 2º | **Não.** A base é execução de contrato (dados do próprio usuário) e legítimo interesse (dados de terceiros), não consentimento; a finalidade não mudou. No Open Finance, a RC 1/2020 exige novo consentimento quando mudam finalidade, prazo, instituição ou dados compartilhados; nenhum mudou (os campos já vinham da Polp) | Baixa |
+| Precisa avisar quem já tem conta? | LGPD art. 6º, VI; art. 8º, § 6º; art. 9º, II; art. 10, § 2º; Guia ANPD de Legítimo Interesse (2024); Voto nº 11/2024/DIR-MW/CD (caso Meta) | **Sim, por cautela.** Guardar mais elementos altera a "forma" do tratamento (art. 9º, II); o art. 8º, § 6º manda informar "com destaque de forma específica do teor das alterações"; o legítimo interesse exige transparência reforçada; a ANPD já tratou como falha a falta de divulgação clara de mudança de política. A Política ganhou a seção "O que mudou nesta versão", mas só quem a abre a vê | **Em aberto:** o § 6º está no artigo do consentimento, e não há regulamento da ANPD sobre forma ou prazo do aviso. Falta um aviso no painel para quem já tem conta (não implementado) |
+| Só mudar a data basta? | Mesmos fundamentos | **Não.** O registro de aceite só é exigido no cadastro; quem já tem conta não é avisado de nada | — |
+
+## M. Planejamento sem valores manuais (14/11/2026)
+
+A reserva de emergência e as metas deixaram de aceitar valores digitados. A migração `PlanningAllocationsFromImportedBalances` apagou as colunas `CurrentAmountEncrypted` de `EmergencyReserves` e `SavingsGoals` (valor anotado da reserva e "já guardado" das metas), por decisão do responsável pelo produto; o valor anotado que ainda estivesse no `localStorage` é apagado na próxima carga e não vai para o servidor. Os vínculos explícitos de reserva já existentes foram copiados para a nova tabela `PlanningAllocations`, que guarda só ids técnicos (meta, investimento ou caixinha), sem nome nem valor, e sai junto com a conexão (cascata dos investimentos), a meta ou a conta. Cada investimento conta para um único destino (índice único), para que reserva e metas nunca somem o mesmo dinheiro. A exportação passou a trazer os vínculos e não traz mais os valores apagados. Política de Privacidade e tela Privacidade e dados atualizadas (versão `2026-11-14`): é redução de dados guardados mais um vínculo técnico, sem nova finalidade, então a conclusão da seção L sobre consentimento vale também aqui.
+
+Complemento (14/11/2026): a reserva automática passou a incluir toda caixinha com a palavra "reserva" no nome (aplicações continuam só com o nome exato "Reserva de emergência"), e a migração `ResetAutoReserveExclusions` zerou uma vez as exclusões antigas. Nenhum dado novo é guardado: a regra só lê o nome já importado.

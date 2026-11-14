@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
-import { HistoryIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE } from "../../../components/charts/chartTheme.js";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import { buildPriceSchedule, compareTerms } from "../../../utils/investmentMath.js";
@@ -75,19 +74,15 @@ export default function FinancingSimulator() {
   }, [financedAmount, monthlyRate, installmentsCount, narrowChart]);
 
   return (
-    <section className="investimentos__group" aria-labelledby="investimentos-financing-title">
-      <h2 id="investimentos-financing-title" className="investimentos__group-title">
-        Simulador de financiamento
-      </h2>
+    <section className="investimentos__section" aria-labelledby="investimentos-financing-title">
+      <div className="investimentos__section-head">
+        <h2 id="investimentos-financing-title" className="investimentos__group-title">
+          Simulador de financiamento
+        </h2>
+        <p className="investimentos__lead">Financiamento ou consórcio pela Tabela Price, com parcelas fixas.</p>
+      </div>
 
-      <div className="inv-group card fin-sim" style={{ "--modality-color": colors.principal, "--modality-text": colors.principal }}>
-        <header className="inv-group__header">
-          <span className="inv-group__icon" aria-hidden="true">
-            <HistoryIcon />
-          </span>
-          <h3 className="inv-group__title">Financiamento ou consórcio</h3>
-          <span className="inv-group__count">Tabela Price, parcelas fixas</span>
-        </header>
+      <div className="fin-sim">
 
         <div className="fin-sim__layout">
           <div className="investimentos__form fin-sim__inputs">
@@ -119,33 +114,33 @@ export default function FinancingSimulator() {
 
             {!analysis ? (
               !downPaymentTooBig && (
-                <p className="investimentos__hint">Informe o valor total e o número de parcelas pra ver a simulação.</p>
+                <p className="investimentos__hint">Informe o valor total e o número de parcelas para ver a simulação.</p>
               )
             ) : (
               <>
-                <dl className="inv-projection__stats">
-                  <div className="inv-projection__stat inv-projection__stat--main">
+                <dl className="fin-sim__stats">
+                  <div className="fin-sim__stat fin-sim__stat--main">
                     <dt>Parcela mensal</dt>
                     <dd>{formatCurrency(analysis.payment)}</dd>
-                    <span className="inv-projection__note">{installmentsCount} parcelas</span>
+                    <span className="fin-sim__note">{installmentsCount} parcelas</span>
                   </div>
-                  <div className="inv-projection__stat">
+                  <div className="fin-sim__stat">
                     <dt>Valor financiado</dt>
                     <dd>{formatCurrency(financedAmount)}</dd>
                   </div>
-                  <div className="inv-projection__stat">
+                  <div className="fin-sim__stat">
                     <dt>Total pago nas parcelas</dt>
                     <dd>{formatCurrency(analysis.totalPaid)}</dd>
                   </div>
-                  <div className="inv-projection__stat inv-projection__stat--bad">
+                  <div className="fin-sim__stat fin-sim__stat--bad">
                     <dt>Só de juros</dt>
                     <dd>{formatCurrency(analysis.totalInterest)}</dd>
-                    <span className="inv-projection__note">{formatPercentage(analysis.interestShare)} do que você paga</span>
+                    <span className="fin-sim__note">{formatPercentage(analysis.interestShare)} do que você paga</span>
                   </div>
                 </dl>
 
                 <p className="investimentos__verdict">
-                  Pra cada <strong>R$ 100</strong> financiados, você paga <strong>{formatCurrency(analysis.costPer100)}</strong>.
+                  Para cada <strong>R$ 100</strong> financiados, você paga <strong>{formatCurrency(analysis.costPer100)}</strong>.
                   {downPayment > 0 && <> Com a entrada, o custo total é de {formatCurrency(analysis.totalPaid + downPayment)}.</>}
                 </p>
               </>
@@ -155,8 +150,8 @@ export default function FinancingSimulator() {
 
         {analysis && (
           <>
-            <div className="inv-detail__section">
-              <h4 className="inv-detail__title">Composição de cada parcela</h4>
+            <div className="fin-sim__block">
+              <h3 className="inv-plan__title">Composição de cada parcela</h3>
               <div ref={chartRef} role="img" aria-label="Gráfico da composição de cada parcela entre juros e dívida abatida">
                 <ResponsiveContainer width="100%" height={narrowChart ? 220 : 240}>
                   <AreaChart data={analysis.chartData} margin={{ top: 8, right: 16, left: 4, bottom: 8 }}>
@@ -187,8 +182,8 @@ export default function FinancingSimulator() {
               </p>
             </div>
 
-            <div className="inv-detail__section">
-              <h4 className="inv-detail__title">Mesmos valores em outros prazos</h4>
+            <div className="fin-sim__block">
+              <h3 className="inv-plan__title">Mesmos valores em outros prazos</h3>
               <div className="investimentos__table-wrap">
                 <table className="investimentos__table investimentos__table--wide">
                   <thead>

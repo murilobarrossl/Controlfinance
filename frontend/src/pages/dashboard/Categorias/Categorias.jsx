@@ -10,11 +10,10 @@ import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
-import TransactionDetails from "../../../components/dashboard/TransactionDetails/TransactionDetails.jsx";
-import BreakdownRows from "../../../components/dashboard/BreakdownRows/BreakdownRows.jsx";
+import { CategoryList, EstablishmentList } from "./CategoryRows.jsx";
 import { loadPlanning } from "../../../api/planning.js";
 import { calculateCutImpact } from "../../../utils/cutImpact.js";
-import { formatCurrency, formatDate, formatPercentage } from "../../../utils/financeMath.js";
+import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import { donutSliceColors, resolveCategoryColor } from "../../../utils/categoryColors.js";
 import { formatMonthLong, toIsoDate } from "../../../utils/monthLabel.js";
 import "./Categorias.css";
@@ -81,18 +80,11 @@ function topExpenseCategoryName(categories) {
   return topName;
 }
 
-const INSTALLMENT_SUFFIX = /(\d{2}\/\d{2})$/;
-
-// "01/12" etc., ou null se o nome não tiver o sufixo de parcela.
-function installmentLabel(name) {
-  return name.match(INSTALLMENT_SUFFIX)?.[1] ?? null;
-}
-
 export default function Categorias() {
   usePageTitle("Categorias");
   const [searchParams] = useSearchParams();
   const [categoryFromLink] = useState(() => searchParams.get("categoria"));
-  const { effectiveScope, scopeKey, scopeQuery, dataRefreshKey, accountsStatus } = useAccount();
+  const { scopeKey, scopeQuery, dataRefreshKey, accountsStatus } = useAccount();
   const [result, setResult] = useState(null);
   const [aggregateResult, setAggregateResult] = useState(null);
   // Período mostrado: um mês, um ano ou tudo. offset 0 = o atual, 1 = o anterior, e assim por diante.
@@ -320,11 +312,12 @@ export default function Categorias() {
     });
   }
 
-  if (error) return <p className="categorias__error">{error}</p>;
-  if (accountsStatus === "ready" && !scopeKey) return <NoBankAccount />;
 
-  return (
-    <div className="categorias">
+  const periodPhrase =
+    period.mode === "all" ? "em todo o período" : `em ${period.mode === "month" ? range.label.toLowerCase() : range.label}`;
+
+  const heading = (
+    <header className="categorias__header">
       <SectionHeading title="Categorias" level={1} />
 
       <div className="categorias__period">
@@ -351,104 +344,134 @@ export default function Categorias() {
           />
         )}
       </div>
+    </header>
+  );
 
-      {effectiveScope && (
-        <p className="categorias__scope-title">
-          Mostrando as despesas de: <strong>{effectiveScope.label}</strong>
+  if (error) {
+    return (
+      <div className="categorias">
+        {heading}
+        <p className="categorias__error" role="alert">
+          {error}
         </p>
-      )}
+      </div>
+    );
+  }
+  if (accountsStatus === "ready" && !scopeKey) return <NoBankAccount />;
+
+  const pageStart = (categoryPageSafe - 1) * CATEGORY_PAGE_SIZE + 1;
+  const pageEnd = pageStart + pagedBreakdown.length - 1;
+  const establishmentCount = establishmentBreakdown.length;
+
+  return (
+    <div className="categorias">
+      {heading}
 
       <div className="categorias__grid">
-        <Card title="Despesas por categoria">
+        <Card title="Despesas por categoria" className="categorias__card">
           {loading ? (
-            <Skeleton width="100%" height="340px" />
+            <div className="categorias__donut-loading">
+              <Skeleton width="15rem" height="15rem" style={{ borderRadius: "50%" }} />
+              <Skeleton width="100%" height="6rem" />
+            </div>
           ) : breakdown.length === 0 ? (
-            <p className="categorias__hint">Nenhuma despesa categorizada {period.mode === "all" ? "em nenhum período" : `em ${range.label}`}.</p>
+            <p className="categorias__hint">Nenhuma despesa {periodPhrase}.</p>
           ) : (
             <div className="categorias__donut-block">
-              <div className="categorias__donut-wrap">
+              <div
+                className="categorias__donut-wrap"
+                role="img"
+                aria-label={`Gráfico das despesas por categoria ${periodPhrase}. Os valores de cada categoria estão na lista Categorias.`}
+              >
                 <CategoryDonutChart
-                  height={340}
+                  height={272}
                   formatValue={formatCurrency}
                   data={breakdown}
                   onSliceClick={toggleCategory}
                   centerLabel={formatCurrency(totalExpense)}
+                  centerCaption="Total"
                   showLegend={false}
                 />
               </div>
 
-              <ul className="categorias__donut-summary">
+              <ul className="categorias__legend">
                 {breakdown.slice(0, 3).map((c) => (
-                  <li key={c.name} className="categorias__donut-summary-item">
-                    <span className="categorias__donut-summary-dot" style={{ backgroundColor: c.color }} />
-                    <span className="categorias__donut-summary-name">{c.name}</span>
-                    <span className="categorias__donut-summary-percentage">{formatPercentage(c.percentage)}</span>
-                    <span className="categorias__donut-summary-value">{formatCurrency(c.value)}</span>
+                  <li key={c.name} className="categorias__legend-item">
+                    <span className="categorias__legend-dot" style={{ backgroundColor: c.color }} aria-hidden="true" />
+                    <span className="categorias__legend-name">{c.name}</span>
+                    <span className="categorias__legend-pct">{formatPercentage(c.percentage)}</span>
+                    <span className="categorias__legend-value">{formatCurrency(c.value)}</span>
                   </li>
                 ))}
-                {breakdown.length > 3 && (
-                  <li className="categorias__donut-summary-more">
-                    + {breakdown.length - 3} {breakdown.length - 3 === 1 ? "categoria" : "categorias"} na lista ao lado
-                  </li>
-                )}
               </ul>
+              {breakdown.length > 3 && (
+                <p className="categorias__legend-more">
+                  Mais {breakdown.length - 3} {breakdown.length - 3 === 1 ? "categoria" : "categorias"} na lista
+                </p>
+              )}
             </div>
           )}
         </Card>
 
         <Card
           title="Categorias"
+          className="categorias__card"
           action={
             !loading &&
             breakdown.length > 0 && (
-              <select
-                value={categorySort}
-                onChange={(e) => {
-                  setCategorySort(e.target.value);
-                  setCategoryPage(1);
-                }}
-                className="categorias__select"
-                aria-label="Ordenar categorias"
-              >
-                {CATEGORY_SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              <label className="categorias__sort">
+                <span>Ordenar</span>
+                <select
+                  value={categorySort}
+                  onChange={(e) => {
+                    setCategorySort(e.target.value);
+                    setCategoryPage(1);
+                  }}
+                >
+                  {CATEGORY_SORT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             )
           }
         >
           {loading ? (
-            <Skeleton width="100%" height="340px" />
+            <div className="categorias__list-loading">
+              {Array.from({ length: 4 }, (_, i) => (
+                <Skeleton key={i} width="100%" height="4.5rem" />
+              ))}
+            </div>
           ) : breakdown.length === 0 ? (
-            <p className="categorias__hint">Nenhuma despesa categorizada ainda.</p>
+            <p className="categorias__hint">Nada para listar {periodPhrase}.</p>
           ) : (
             <>
-              <BreakdownRows
-                data={pagedBreakdown}
-                tone="expense"
-                activeName={selectedCategory}
-                onRowClick={toggleCategory}
-              />
+              <CategoryList data={pagedBreakdown} activeName={selectedCategory} onSelect={toggleCategory} />
 
               {categoryTotalPages > 1 && (
-                <div className="categorias__pagination" role="navigation" aria-label="Páginas de categorias">
-                  {Array.from({ length: categoryTotalPages }, (_, i) => i + 1).map((pageNumber) => (
-                    <button
-                      key={pageNumber}
-                      type="button"
-                      className={`categorias__page-btn ${
-                        pageNumber === categoryPageSafe ? "categorias__page-btn--active" : ""
-                      }`}
-                      onClick={() => setCategoryPage(pageNumber)}
-                      aria-current={pageNumber === categoryPageSafe ? "page" : undefined}
-                      aria-label={`Página ${pageNumber}`}
-                    >
-                      {pageNumber}
-                    </button>
-                  ))}
-                </div>
+                <nav className="categorias__pagination" aria-label="Páginas de categorias">
+                  <span className="categorias__page-count">
+                    {pageStart}–{pageEnd} de {sortedBreakdown.length}
+                  </span>
+                  <div className="categorias__pages">
+                    {Array.from({ length: categoryTotalPages }, (_, i) => i + 1).map((pageNumber) => (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        className={`categorias__page-btn ${
+                          pageNumber === categoryPageSafe ? "categorias__page-btn--active" : ""
+                        }`}
+                        onClick={() => setCategoryPage(pageNumber)}
+                        aria-current={pageNumber === categoryPageSafe ? "page" : undefined}
+                        aria-label={`Página ${pageNumber}`}
+                      >
+                        {pageNumber}
+                      </button>
+                    ))}
+                  </div>
+                </nav>
               )}
             </>
           )}
@@ -456,55 +479,52 @@ export default function Categorias() {
       </div>
 
       {!loading && selectedCategory && (
-        <div ref={drilldownRef} className="categorias__drilldown-section">
-          <Card title={`${selectedCategory}: onde foi o dinheiro`}>
-            {establishmentBreakdown.length === 0 ? (
+        <section
+          ref={drilldownRef}
+          className={`categorias__detail${cutImpact ? " categorias__detail--with-aside" : ""}`}
+          aria-labelledby="categorias-detail-title"
+        >
+          <div className="categorias__detail-main">
+            <header className="categorias__detail-head">
+              <h2 id="categorias-detail-title" className="categorias__detail-title">
+                {selectedCategory}
+              </h2>
+              <p className="categorias__detail-note">
+                {formatCurrency(selectedCategoryAmount)} {periodPhrase}
+                {establishmentCount > 0 &&
+                  `, em ${establishmentCount} ${establishmentCount === 1 ? "estabelecimento" : "estabelecimentos"}`}
+              </p>
+            </header>
+
+            {establishmentCount === 0 ? (
               <p className="categorias__hint">Nenhuma transação encontrada.</p>
             ) : (
-              <BreakdownRows
+              <EstablishmentList
                 data={establishmentBreakdown}
-                tone="expense"
                 expandedNames={expandedEstablishments}
-                onRowClick={toggleEstablishment}
-                renderExpanded={(name) => (
-                  <TransactionDetails
-                    className="categorias__visits"
-                    query={{
-                      ...scopeQuery,
-                      from: range.from,
-                      to: range.to,
-                      type: "Expense",
-                      category: selectedCategory,
-                      establishment: name,
-                      refresh: dataRefreshKey,
-                    }}
-                    renderItem={(t) => (
-                      <li key={t.id} className="categorias__visits-item">
-                        <span className="categorias__visits-date">
-                          {installmentLabel(t.name) && (
-                            <span className="categorias__visits-installment">Parcela {installmentLabel(t.name)} · </span>
-                          )}
-                          {formatDate(t.dueDate)}
-                        </span>
-                        <span className="categorias__visits-amount">{formatCurrency(t.amount)}</span>
-                      </li>
-                    )}
-                  />
-                )}
+                onToggle={toggleEstablishment}
+                detailsQuery={{
+                  ...scopeQuery,
+                  from: range.from,
+                  to: range.to,
+                  type: "Expense",
+                  category: selectedCategory,
+                  refresh: dataRefreshKey,
+                }}
               />
             )}
-          </Card>
+          </div>
 
           {cutImpact && (
-            <Card title={`Impacto de cortar ${selectedCategory}`}>
-              <div className="categorias__impact-rates">
+            <Card title="Simular um corte" className="categorias__impact">
+              <div className="categorias__impact-rates" role="radiogroup" aria-label="Quanto cortar">
                 {CUT_RATE_OPTIONS.map((rate) => (
                   <button
                     key={rate}
                     type="button"
-                    className={`categorias__impact-rate ${
-                      cutRate === rate ? "categorias__impact-rate--active" : ""
-                    }`}
+                    role="radio"
+                    aria-checked={cutRate === rate}
+                    className={`categorias__segment ${cutRate === rate ? "categorias__segment--active" : ""}`}
                     onClick={() => setCutRate(rate)}
                   >
                     {formatPercentage(rate * 100)}
@@ -516,37 +536,42 @@ export default function Categorias() {
                 {cutImpactSentence(selectedCategory, selectedCategoryAmount, cutRate, cutImpact)}
               </p>
 
-              <div className="categorias__impact-targets">
+              <dl className="categorias__impact-targets">
                 <div className="categorias__impact-target">
-                  <span className="categorias__impact-target-label">Reserva de emergência</span>
-                  <span className="categorias__impact-target-values">
-                    {formatCurrency(cutImpact.reserveImpact.current)} →{" "}
-                    <span className="categorias__impact-target-after">
-                      {formatCurrency(cutImpact.reserveImpact.afterCut)}
+                  <dt>Reserva de emergência</dt>
+                  <dd>
+                    {formatCurrency(cutImpact.reserveImpact.current)}
+                    <span className="categorias__impact-arrow" aria-hidden="true">
+                      →
                     </span>
-                  </span>
+                    <span className="categorias__sr-only">passaria a</span>
+                    <strong>{formatCurrency(cutImpact.reserveImpact.afterCut)}</strong>
+                  </dd>
                 </div>
 
-                {cutImpact.goalImpact ? (
+                {cutImpact.goalImpact && (
                   <div className="categorias__impact-target">
-                    <span className="categorias__impact-target-label">Meta: {cutImpact.goalImpact.name}</span>
-                    <span className="categorias__impact-target-values">
-                      faltam {formatCurrency(cutImpact.goalImpact.remainingBefore)} →{" "}
-                      <span className="categorias__impact-target-after">
-                        faltam {formatCurrency(cutImpact.goalImpact.remainingAfter)}
+                    <dt>Meta: {cutImpact.goalImpact.name}</dt>
+                    <dd>
+                      Faltam {formatCurrency(cutImpact.goalImpact.remainingBefore)}
+                      <span className="categorias__impact-arrow" aria-hidden="true">
+                        →
                       </span>
-                    </span>
+                      <span className="categorias__sr-only">passaria a</span>
+                      <strong>faltam {formatCurrency(cutImpact.goalImpact.remainingAfter)}</strong>
+                    </dd>
                   </div>
-                ) : (
-                  <p className="categorias__hint">
-                    Você ainda não cadastrou metas. Crie uma em Investimentos para ver o quanto esse corte te
-                    aproximaria dela.
-                  </p>
                 )}
-              </div>
+              </dl>
+
+              {!cutImpact.goalImpact && (
+                <p className="categorias__impact-hint">
+                  Cadastre uma meta em Investimentos para ver quanto esse corte aproxima você dela.
+                </p>
+              )}
             </Card>
           )}
-        </div>
+        </section>
       )}
     </div>
   );

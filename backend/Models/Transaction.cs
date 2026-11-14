@@ -31,4 +31,23 @@ public class Transaction
 
     /// <summary>Quando o lembrete de vencimento por e-mail foi enviado (null = ainda não enviado).</summary>
     public DateTime? ReminderSentAt { get; set; }
+
+    // Dados do banco, gravados só pelo sync (nunca editáveis). CPF e agência da contraparte,
+    // MCC e textos livres da Polp não são guardados: nenhuma tela precisa deles.
+    /// <summary>Nulo quando o banco não manda horário (só data ou "T00:00:00").</summary>
+    public DateTime? BankDateTime { get; set; }
+    public string? BankOperationType { get; set; }
+    public string? BankDescription { get; set; }
+    public string? CounterpartyName { get; set; }
+    public string? CounterpartyAlias { get; set; }
+    public string? CounterpartyCnpj { get; set; }
+    public string? CounterpartyPersonType { get; set; }
+    public string? CounterpartyBankCode { get; set; }
+    public string? CounterpartyAccount { get; set; }
+    public string? CardNumber { get; set; }
+    public int? InstallmentNumber { get; set; }
+    public int? InstallmentTotal { get; set; }
+    public decimal? OriginalAmount { get; set; }
+    public string? OriginalCurrency { get; set; }
+    public string? BillMonth { get; set; }
 }

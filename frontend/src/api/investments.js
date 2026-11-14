@@ -15,6 +15,3 @@ export const investmentHistory = (id, reserved, cursor, signal) => page(
 export const investmentMovements = (id, cursor, signal) => page(`/investments/${encodeURIComponent(id)}/movements`, cursor, signal);
 export const investmentFinancials = (id, month, signal) => apiFetch(
   `/investments/${encodeURIComponent(id)}/financials?${new URLSearchParams({ month })}`, { signal });
-export const classifyInvestmentReserve = (item, enabled) => apiFetch("/planning/reserve/imported", {
-  method: "PUT", body: JSON.stringify({ investmentId: item.reserved ? null : item.id, reservedBalanceId: item.reserved ? item.id : null, enabled }),
-});

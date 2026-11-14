@@ -67,3 +67,5 @@ export const getRecentTransactions = async ({ bankAccountId, limit }, { signal }
   if (limit) params.set("limit", limit);
   return apiFetch(`/transactions/recent?${params.toString()}`, { signal });
 };
+
+export const getTransaction = async (id, { signal } = {}) => apiFetch(`/transactions/${encodeURIComponent(id)}`, { signal });

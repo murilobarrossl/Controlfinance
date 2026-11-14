@@ -267,22 +267,6 @@ public class DashboardTests
     }
 
     [Fact]
-    public async Task Cartao_do_dashboard_reconcilia_parcelas_e_mostra_usado_700()
-    {
-        using var t = new TestDb();
-        t.AddAccount();
-        var card = t.AddCard(5000m, 1200m);
-        t.AddInstallment(card, null, 100m, 1, 12, Dates.Day15MonthsAgo(5));
-
-        var s = await Summary(t);
-
-        Assert.NotNull(s.ActiveCard);
-        Assert.Equal(700.00m, s.ActiveCard!.UsedLimit);
-        Assert.Equal(5000.00m, s.ActiveCard.CreditLimit);
-        Assert.Equal(100.00m, s.ActiveCard.CurrentInvoice);
-    }
-
-    [Fact]
     public async Task Mes_corrente_e_o_de_Sao_Paulo_nao_o_do_servidor_ao_meio_do_mes()
     {
         using var t = new TestDb();

@@ -21,13 +21,43 @@ export default function PoliticaDePrivacidade() {
   }, []);
 
   return (
-    <LegalPageLayout kicker="Legal" title="Política de privacidade" updatedAt={`12 de novembro de 2026 (versão ${PRIVACY_VERSION})`}>
+    <LegalPageLayout kicker="Legal" title="Política de privacidade" updatedAt={`14 de novembro de 2026 (versão ${PRIVACY_VERSION})`}>
       <h2>Resumo</h2>
       <ul>
         <li>Coletamos o mínimo para o painel funcionar. O número do seu CPF/CNPJ não fica guardado, e não pedimos telefone.</li>
         <li>Se você conectar um banco, guardamos contas, saldos, extrato, dados de cartão, investimentos e caixinhas, cifrados, enquanto a conexão existir.</li>
         <li>Os dados passam só por fornecedores indispensáveis ao serviço, listados abaixo. Não vendemos dados e não usamos para publicidade.</li>
         <li>No painel, em <strong>Privacidade e dados</strong>, você baixa uma cópia de tudo, desconecta bancos, desliga e-mails e exclui a conta.</li>
+      </ul>
+
+      <h2>O que mudou nesta versão (14 de novembro de 2026)</h2>
+      <ul>
+        <li>
+          Deixamos de guardar valores digitados à mão no planejamento: o valor anotado da reserva de emergência e o valor
+          “já guardado” das metas foram apagados. A reserva e o progresso das metas passam a vir só dos saldos informados
+          pelos bancos.
+        </li>
+        <li>
+          Passamos a guardar quais investimentos e caixinhas você vincula à reserva e a cada meta. Não há nova finalidade,
+          novo compartilhamento nem novo fornecedor.
+        </li>
+      </ul>
+
+      <h2>O que mudou na versão de 13 de novembro de 2026</h2>
+      <ul>
+        <li>
+          Passamos a guardar mais detalhes de cada transação que o banco já enviava pelo Open Finance: horário, tipo da
+          operação, descrição original, a outra parte (nome comercial, razão social e CNPJ de empresas, se é pessoa física
+          ou jurídica, código do banco e 4 últimos dígitos da conta), cartão usado (4 últimos dígitos), parcela, mês da fatura e valor em moeda estrangeira.
+        </li>
+        <li>
+          Finalidade: mostrar esses detalhes a você na nova tela de detalhes da transação, dentro do Relatórios. Não há nova
+          finalidade, novo compartilhamento nem novo fornecedor.
+        </li>
+        <li>
+          Para transações importadas antes desta versão, o Control Finance relê uma única vez o histórico já
+          disponível na Polp. Isso não cria nova autorização no seu banco.
+        </li>
       </ul>
 
       <h2>1. Quem é o responsável pelos seus dados</h2>
@@ -61,8 +91,17 @@ export default function PoliticaDePrivacidade() {
         <li>Contas: nome do produto, tipo, saldo e os 4 últimos dígitos do número. O número completo não é guardado.</li>
         <li>Cartões: bandeira, limite, limite usado, dia de fechamento e vencimento, valor e vencimento da fatura.</li>
         <li>
-          Transações: descrição, estabelecimento, valor, data, situação e categoria sugerida pelo provedor. Em transferências,
-          a descrição pode trazer o nome da outra pessoa envolvida (dado de terceiro), que é mostrado só a você.
+          Transações: valor, data, horário (quando o banco informa), se é entrada ou saída, tipo da operação (Pix, TED,
+          boleto, compra, estorno etc.), descrição original enviada pelo banco, se é lançamento futuro e categoria sugerida
+          pelo provedor. Em cartão, também o cartão usado (só os 4 últimos dígitos), a parcela, o mês da fatura e o valor em
+          moeda estrangeira, quando houver.
+        </li>
+        <li>
+          A outra parte de cada transação, quando informada: nome comercial, razão social e CNPJ da empresa identificados
+          pela Polp, se é pessoa física ou jurídica, código do banco e só os 4 últimos dígitos da conta. São dados de
+          terceiros. O CPF de pessoas físicas e a agência da outra parte chegam da Polp mas não são guardados. Quando a Polp não identifica a outra parte, a tela pode mostrar o nome
+          que aparece na descrição original do banco, indicando que foi lido da descrição; esse nome não é guardado à
+          parte.
         </li>
         <li>
           Investimentos que o banco disponibiliza pelo Open Finance: nome e tipo do produto, características do
@@ -73,9 +112,9 @@ export default function PoliticaDePrivacidade() {
 
       <p><strong>Dados que você cadastra</strong></p>
       <ul>
-        <li>Cartões e parcelamentos cadastrados por você (a descrição do parcelamento é guardada cifrada), categorias e edições de nome/categoria das transações importadas.</li>
-        <li>Reserva de emergência e metas de economia que você registra na aba Investimentos: valor da reserva e, de cada meta, nome, valor alvo, valor guardado e prazo. Ficam na sua conta, nos nossos servidores, com nome e valores cifrados.</li>
-        <li>Marcações que você faz em aplicações importadas: qual delas é a sua reserva de emergência e a regra de rendimento que você informar (por exemplo, percentual do CDI), usadas só para as projeções.</li>
+        <li>Categorias e edições de nome/categoria das transações importadas.</li>
+        <li>Metas de economia que você cria na aba Investimentos: nome, valor-alvo e prazo de cada meta. Ficam na sua conta, nos nossos servidores, com nome e valor-alvo cifrados.</li>
+        <li>Marcações que você faz em investimentos e caixinhas importados: quais compõem a sua reserva de emergência e a qual meta cada um está vinculado. O valor da reserva e o progresso das metas são calculados a partir dos saldos informados pelos bancos; você não digita esses valores. Se você tiver informado uma regra de rendimento (por exemplo, percentual do CDI), ela também fica guardada.</li>
       </ul>
 
       <p><strong>Registros de aceite e preferências</strong></p>
@@ -124,7 +163,8 @@ export default function PoliticaDePrivacidade() {
         <li>Registros de acesso, quando gravados: cumprimento de obrigação legal (art. 7º, II; Marco Civil da Internet, art. 15).</li>
         <li>Investimentos e caixinhas importados, e as projeções feitas com eles: execução de contrato, a seu pedido, ao conectar o banco.</li>
         <li>Guardar registros de aceite: exercício regular de direitos (art. 7º, VI).</li>
-        <li>Nomes de terceiros que aparecem em transferências: legítimo interesse (art. 7º, IX), limitado a mostrar seu próprio extrato a você, cifrados no banco de dados e nunca usados para outra finalidade.</li>
+        <li>Mostrar os detalhes de cada transação importada: execução de contrato (art. 7º, V).</li>
+        <li>Dados de terceiros que aparecem nas suas transações (nome, razão social, CNPJ de empresas, tipo de pessoa, código do banco e 4 últimos dígitos da conta da outra parte): legítimo interesse (art. 7º, IX, e art. 10), limitado a mostrar seu próprio extrato e os detalhes de cada transação a você. Guardamos só o necessário para isso, cifrado, e nunca usamos para outra finalidade, como contato, perfil ou publicidade.</li>
         <li>Declaração de maioridade: execução de contrato (o serviço é destinado a maiores de 18 anos).</li>
       </ul>
       <p>Não usamos seus dados para decisões automatizadas sobre você, para publicidade ou para treinar modelos.</p>
@@ -163,7 +203,7 @@ export default function PoliticaDePrivacidade() {
 
       <h2>6. Como protegemos</h2>
       <ul>
-        <li>Saldos, valores, limites, faturas, descrições de transações e de parcelamentos, investimentos e caixinhas importados (nomes e valores de contratos, posições e movimentações), nomes e valores das metas, valor da reserva de emergência, IP dos registros de acesso e os dígitos de conta guardados são cifrados (AES-256-GCM) no banco de dados, com chaves que podem ser trocadas periodicamente.</li>
+        <li>Saldos, valores, limites, faturas, descrições de transações (inclusive a descrição original do banco), nome comercial, razão social, CNPJ e dígitos de conta da outra parte, dígitos do cartão usado, valor em moeda estrangeira, investimentos e caixinhas importados (nomes e valores de contratos, posições e movimentações), nomes e valores-alvo das metas, IP dos registros de acesso e os dígitos de conta guardados são cifrados (AES-256-GCM) no banco de dados, com chaves que podem ser trocadas periodicamente.</li>
         <li>Comunicação cifrada (HTTPS) entre o navegador, o Control Finance e os fornecedores.</li>
         <li>Sessão em cookie que scripts da página não conseguem ler, com proteção contra requisições forjadas por outros sites.</li>
         <li>Cada pessoa só acessa os próprios dados; tentativas repetidas de login são bloqueadas temporariamente.</li>
@@ -173,7 +213,7 @@ export default function PoliticaDePrivacidade() {
 
       <h2>7. Por quanto tempo guardamos</h2>
       <ul>
-        <li>Cadastro, cartões e parcelamentos cadastrados por você, reserva de emergência, metas de economia, edições e preferências: até você excluir a conta (ou remover o item).</li>
+        <li>Cadastro, reserva de emergência, metas de economia, edições e preferências: até você excluir a conta (ou remover o item).</li>
         <li>Dados de um banco conectado, inclusive investimentos e caixinhas: até você desconectar esse banco ou excluir a conta. Ao desconectar, apagamos na hora tudo que veio dele. Um prazo máximo para o histórico importado (extrato, movimentações de investimento e histórico de posições e de caixinhas) pode ser configurado; o prazo em vigor aparece em Privacidade e dados, no painel.</li>
         <li>Marcação de reserva e regras de rendimento em aplicações importadas: até você removê-las, desconectar o banco da aplicação ou excluir a conta.</li>
         <li>Registros de aceite: enquanto a conta existir; são apagados junto com ela.</li>
@@ -198,7 +238,7 @@ export default function PoliticaDePrivacidade() {
 
       <h2>9. Desconectar um banco e excluir a conta</h2>
       <p>
-        <strong>Desconectar um banco</strong> apaga do Control Finance as contas, cartões, extrato, parcelamentos, investimentos e
+        <strong>Desconectar um banco</strong> apaga do Control Finance as contas, cartões, extrato, investimentos e
         caixinhas que vieram dele e pede à Polp que exclua a conexão. Sua conta no Control Finance continua existindo.
       </p>
       <p>

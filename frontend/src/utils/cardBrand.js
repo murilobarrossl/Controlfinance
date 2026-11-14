@@ -16,7 +16,6 @@ export function connectorsByName(connectors) {
 }
 
 export function cardBrand(source, connectorsMap) {
-  if (source.isSynced === false) return { name: "Cartão manual", isManual: true };
   const name = source.bankName || "Banco conectado";
   const connector = connectorsMap.get(normalizeName(name));
   return {
@@ -58,6 +57,6 @@ export function cardPickerOption(card, brand) {
     title: brand.name,
     subtitle: card.name,
     color: brand.color,
-    logo: brand.isManual ? null : brand,
+    logo: brand,
   };
 }

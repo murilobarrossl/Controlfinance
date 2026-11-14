@@ -17,7 +17,6 @@ public static class PrivacyBackfill
         var users = await StripRecoverableDocumentsAsync(db, ct);
         var transactions = await EncryptLegacyTransactionNamesAsync(db, ct);
         var accounts = await MaskAccountNumbersAsync(db, ct);
-        var installments = await EncryptLegacyInstallmentDescriptionsAsync(db, ct);
 
         // Irreversível (o texto puro do nome normalizado some), por isso só com opt-in do
         // operador. Sem rodar, nada quebra: RecurrenceKey reconhece também a chave antiga.
@@ -26,38 +25,10 @@ public static class PrivacyBackfill
             : 0;
 
         // Só contagens: nenhum dado do usuário vai pro log.
-        if (users + transactions + accounts + installments + recurrences > 0)
+        if (users + transactions + accounts + recurrences > 0)
             logger.LogInformation(
-                "PrivacyBackfill: {Users} documento(s) reduzido(s) a tipo, {Transactions} nome(s) de transação cifrado(s), {Accounts} número(s) de conta mascarado(s), {Installments} descrição(ões) de parcelamento cifrada(s), {Recurrences} chave(s) de recorrência convertida(s) em hash.",
-                users, transactions, accounts, installments, recurrences);
-    }
-
-    // Descrição de parcelamento em texto puro (coluna "Description", shadow LegacyDescription) →
-    // DescriptionEncrypted. Reversível: o valor continua decifrável com a chave.
-    private static async Task<int> EncryptLegacyInstallmentDescriptionsAsync(AppDbContext db, CancellationToken ct)
-    {
-        var total = 0;
-        while (true)
-        {
-            var batch = await db.Installments
-                .Where(i => EF.Property<string?>(i, "LegacyDescription") != null)
-                .OrderBy(i => i.Id)
-                .Take(BatchSize)
-                .ToListAsync(ct);
-            if (batch.Count == 0) return total;
-
-            foreach (var installment in batch)
-            {
-                var legacy = db.Entry(installment).Property<string?>("LegacyDescription");
-                if (string.IsNullOrEmpty(installment.Description))
-                    installment.Description = legacy.CurrentValue ?? string.Empty;
-                legacy.CurrentValue = null;
-            }
-
-            await db.SaveChangesAsync(ct);
-            db.ChangeTracker.Clear();
-            total += batch.Count;
-        }
+                "PrivacyBackfill: {Users} documento(s) reduzido(s) a tipo, {Transactions} nome(s) de transação cifrado(s), {Accounts} número(s) de conta mascarado(s), {Recurrences} chave(s) de recorrência convertida(s) em hash.",
+                users, transactions, accounts, recurrences);
     }
 
     private static async Task<int> HashLegacyRecurrenceNamesAsync(AppDbContext db, IEncryptionService encryption, CancellationToken ct)

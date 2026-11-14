@@ -3,11 +3,13 @@ import { loadPlanning } from "../../../api/planning.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 
-const INITIAL = { status: "loading", reserve: null, goals: [], rateProfiles: {}, legacyReserveAmount: null };
+const INITIAL = { status: "loading", reserve: null, goals: [], rateProfiles: {} };
 
 function indexProfiles(list) {
   return Object.fromEntries((list ?? []).map((profile) => [profile.bankAccountId, profile]));
 }
+
+const fromServer = (planning) => ({ reserve: planning.reserve ?? null, goals: planning.goals ?? [], rateProfiles: indexProfiles(planning.rateProfiles) });
 
 export default function usePlanning() {
   const owner = useAuth()?.user?.id;
@@ -18,16 +20,9 @@ export default function usePlanning() {
     const controller = new AbortController();
     setState((prev) => prev.owner === owner ? prev : { ...INITIAL, owner });
     loadPlanning({ signal: controller.signal })
-      .then(({ planning, legacyReserveAmount }) => {
+      .then((planning) => {
         if (controller.signal.aborted) return;
-        setState({
-          owner,
-          status: "ready",
-          reserve: planning.reserve ?? null,
-          goals: planning.goals ?? [],
-          rateProfiles: indexProfiles(planning.rateProfiles),
-          legacyReserveAmount,
-        });
+        setState({ owner, status: "ready", ...fromServer(planning) });
       })
       .catch((err) => {
         if (!isAbortError(err) && !controller.signal.aborted) setState((prev) => ({ ...prev, status: "error" }));
@@ -40,9 +35,9 @@ export default function usePlanning() {
     setReloadKey((key) => key + 1);
   }, []);
 
-  const setReserve = useCallback((reserve) => setState((prev) => prev.owner === owner ? { ...prev, reserve } : prev), [owner]);
+  // Respostas de vínculo trazem o planejamento inteiro: substitui de uma vez reserva e metas.
+  const replace = useCallback((planning) => setState((prev) => prev.owner === owner ? { ...prev, ...fromServer(planning) } : prev), [owner]);
   const updateGoals = useCallback((update) => setState((prev) => prev.owner === owner ? { ...prev, goals: update(prev.goals) } : prev), [owner]);
-  const clearLegacyReserveNotice = useCallback(() => setState((prev) => prev.owner === owner ? { ...prev, legacyReserveAmount: null } : prev), [owner]);
   const setRateProfile = useCallback(
     (accountId, profile) =>
       setState((prev) => {
@@ -55,5 +50,5 @@ export default function usePlanning() {
     [owner],
   );
 
-  return { ...(state.owner === owner ? state : INITIAL), retry, setReserve, updateGoals, clearLegacyReserveNotice, setRateProfile };
+  return { ...(state.owner === owner ? state : INITIAL), retry, replace, updateGoals, setRateProfile };
 }

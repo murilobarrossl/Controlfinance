@@ -41,12 +41,12 @@ const PERGUNTAS = [
   {
     pergunta: "Qual a diferença entre conta corrente e cartão de crédito no painel?",
     resposta:
-      "A conta corrente mostra o dinheiro que você tem hoje: saldo, entradas e saídas. O cartão de crédito mostra o que você gastou usando crédito e ainda vai pagar na fatura. Fatura, limite, vencimentos e parcelamentos ficam reunidos na aba Cartões.",
+      "A conta corrente mostra o dinheiro que você tem hoje: saldo, entradas e saídas. O cartão de crédito mostra o que você gastou usando crédito e ainda vai pagar na fatura. Fatura, limite, vencimentos e extrato do cartão ficam reunidos na aba Cartões.",
   },
   {
     pergunta: "O que eu encontro no painel?",
     resposta:
-      "Um dashboard com saldo, receitas e despesas do mês e principais categorias de gasto; a aba Cartões, com fatura, limite, próximos vencimentos e parcelamentos; Receitas e despesas e Categorias, para entender para onde vai o dinheiro; Relatórios, com o histórico de lançamentos filtrável por mês ou por todo o período; Investimentos, com as contas de reserva e investimento reconhecidas nos seus bancos conectados, metas de economia e um simulador de financiamento; e Privacidade e dados, onde você baixa uma cópia dos seus dados, desconecta bancos e exclui a conta.",
+      "Um dashboard com saldo, receitas e despesas do mês e principais categorias de gasto; a aba Cartões, com fatura, limite, próximos vencimentos e extrato de cada cartão; Receitas e despesas e Categorias, para entender para onde vai o dinheiro; Relatórios, com o histórico de lançamentos filtrável por mês ou por todo o período; Investimentos, com as contas de reserva e investimento reconhecidas nos seus bancos conectados, metas de economia e um simulador de financiamento; e Privacidade e dados, onde você baixa uma cópia dos seus dados, desconecta bancos e exclui a conta.",
   },
   {
     pergunta: "Vou receber lembretes de vencimento?",

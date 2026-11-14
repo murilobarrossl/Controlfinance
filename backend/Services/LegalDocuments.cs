@@ -6,7 +6,7 @@ namespace ControlFinance.API.Services;
 // frontend/src/legal/versions.js.
 public static class LegalDocuments
 {
-    public const string TermsVersion = "2026-11-12";
-    public const string PrivacyVersion = "2026-11-12";
+    public const string TermsVersion = "2026-11-14";
+    public const string PrivacyVersion = "2026-11-14";
     public const string BankConnectionNoticeVersion = "2026-11-11";
 }

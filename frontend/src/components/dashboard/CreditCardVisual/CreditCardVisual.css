@@ -36,49 +36,6 @@
   outline-offset: 4px;
 }
 
-.credit-card-visual__star {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  margin: -0.5rem -0.6rem -0.5rem 0;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--card-text);
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.credit-card-visual__star::before {
-  content: "";
-  position: absolute;
-  inset: -0.25rem;
-}
-
-.credit-card-visual__star svg {
-  width: 18px;
-  height: 18px;
-}
-
-.credit-card-visual__star:hover {
-  background-color: color-mix(in srgb, var(--card-text) 14%, transparent);
-}
-
-.credit-card-visual__star:focus-visible {
-  outline: 2px solid var(--card-text);
-  outline-offset: -2px;
-}
-
-.credit-card-visual__star--active,
-.credit-card-visual__star--active:hover {
-  background-color: transparent;
-  cursor: default;
-}
-
 .credit-card-visual__stats {
   display: flex;
   flex-direction: column;
@@ -120,20 +77,6 @@
   text-align: right;
   color: var(--color-text-secondary);
   font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.credit-card-visual__minor {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
-}
-
-.credit-card-visual__minor-value {
-  color: var(--color-text-primary);
-  font-size: 0.9rem;
-  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 

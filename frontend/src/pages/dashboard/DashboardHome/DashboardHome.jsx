@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { getDashboardSummary } from "../../../api/dashboard.js";
 import { getTransactionAggregates } from "../../../api/transactions.js";
 import { getCategories } from "../../../api/categories.js";
-import { getCreditCardsSummary, setPrimaryCard } from "../../../api/creditCards.js";
+import { getCreditCardsSummary } from "../../../api/creditCards.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
@@ -109,10 +109,10 @@ export default function DashboardHome() {
   usePageTitle("Dashboard inteligente");
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { connectors, accountsStatus, effectiveScope, scopeKey, scopeQuery, dataRefreshKey, bumpDataRefresh } = useAccount();
+  const { connectors, accountsStatus, effectiveScope, scopeKey, scopeQuery, dataRefreshKey } = useAccount();
   const [categories, setCategories] = useState([]);
   const [allCards, setAllCards] = useState([]);
-  const [cardSwitchError, setCardSwitchError] = useState("");
+  const [shownCardId, setShownCardId] = useState(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -122,15 +122,6 @@ export default function DashboardHome() {
     return () => controller.abort();
   }, [dataRefreshKey]);
 
-  async function handlePrimaryChange(cardId) {
-    setCardSwitchError("");
-    try {
-      await setPrimaryCard(cardId);
-      bumpDataRefresh();
-    } catch (err) {
-      setCardSwitchError(err.message || "Não foi possível trocar o cartão.");
-    }
-  }
   const [result, setResult] = useState(null);
   const requestKey = `${scopeKey}|${dataRefreshKey}`;
   const loading = accountsStatus !== "ready" || result?.key !== requestKey;
@@ -215,7 +206,8 @@ export default function DashboardHome() {
     );
   }
 
-  const { account, totalIncome, totalExpense, categoryExpenses, activeCard } = summary;
+  const { account, totalIncome, totalExpense, categoryExpenses } = summary;
+  const activeCard = allCards.find((c) => c.id === shownCardId) ?? summary.activeCard;
   const monthlyBalance = roundMoney(totalIncome - totalExpense);
   const percentageSpent = totalIncome > 0 ? (totalExpense / totalIncome) * 100 : null;
   const savingsRate =
@@ -361,42 +353,35 @@ export default function DashboardHome() {
         </Card>
       </div>
 
-      <div className="dashboard-home__grid">
-        {activeCard && (
-          <Card
-            className="dashboard-home__card-block"
-            title="Seu cartão"
-            action={
-              allCards.length > 1 ? (
-                <CardPicker
-                  id="dashboard-trocar-cartao"
-                  options={cardOptions}
-                  value={activeCard.id}
-                  onChange={(id) => id !== activeCard.id && handlePrimaryChange(id)}
-                  triggerLabel="Trocar"
-                  ariaLabel="Trocar o cartão mostrado aqui"
-                />
-              ) : (
-                <Link to="/dashboard/cartoes" className="dashboard-home__card-switch">
-                  Trocar
-                </Link>
-              )
-            }
-          >
-            <CardOverview
-              card={activeCard}
-              cardholderName={user?.name}
-              onOpenCards={() => setCardConfirmOpen(true)}
-              refreshKey={dataRefreshKey}
-            />
-            {cardSwitchError && (
-              <p className="dashboard-home__error" role="alert">
-                {cardSwitchError}
-              </p>
-            )}
-          </Card>
-        )}
-      </div>
+      {activeCard && (
+        <Card
+          className="dashboard-home__card-block"
+          title="Seu cartão"
+          action={
+            allCards.length > 1 ? (
+              <CardPicker
+                id="dashboard-trocar-cartao"
+                options={cardOptions}
+                value={activeCard.id}
+                onChange={setShownCardId}
+                triggerLabel="Trocar"
+                ariaLabel="Trocar o cartão mostrado aqui"
+              />
+            ) : (
+              <Link to="/dashboard/cartoes" className="dashboard-home__card-switch">
+                Trocar
+              </Link>
+            )
+          }
+        >
+          <CardOverview
+            card={activeCard}
+            cardholderName={user?.name}
+            onOpenCards={() => setCardConfirmOpen(true)}
+            refreshKey={dataRefreshKey}
+          />
+        </Card>
+      )}
 
       <ConfirmDialog
         open={cardConfirmOpen}

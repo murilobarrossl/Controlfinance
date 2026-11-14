@@ -327,6 +327,8 @@
 }
 
 .relatorios__transfer-badge {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   border-radius: var(--radius-pill);
@@ -413,6 +415,7 @@
 
 .relatorios__row-action {
   position: relative;
+  z-index: 1;
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -475,6 +478,33 @@
 .relatorios__row-action:hover:not(:disabled) {
   background-color: var(--color-surface-hover);
   color: var(--color-text-primary);
+}
+
+/* O link cobre a linha inteira; os botões de edição ficam acima dele (z-index em row-action). */
+.relatorios__row {
+  position: relative;
+}
+
+.relatorios__row-link {
+  position: absolute;
+  inset: 0;
+}
+
+.relatorios__row:has(.relatorios__row-link) {
+  cursor: pointer;
+}
+
+.relatorios__row:has(.relatorios__row-link):hover > td {
+  background-color: var(--color-surface-hover);
+}
+
+.relatorios__row:has(.relatorios__row-link:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.relatorios__row-link:focus-visible {
+  outline: none;
 }
 
 /* Ordenado por data, a data aparece só na faixa do dia e esta célula fica vazia; em outra

@@ -61,7 +61,6 @@ public class AccountController(
                 lembretesDeVencimento = user.DueRemindersEnabled,
                 avisoMensal = user.MonthlySummaryEnabled,
                 fusoHorario = user.TimeZone,
-                cartaoPrincipalId = user.PrimaryCardId,
             },
             aceites = await db.ConsentRecords
                 .AsNoTracking()
@@ -106,12 +105,22 @@ public class AccountController(
                 categoria = t.CategoryId.HasValue ? categoryNames.GetValueOrDefault(t.CategoryId.Value) : null,
                 conta = t.BankAccountId.HasValue ? accountNames.GetValueOrDefault(t.BankAccountId.Value) : null,
                 fixa = t.IsFixed,
+                dataHoraNoBanco = t.BankDateTime,
+                tipoOperacao = t.BankOperationType,
+                descricaoNoBanco = t.BankDescription,
+                contraparteRazaoSocial = t.CounterpartyName,
+                contraparteNomeComercial = t.CounterpartyAlias,
+                contraparteCnpj = t.CounterpartyCnpj,
+                contraparteTipoPessoa = t.CounterpartyPersonType,
+                bancoContraparte = t.CounterpartyBankCode,
+                contaContraparte = t.CounterpartyAccount,
+                cartao = t.CardNumber,
+                parcela = t.InstallmentNumber,
+                totalParcelas = t.InstallmentTotal,
+                valorOriginal = t.OriginalAmount,
+                moedaOriginal = t.OriginalCurrency,
+                mesFatura = t.BillMonth,
             }),
-            cartoesManuais = await db.CreditCards
-                .AsNoTracking()
-                .Where(c => c.UserId == UserId)
-                .Select(c => new { c.Name, bandeira = c.Brand, limite = c.CreditLimit, limiteUsado = c.UsedLimit, diaFechamento = c.ClosingDay, diaVencimento = c.DueDay })
-                .ToListAsync(ct),
             // Registros de acesso só existem se AccessLog:Mode estiver ligado. São dados do
             // titular, então entram na cópia (LGPD art. 18, II).
             registrosDeAcesso = (await db.AccessLogs
@@ -120,18 +129,19 @@ public class AccountController(
                     .OrderBy(a => a.OccurredAt)
                     .ToListAsync(ct))
                 .Select(a => new { evento = a.Event, em = a.OccurredAt, ip = a.IpAddress }),
-            parcelamentos = (await db.Installments
-                .AsNoTracking()
-                .Where(i => i.UserId == UserId)
-                .ToListAsync(ct))
-                .Select(i => new { descricao = i.Description, valorTotal = i.TotalAmount, parcelas = i.TotalInstallments, parcelaAtual = i.CurrentInstallment, valorParcela = i.InstallmentAmount, proximoVencimento = i.NextDueDate }),
             reservaDeEmergencia = (await db.EmergencyReserves
                 .AsNoTracking()
                 .Where(r => r.UserId == UserId)
                 .ToListAsync(ct))
-                .Select(r => new { valor = r.CurrentAmount, contaVinculadaId = r.BankAccountId,
-                    investimentoVinculadoId = r.ImportedInvestmentId, saldoReservadoVinculadoId = r.ImportedReservedBalanceId, atualizadaEm = r.UpdatedAt })
+                .Select(r => new { contaVinculadaId = r.BankAccountId, atualizadaEm = r.UpdatedAt })
                 .FirstOrDefault(),
+            vinculosDePlanejamento = await db.PlanningAllocations
+                .AsNoTracking()
+                .Where(a => a.UserId == UserId)
+                .OrderBy(a => a.CreatedAt)
+                .Select(a => new { destino = a.GoalId == null ? "reserva" : "meta", metaId = a.GoalId,
+                    investimentoId = a.ImportedInvestmentId, caixinhaId = a.ImportedReservedBalanceId, criadoEm = a.CreatedAt })
+                .ToListAsync(ct),
             regrasDeRendimento = await db.InvestmentRateProfiles
                 .AsNoTracking()
                 .Where(p => p.UserId == UserId)
@@ -142,7 +152,7 @@ public class AccountController(
                 .Where(g => g.UserId == UserId)
                 .OrderBy(g => g.CreatedAt)
                 .ToListAsync(ct))
-                .Select(g => new { nome = g.Name, valorAlvo = g.TargetAmount, valorGuardado = g.CurrentAmount, prazo = g.Deadline, criadaEm = g.CreatedAt }),
+                .Select(g => new { id = g.Id, nome = g.Name, valorAlvo = g.TargetAmount, prazo = g.Deadline, criadaEm = g.CreatedAt }),
         };
 
         Response.Headers.Append("Cache-Control", "no-store");
@@ -218,10 +228,9 @@ public class AccountController(
         await using (var tx = await db.Database.BeginTransactionAsync(ct))
         {
             await disconnectService.MarkAccountResourcesRemovedAsync(UserId, ct);
-            // Installment não tem FK pra Users (só UserId solto), então não sai no cascade.
-            await db.Installments.Where(i => i.UserId == UserId).ExecuteDeleteAsync(ct);
             // Reserva e metas também têm cascade de Users, mas saem explicitamente: são dados que o
             // usuário digitou, e a exclusão deles não pode depender só da FK existir no banco.
+            await db.PlanningAllocations.Where(a => a.UserId == UserId).ExecuteDeleteAsync(ct);
             await db.SavingsGoals.Where(g => g.UserId == UserId).ExecuteDeleteAsync(ct);
             await db.InvestmentRateProfiles.Where(p => p.UserId == UserId).ExecuteDeleteAsync(ct);
             await db.EmergencyReserves.Where(r => r.UserId == UserId).ExecuteDeleteAsync(ct);

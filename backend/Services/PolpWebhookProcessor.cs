@@ -79,6 +79,13 @@ public class PolpWebhookProcessor(
                 break;
             }
 
+            case PolpInternalEvents.TransactionDetails:
+            {
+                var local = await IntegrationAsync(evt, ct);
+                if (local is not null) await sync.RefreshTransactionDetailsAsync(local, ct);
+                break;
+            }
+
             case PolpInternalEvents.Reconcile:
             {
                 var local = await IntegrationAsync(evt, ct);

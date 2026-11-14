@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project overview
 
 Control Finance is a personal finance web app: an ASP.NET Core 8 API backend (`backend/`) and a
-React + Vite frontend (`frontend/`). Users track bank accounts, transactions, credit cards, and
-installments, optionally synced automatically via the Polp open-finance integration.
+React + Vite frontend (`frontend/`). Users track bank accounts, transactions and credit cards, synced
+automatically via the Polp open-finance integration.
 
 The `ControlFinance/` directory at repo root is stale (only contains `node_modules`, no source);
 ignore it.
@@ -84,7 +84,7 @@ Auth is **cookie-based**, not bearer-token-in-JS, despite still using JWTs inter
 ### Data protection / encryption
 
 - Sensitive columns (money amounts: `Balance`, `Amount`, `CreditLimit`, `UsedLimit`,
-  `TotalAmount`, `InstallmentAmount`, `CurrentInvoiceAmount`; `Transaction.Name`; masked
+  `CurrentInvoiceAmount`; `Transaction.Name`; masked
   `BankAccount.Number`) are encrypted at rest with AES-256-GCM via
   `IEncryptionService`, wired in transparently as EF Core `ValueConverter`s in
   `AppDbContext.OnModelCreating`. Application code always reads/writes plaintext; only the DB
@@ -106,7 +106,7 @@ Auth is **cookie-based**, not bearer-token-in-JS, despite still using JWTs inter
   `ComputeLookupHashCandidates` (CPF is not stored, so hash rotation is lazy: re-hashed when the user
   types the document again). `EncryptionKeyRotation` (opt-in `Encryption:RotateOnStartup`) re-encrypts
   every `...Encrypted` column. Never remove a key before rotation finished.
-- `Installment.Description` is encrypted too; `RecurrenceDecision.NormalizedName` stores an HMAC
+- `RecurrenceDecision.NormalizedName` stores an HMAC
   (`RecurrenceKey`), never the plain normalized transaction name.
 - Retention and access logs are opt-in config: `DataRetention:SyncedHistoryMonths` (skip at import +
   daily purge of old imported transactions), `AccessLog:Mode` (`Off` | `Authentication`, IP encrypted,
@@ -118,14 +118,13 @@ Auth is **cookie-based**, not bearer-token-in-JS, despite still using JWTs inter
 
 ### Domain model (`backend/Models`, `backend/Data/AppDbContext.cs`)
 
-`User` → `BankAccount`, `Category`, `CreditCard`, `Transaction` (each cascade-deletes with the
-user). `Transaction` optionally links to a `BankAccount` and/or `Category` (`SetNull` on delete).
-`Installment` optionally links to a `CreditCard`. `PolpIntegration` tracks an open-finance link
+`User` → `BankAccount`, `Category`, `Transaction` (each cascade-deletes with the user). `Transaction` optionally links to a `BankAccount` and/or `Category` (`SetNull` on delete).
+`PolpIntegration` tracks an open-finance link
 per user/institution. `ConsentRecord` is the append-only log of accepted Terms/Privacy versions and
 bank-connection notices (versions in `LegalDocuments.cs` and `frontend/src/legal/versions.js`,
-must match). `Installment` has no FK to `User`: delete it explicitly. `Transaction`/`Installment`
-→ `BankAccount` is `SetNull`, so deleting accounts must go through
-`PolpDisconnectService.DeleteAccountsDataAsync` to avoid orphaned statements.
+must match). `Transaction` → `BankAccount` is `SetNull`, so deleting accounts must go through
+`PolpDisconnectService.DeleteAccountsDataAsync` to avoid orphaned statements. Credit cards come only
+from the bank (no manual cards or installments; migration `RemoveManualCardsAndInstallments`).
 
 ### Polp integration (open finance sync, API v2 / Celcoin)
 

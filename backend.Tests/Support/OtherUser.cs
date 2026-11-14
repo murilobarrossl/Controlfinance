@@ -15,9 +15,7 @@ public sealed record OtherUser(
     BankAccount Card,
     BankAccount ManualAccount,
     Category Category,
-    Transaction Transaction,
-    CreditCard ManualCard,
-    Installment Installment)
+    Transaction Transaction)
 {
     public const string AccountName = "Conta da outra pessoa";
     public const string TransactionName = "Compra da outra pessoa";
@@ -60,25 +58,10 @@ public sealed record OtherUser(
             Type = TransactionType.Expense, Status = TransactionStatus.Pending, Amount = 321.09m,
             DueDate = Dates.Today.AddDays(1), Description = Guid.NewGuid().ToString()
         };
-        var manualCard = new CreditCard
-        {
-            UserId = user.Id, Name = "Cartão manual da outra pessoa", CreditLimit = 5000m, UsedLimit = 100m,
-            ClosingDay = 5, DueDay = 15
-        };
         t.Db.Transactions.Add(transaction);
-        t.Db.CreditCards.Add(manualCard);
         t.Db.SaveChanges();
 
-        var installment = new Installment
-        {
-            UserId = user.Id, BankAccountId = card.Id, Description = "Parcela da outra pessoa", TotalAmount = 300m,
-            TotalInstallments = 3, CurrentInstallment = 1, InstallmentAmount = 100m,
-            NextDueDate = Dates.Today.AddMonths(1)
-        };
-        t.Db.Installments.Add(installment);
-        t.Db.SaveChanges();
-
-        return new OtherUser(user, integration, account, card, manual, category, transaction, manualCard, installment);
+        return new OtherUser(user, integration, account, card, manual, category, transaction);
     }
 }
 

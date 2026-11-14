@@ -5,18 +5,30 @@ using ControlFinance.API.Models;
 
 namespace ControlFinance.API.Services;
 
-// Mesma regra de utils/importedInvestments.js (isEmergencyReserveName).
+// Mesma regra de utils/importedInvestments.js (isEmergencyReserveName). O banco não informa a
+// finalidade de uma caixinha, então o nome é o único sinal: caixinha com a palavra "reserva" entra na
+// reserva sozinha; aplicação (CDB, fundo...) só com o nome exato, porque "reserva" ali é ambíguo.
 public static class EmergencyReserveNames
 {
     private const string Target = "reserva de emergencia";
 
-    public static bool IsAuto(string? name)
+    public static bool IsAuto(string? name, bool reservedBalance)
     {
-        if (string.IsNullOrWhiteSpace(name)) return false;
+        var words = Words(name);
+        return reservedBalance ? words.Any(w => w is "reserva" or "reservas") : string.Join(' ', words) == Target;
+    }
+
+    private static string[] Words(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return [];
         var plain = new StringBuilder();
         foreach (var c in name.Normalize(NormalizationForm.FormD))
-            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark) plain.Append(c);
-        return string.Join(' ', plain.ToString().ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)) == Target;
+        {
+            var category = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (category == UnicodeCategory.NonSpacingMark) continue;
+            plain.Append(char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : ' ');
+        }
+        return plain.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries);
     }
 
     public static List<Guid> Excluded(EmergencyReserve reserve)

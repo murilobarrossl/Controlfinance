@@ -86,6 +86,7 @@ public class PolpReconciliationService(
                 var integrations = await query.OrderBy(p => p.Id).Select(p => new
                 {
                     p.Id, p.PolpIntegrationId, p.SyncedLocally,
+                    NeedsTransactionDetails = p.SyncedLocally && p.TransactionDetailsVersion < PolpSyncService.TransactionDetailsVersion,
                     // Upgrade/startup recovery must not wait for this connection's daily bucket.
                     NeedsInvestmentRecovery = !db.InvestmentSyncStates.Any(s => s.UserId == p.UserId
                         && s.IntegrationId == p.Id && s.Kind == "discovery")
@@ -97,6 +98,9 @@ public class PolpReconciliationService(
                 if (integrations.Count == 0) break;
                 foreach (var integration in integrations)
                 {
+                    if (integration.NeedsTransactionDetails)
+                        await inbox.EnqueueAsync(new PolpInboxEvent(
+                            PolpInternalEvents.TransactionDetails, "consents", integration.PolpIntegrationId.ToString(), null, PolpInboxPriority.Low), ct);
                     var scheduled = Schedule.Bucket(integration.Id) == round;
                     if (!scheduled && !integration.NeedsInvestmentRecovery) continue;
                     if (scheduled)

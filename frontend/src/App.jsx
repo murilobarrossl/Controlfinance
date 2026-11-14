@@ -17,6 +17,7 @@ const DashboardHome = lazy(() => import("./pages/dashboard/DashboardHome/Dashboa
 const Cartoes = lazy(() => import("./pages/dashboard/Cartoes/Cartoes.jsx"));
 const ReceitasDespesas = lazy(() => import("./pages/dashboard/ReceitasDespesas/ReceitasDespesas.jsx"));
 const Relatorios = lazy(() => import("./pages/dashboard/Relatorios/Relatorios.jsx"));
+const TransactionDetail = lazy(() => import("./pages/dashboard/Relatorios/TransactionDetail.jsx"));
 const Categorias = lazy(() => import("./pages/dashboard/Categorias/Categorias.jsx"));
 const Investimentos = lazy(() => import("./pages/dashboard/Investimentos/Investimentos.jsx"));
 const Privacidade = lazy(() => import("./pages/dashboard/Privacidade/Privacidade.jsx"));
@@ -61,6 +62,7 @@ function AppRoutes() {
             <Route path="cartoes" element={<Cartoes />} />
             <Route path="receitas-despesas" element={<ReceitasDespesas />} />
             <Route path="relatorios" element={<Relatorios />} />
+            <Route path="relatorios/:transactionId" element={<TransactionDetail />} />
             <Route path="categorias" element={<Categorias />} />
             <Route path="investimentos" element={<Investimentos />} />
             <Route path="privacidade" element={<Privacidade />} />

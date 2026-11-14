@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import Button from "../../../components/ui/Button/Button.jsx";
-import { InfoIcon, ShieldIcon, TrendUpIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
-import { classifyInvestmentReserve } from "../../../api/investments.js";
-import { dateLabel, formatExact, formatMoney, formatContractNumber, isReserve, moneyField, STATE_TEXT, validMoney } from "../../../utils/importedInvestments.js";
+import { ShieldIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
+import { setReserveResource } from "../../../api/planning.js";
+import { dateLabel, formatExact, formatMoney, formatContractNumber, goalOf, isReserve, moneyField, STATE_TEXT, validMoney } from "../../../utils/importedInvestments.js";
 import { useInvestmentResource } from "./useInvestmentResource.js";
+import useSaving from "./useSaving.js";
 import InvestmentYieldChart from "./InvestmentYieldChart.jsx";
 
 export const MOVEMENT_NAMES = {
@@ -26,22 +27,17 @@ function TextRow({ label, value }) { return <div><dt>{label}</dt><dd>{value || "
 function ScalarRow({ label, document, field }) {
   return <TextRow label={label} value={document?.availability?.[field] === "available" ? formatExact(document.values?.[field]) : null} />;
 }
-export function ReserveResourceButton({ item, planning }) {
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(false);
-  const selected = isReserve(item, planning.reserve);
-  async function change() {
-    if (saving) return;
-    setSaving(true); setError(false);
-    try { planning.setReserve(await classifyInvestmentReserve(item, !selected)); }
-    catch { setError(true); }
-    finally { setSaving(false); }
-  }
+function ReserveResourceButton({ item, planning }) {
+  const { saving, error, run } = useSaving();
+  const goal = goalOf(item, planning.goals);
+  const selected = isReserve(item, planning.reserve, planning.goals);
+  if (goal) return <p className="inv-detail__updated">Vinculado à meta “{goal.name}”</p>;
   return <div className="inv-real__reserve-action">
-    <Button as="button" type="button" variant="outline" size="sm" onClick={change} disabled={saving || planning.status !== "ready"} aria-pressed={selected}>
-      <ShieldIcon />{saving ? "Salvando…" : selected ? "Desmarcar reserva de emergência" : "Usar como reserva de emergência"}
+    <Button as="button" type="button" variant="outline" size="sm" onClick={() => run(async () => planning.replace(await setReserveResource(item, !selected)))}
+      disabled={saving || planning.status !== "ready"} aria-pressed={selected}>
+      <ShieldIcon />{saving ? "Salvando…" : selected ? "Tirar da reserva de emergência" : "Usar como reserva de emergência"}
     </Button>
-    {error && <p className="investimentos__error" role="alert">Não foi possível salvar a classificação. Atualize os dados e tente novamente.</p>}
+    {error && <p className="investimentos__error" role="alert">{error}</p>}
   </div>;
 }
 function More({ dataset, onMore }) {
@@ -80,15 +76,15 @@ function RealHistory({ dataset, item, onMore, retry }) {
   const currency = currencies.includes(currencyChoice) ? currencyChoice : currencies[0];
   const compatible = points.map((p) => ({ ...p, money: p.money?.currency === currency ? p.money : null }));
   return <section className="inv-detail__section">
-    <div className="inv-detail__section-head"><h4 className="inv-detail__title inv-detail__title--lead">{item.reserved ? "Evolução dos saldos registrados" : "Evolução real da posição"}</h4>
+    <div className="inv-detail__section-head"><h4 className="inv-detail__title">{item.reserved ? "Evolução do saldo" : "Evolução da posição"}</h4>
       {!item.reserved && <label className="inv-real__select">Saldo<select value={field} onChange={(e) => setField(e.target.value)}><option value="gross_amount">Bruto</option><option value="net_amount">Líquido</option></select></label>}
       {currencies.length > 1 && <label className="inv-real__select">Moeda<select value={currency} onChange={(e) => setCurrency(e.target.value)}>{currencies.map((c) => <option key={c}>{c}</option>)}</select></label>}
     </div>
-    {dataset.status === "loading" ? <p className="investimentos__hint" role="status">Carregando posições observadas…</p>
-      : dataset.status === "error" ? <div role="alert"><p>Não foi possível obter o histórico agora.</p><button type="button" className="investimentos__link-button" onClick={retry}>Tentar novamente</button></div>
+    {dataset.status === "loading" ? <p className="investimentos__hint" role="status">Carregando histórico…</p>
+      : dataset.status === "error" ? <div className="investimentos__failure" role="alert"><p className="investimentos__hint">Não foi possível obter o histórico agora.</p><button type="button" className="investimentos__link-button" onClick={retry}>Tentar novamente</button></div>
       : <>
         <InvestmentYieldChart kind="historical" points={compatible} idPrefix={item.key} />
-        {item.reserved && <p className="investimentos__hint">As datas indicam quando o Control Finance registrou cada saldo. A instituição não informou uma data própria de referência. Reservas com vários saldos sem identificação individual são exibidas na tabela.</p>}
+        {item.reserved && <p className="investimentos__fineprint">As datas indicam quando cada saldo foi recebido.</p>}
         <details className="investimentos__explain"><summary>Ver posições registradas ({dataset.data.length})</summary>
           <div className="investimentos__table-wrap"><table className="investimentos__table"><thead><tr><th>{item.reserved ? "Registro" : "Referência"}</th><th>Valor informado</th><th>Coleta</th></tr></thead><tbody>
             {dataset.data.map((row) => {
@@ -100,7 +96,7 @@ function RealHistory({ dataset, item, onMore, retry }) {
           {dataset.data.length === 0 && <p className="investimentos__hint">Ainda não há posições registradas.</p>}
         </details>
         <More dataset={dataset} onMore={onMore} />
-        {dataset.cursor && <p className="investimentos__hint">O gráfico inclui apenas os registros carregados. Carregue outras páginas para ampliar o período.</p>}
+        {dataset.cursor && <p className="investimentos__hint">O gráfico mostra só os registros já carregados. Carregue mais para ampliar o período.</p>}
       </>}
   </section>;
 }
@@ -112,7 +108,7 @@ function MonthlyResults({ state, month, setMonth }) {
   const result = state.data;
   const period = /^\d{4}-\d{2}$/.test(month) ? MONTH_NAMES.format(new Date(`${month}-01T00:00:00Z`)) : "mês selecionado";
   return <section className="inv-detail__section">
-    <div className="inv-detail__section-head"><h4 className="inv-detail__title inv-detail__title--lead">Rendimento mês a mês</h4><label className="inv-real__select">Mês<input type="month" value={month} min="1901-01" max={currentMonth()} onChange={(e) => { if (/^\d{4}-\d{2}$/.test(e.target.value) && e.target.value <= currentMonth()) setMonth(e.target.value); }} /></label></div>
+    <div className="inv-detail__section-head"><h4 className="inv-detail__title">Rendimento mês a mês</h4><label className="inv-real__select">Mês<input type="month" value={month} min="1901-01" max={currentMonth()} onChange={(e) => { if (/^\d{4}-\d{2}$/.test(e.target.value) && e.target.value <= currentMonth()) setMonth(e.target.value); }} /></label></div>
     {state.status === "loading" ? <p className="investimentos__hint" role="status">Consultando os dados de {period}…</p>
       : state.status === "error" ? <p className="investimentos__hint" role="alert">Não foi possível consultar os resultados deste período. Atualize o detalhamento para tentar novamente.</p>
       : <>
@@ -120,28 +116,28 @@ function MonthlyResults({ state, month, setMonth }) {
           <TextRow label={`Rendimento bruto · ${period}`} value={result?.monthlyGrossIncome?.status !== "unavailable" ? formatMoney(result?.monthlyGrossIncome?.value) : "Não determinado"} />
           <TextRow label={`Rendimento líquido · ${period}`} value={result?.monthlyNetIncome?.status !== "unavailable" ? formatMoney(result?.monthlyNetIncome?.value) : "Não determinado"} />
         </dl>
-        <p className="investimentos__hint">O rendimento mensal depende de posições e movimentações conciliadas. Uma mudança de saldo pode incluir aportes, resgates, amortizações e impostos.</p>
+        <p className="investimentos__fineprint">Variações de saldo também incluem aportes, resgates, amortizações e impostos.</p>
         {result?.operations?.length > 0 && <details className="investimentos__explain"><summary>Operações recebidas em {period}</summary>
-          <p className="investimentos__hint">Valores das operações disponíveis, separados por tipo e moeda. A instituição pode não fornecer todo o histórico do mês.</p>
+          <p className="investimentos__hint">O banco pode não ter enviado todas as operações do mês.</p>
           {result.operations.map((group) => <div className="inv-real__operation" key={group.sourceType}>
             <strong>{MOVEMENT_NAMES[group.sourceType] ?? "Outra movimentação informada"} · {group.count} {group.count === 1 ? "registro" : "registros"}</strong>
             <dl className="inv-real__rows">{MONEY_FIELDS.filter(([field]) => group.values?.[field]).map(([field, label]) => <TextRow key={field} label={label}
               value={group.values[field].status === "sum_of_reported_operations" ? group.values[field].value.map(formatMoney).join(" · ") : "Não determinado"} />)}</dl>
           </div>)}
         </details>}
-        {result?.operations?.length === 0 && <p className="investimentos__hint">Não há operações carregadas para este mês. Isso não comprova rendimento zero.</p>}
+        {result?.operations?.length === 0 && <p className="investimentos__hint">Nenhuma operação recebida neste mês, o que não significa rendimento zero.</p>}
         {result?.observedIntervalVariation?.status === "derived_from_observed_positions" && <details className="investimentos__explain"><summary>Variação entre posições observadas</summary>
           <p className="investimentos__hint">De {dateLabel(result.observedIntervalVariation.fromReferenceAt)} a {dateLabel(result.observedIntervalVariation.toReferenceAt)}. Este intervalo pode não coincidir com o mês completo.</p>
           <dl className="inv-real__rows"><TextRow label="Variação do saldo bruto" value={formatMoney(result.observedIntervalVariation.gross?.value)} /><TextRow label="Variação do saldo líquido" value={formatMoney(result.observedIntervalVariation.net?.value)} /></dl>
-          <p className="investimentos__hint">Variação patrimonial inclui os efeitos das movimentações e dos preços; não é apresentada como rendimento.</p>
+          <p className="investimentos__hint">A variação inclui movimentações e mudanças de preço, por isso não é tratada como rendimento.</p>
         </details>}
       </>}
   </section>;
 }
 function Movements({ dataset, onMore, retry }) {
-  return <section className="inv-detail__section"><h4 className="inv-detail__title">Movimentações do investimento</h4>
-    {dataset.status === "loading" ? <p role="status">Carregando movimentações…</p> : dataset.status === "error" ? <div role="alert"><p>Não foi possível obter as movimentações.</p><button type="button" className="investimentos__link-button" onClick={retry}>Tentar novamente</button></div> : <>
-      {dataset.data.length === 0 && <p className="investimentos__hint">Nenhuma movimentação foi disponibilizada até o momento.</p>}
+  return <section className="inv-detail__section"><h4 className="inv-detail__title">Movimentações</h4>
+    {dataset.status === "loading" ? <p className="investimentos__hint" role="status">Carregando movimentações…</p> : dataset.status === "error" ? <div className="investimentos__failure" role="alert"><p className="investimentos__hint">Não foi possível obter as movimentações.</p><button type="button" className="investimentos__link-button" onClick={retry}>Tentar novamente</button></div> : <>
+      {dataset.data.length === 0 && <p className="investimentos__hint">Nenhuma movimentação recebida até agora.</p>}
       {dataset.data.map((row) => <details key={row.id} className="investimentos__explain inv-real__operation"><summary>{MOVEMENT_NAMES[row.movementType] ?? "Outra movimentação informada"} · {dateLabel(row.document?.values?.transaction_conversion_date ?? row.document?.values?.transaction_date)}</summary>
         <dl className="inv-real__rows">{MONEY_FIELDS.filter(([field]) => field in (row.document?.availability ?? {})).map(([field, label]) => <MoneyRow key={field} label={label} document={row.document} field={field} />)}
           <ScalarRow label="Quantidade movimentada" document={row.document} field={"transaction_quota_quantity" in (row.document?.availability ?? {}) ? "transaction_quota_quantity" : "transaction_quantity"} />
@@ -154,7 +150,6 @@ function Movements({ dataset, onMore, retry }) {
 }
 export default function ImportedInvestmentDetail({ item, planning, owner }) {
   const [month, setMonth] = useState(currentMonth);
-  const [showAll, setShowAll] = useState(false);
   const state = useInvestmentResource(item, owner, month);
   const resource = state.resource;
   const document = item.reserved ? resource?.document : resource?.position?.document;
@@ -168,39 +163,39 @@ export default function ImportedInvestmentDetail({ item, planning, owner }) {
   const actualStatus = ({ EXPIRED: "expired", REVOKED: "revoked", REJECTED: "rejected", AWAITING_AUTHORIZATION: "pending_authorization" })[resource?.sourceConnectionStatus]
     ?? ({ EXPIRED: "expired", REVOKED: "revoked", REJECTED: "rejected" })[resource?.sourceAuthorization?.providerStatus] ?? item.state;
   return <div className="inv-detail inv-real">
-    <div className="inv-detail__top"><p className="inv-detail__updated">Coleta: {dateLabel(resource?.lastObservedAt ?? item.lastObservedAt)}</p><ReserveResourceButton item={item} planning={planning} /></div>
-    {actualStatus !== "available" && <p className="investimentos__hint" role="status">{STATE_TEXT[actualStatus] ?? "Aguardando confirmação dos dados."} Os valores exibidos mantêm suas datas originais.</p>}
-    {resource?.synchronization?.some((s) => s.status === "Error" || s.status === "Blocked") && <p className="investimentos__hint" role="status">Parte dos dados ainda não pôde ser atualizada. As referências e os valores anteriores foram preservados.</p>}
-    <button type="button" className="investimentos__link-button" onClick={state.retry} disabled={state.loading}>Atualizar detalhamento</button>
-    {state.loading && !resource ? <p role="status">Carregando detalhamento…</p> : state.error ? <p className="investimentos__hint" role="alert">{state.removed ? "Este recurso não está mais disponível nesta conexão. Atualize a lista de investimentos." : "Não foi possível carregar este investimento agora."}</p> : resource && <>
+    <div className="inv-detail__top">
+      <p className="inv-detail__updated">Dados recebidos em {dateLabel(resource?.lastObservedAt ?? item.lastObservedAt)}</p>
+      <div className="inv-detail__actions"><button type="button" className="investimentos__link-button" onClick={state.retry} disabled={state.loading}>Atualizar detalhamento</button><ReserveResourceButton item={item} planning={planning} /></div>
+    </div>
+    {actualStatus !== "available" && <p className="investimentos__hint" role="status">{STATE_TEXT[actualStatus] ?? "Aguardando confirmação dos dados."}</p>}
+    {resource?.synchronization?.some((s) => s.status === "Error" || s.status === "Blocked") && <p className="investimentos__hint" role="status">Parte dos dados não pôde ser atualizada.</p>}
+    {state.loading && !resource ? <p className="investimentos__hint" role="status">Carregando detalhamento…</p> : state.error ? <p className="investimentos__hint" role="alert">{state.removed ? "Este investimento não está mais disponível nesta conexão. Atualize a lista de investimentos." : "Não foi possível carregar este investimento agora."}</p> : resource && <>
       <header className="inv-hero">
         <h4 className="inv-hero__label">{balanceHeading}</h4>
         {item.reserved ? (document?.values?.available_amount?.length ? document.values.available_amount.map((money, index) => <strong className="inv-hero__value" key={index}>{formatMoney(money)}</strong>) : <strong className="inv-hero__value">Não informado</strong>) : <strong className="inv-hero__value">{formatMoney(gross ?? net)}</strong>}
-        <p className="inv-hero__meta">{item.reserved ? "Saldo reservado da conta, separado das aplicações · data de referência não informada" : `Posição informada pela instituição · referência ${dateLabel(document?.values?.reference_date_time ?? document?.values?.reference_date ?? resource.position?.referenceAt)}`}</p>
-        {item.reserved && document?.availability?.available_amount !== "available" && <p className="inv-hero__meta">Último saldo informado · informação atual não fornecida{document?.provenance?.available_amount?.observed_at ? ` · registrado em ${dateLabel(document.provenance.available_amount.observed_at)}` : ""}</p>}
+        <p className="inv-hero__meta">{item.reserved ? "Sem data de referência informada pelo banco" : `Posição de ${dateLabel(document?.values?.reference_date_time ?? document?.values?.reference_date ?? resource.position?.referenceAt)}, informada pela instituição`}</p>
+        {item.reserved && document?.availability?.available_amount !== "available" && <p className="inv-hero__meta">Último saldo informado{document?.provenance?.available_amount?.observed_at ? ` · registrado em ${dateLabel(document.provenance.available_amount.observed_at)}` : ""}</p>}
       </header>
-      <section className="inv-breakdown" aria-label="Composição do saldo">
-        <span className="inv-breakdown__icon" aria-hidden="true"><TrendUpIcon /></span>
-        {!item.reserved && <dl className="inv-breakdown__rows">
-          <MoneyRow label="Saldo bruto" document={document} field="gross_amount" />
-          {item.family === "funds" ? <><MoneyRow label="Provisão de IR" document={document} field="income_tax_provision" /><MoneyRow label="Provisão de IOF" document={document} field="financial_transaction_tax_provision" /></>
-            : <><MoneyRow label="IR informado na posição" document={document} field="income_tax" /><MoneyRow label="IOF informado na posição" document={document} field="financial_transaction_tax" /></>}
-          <MoneyRow label="Saldo líquido" document={document} field="net_amount" className="inv-breakdown__total" />
-        </dl>}
-        <dl className="inv-breakdown__rows" id={`${item.key}-more`} hidden={!item.reserved && !showAll}>
-          <TextRow label="Total aplicado desde a origem" value="Não informado" />
-          <TextRow label="Rendimento bruto acumulado" value="Não determinado" />
-          <TextRow label="Rendimento líquido acumulado" value="Não determinado" />
-        </dl>
-        {!item.reserved && <button type="button" className="inv-breakdown__toggle" aria-expanded={showAll} aria-controls={`${item.key}-more`} onClick={() => setShowAll((value) => !value)}>{showAll ? "Ocultar detalhes" : "Detalhar valores"}</button>}
-      </section>
-      <div className="inv-note"><span className="inv-note__icon" aria-hidden="true"><InfoIcon /></span><p>Campos não informados não significam zero. Impostos da posição e provisões não comprovam descontos efetivos; os impostos de cada operação aparecem nas movimentações.</p></div>
-      <section className="inv-detail__section"><h4 className="inv-detail__title">Produto e condições registradas</h4><p className="investimentos__hint">Dados conservados conforme o último fornecimento da instituição.{(fixedIncome || item.reserved) && " As taxas mantêm seus valores originais; sua unidade precisa ser confirmada para qualquer projeção."}</p><dl className="inv-real__rows">
-        <TextRow label="Modalidade" value={item.modality.label} /><TextRow label="Instituição" value={resource.institution?.institutionName ?? item.institution.name} />
+      <div className={`inv-detail__columns${item.reserved ? " inv-detail__columns--single" : ""}`}>
+        {!item.reserved && <section className="inv-detail__group" aria-labelledby={`${item.key}-composition`}>
+          <h4 id={`${item.key}-composition`} className="inv-detail__title">Composição do saldo</h4>
+          <dl className="inv-breakdown__rows">
+            <MoneyRow label="Saldo bruto" document={document} field="gross_amount" />
+            {item.family === "funds" ? <><MoneyRow label="Provisão de IR" document={document} field="income_tax_provision" /><MoneyRow label="Provisão de IOF" document={document} field="financial_transaction_tax_provision" /></>
+              : <><MoneyRow label="IR informado na posição" document={document} field="income_tax" /><MoneyRow label="IOF informado na posição" document={document} field="financial_transaction_tax" /></>}
+            <MoneyRow label="Saldo líquido" document={document} field="net_amount" className="inv-breakdown__total" />
+          </dl>
+          <p className="investimentos__fineprint">“Não informado” não significa zero. IR e IOF da posição não confirmam um desconto já feito; os impostos de cada operação aparecem nas movimentações.</p>
+        </section>}
+        <section className="inv-detail__group" aria-labelledby={`${item.key}-terms`}>
+          <h4 id={`${item.key}-terms`} className="inv-detail__title">Produto e condições</h4>
+          {(fixedIncome || item.reserved) && <p className="investimentos__fineprint">Taxas exibidas como a instituição informou.</p>}
+          <dl className="inv-real__rows">
+            <TextRow label="Modalidade" value={item.modality.label} /><TextRow label="Instituição" value={resource.institution?.institutionName ?? item.institution.name} />
         {identity.ticker && <TextRow label="Ativo" value={identity.ticker} />}
         {identity.isin_code && <TextRow label="Código ISIN" value={identity.isin_code} />}
         {!item.reserved && <><ScalarRow label={item.family === "funds" ? "Quantidade de cotas" : "Quantidade"} document={document} field={item.family === "funds" ? "quota_quantity" : "quantity"} />
-          {fixedIncome && <MoneyRow label="Preço de aquisição por unidade" document={document} field="purchase_unit_price" />}<TextRow label="Custo total da posição" value="Não informado" />
+          {fixedIncome && <MoneyRow label="Preço de aquisição por unidade" document={document} field="purchase_unit_price" />}
           <MoneyRow label={item.family === "funds" ? "Preço bruto da cota" : item.family === "variable-incomes" ? "Preço de fechamento informado" : "Preço unitário atualizado"} document={document} field={item.family === "funds" ? "quota_gross_price_value" : item.family === "variable-incomes" ? "closing_price" : "updated_unit_price"} />
           {item.family === "variable-incomes" && <ScalarRow label="Fator de preço" document={document} field="price_factor" />}
           {"issue_unit_price" in (resource.contract?.availability ?? {}) && <MoneyRow label="Preço de emissão" document={resource.contract} field="issue_unit_price" />}
@@ -216,7 +211,9 @@ export default function ImportedInvestmentDetail({ item, planning, owner }) {
           {[["purchase_date", "Aquisição"], ["issue_date", "Emissão"], ["due_date", "Vencimento"], ["grace_period_date", "Fim da carência"]].map(([field, label]) => <TextRow key={field} label={label} value={dateLabel(contract[field])} />)}
           </>}
         </>}
-      </dl></section>
+          </dl>
+        </section>
+      </div>
       {item.reserved && <section className="inv-detail__section"><h4 className="inv-detail__title">Remuneração dos saldos reservados</h4>
         {(document?.values?.available_amount ?? []).map((amount, index) => <div className="inv-real__operation" key={index}>
           <strong>Saldo {index + 1} · {formatMoney(amount)}</strong>
@@ -231,7 +228,6 @@ export default function ImportedInvestmentDetail({ item, planning, owner }) {
       </section>}
       <RealHistory dataset={state.history} item={item} onMore={() => state.more("history")} retry={state.retry} />
       {!item.reserved && <><MonthlyResults state={state.financial} month={month} setMonth={setMonth} /><Movements dataset={state.movements} onMore={() => state.more("movements")} retry={state.retry} /></>}
-      <section className="inv-projection"><h4 className="inv-detail__title">Projeções futuras</h4><p className="investimentos__hint">As condições disponíveis deste produto ainda não permitem uma projeção automática com segurança. Nenhum rendimento futuro é garantido.</p></section>
     </>}
   </div>;
 }

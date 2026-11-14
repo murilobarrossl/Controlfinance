@@ -145,18 +145,4 @@ public class EncryptionRoundTripTests
         Assert.Null(read.UsedLimit);
     }
 
-    [Fact]
-    public async Task Parcelamento_com_centavos_volta_identico()
-    {
-        using var t = new TestDb();
-        var card = t.AddCard(5000.00m, 99.99m);
-        t.AddInstallment(card, null, 33.33m, 1, 3, new DateTime(2099, 1, 10), totalAmount: 100.00m);
-
-        await using var other = t.NewContext();
-        var read = await other.Installments.AsNoTracking().SingleAsync();
-
-        Assert.Equal(33.33m, read.InstallmentAmount);
-        Assert.Equal(100.00m, read.TotalAmount);
-        Assert.Equal("Compra", read.Description);
-    }
 }

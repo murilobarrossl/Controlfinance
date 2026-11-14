@@ -111,8 +111,8 @@ export default function Privacidade() {
       <Card title="O que guardamos sobre você">
         <ul className="privacidade__list">
           <li><strong>Cadastro:</strong> nome, e-mail, senha (só em forma irreversível), fuso horário e o tipo de documento. O número do CPF/CNPJ não fica guardado, só um código de verificação gerado a partir dele.</li>
-          <li><strong>Bancos conectados:</strong> contas, saldos, extrato, dados de cartão, investimentos, caixinhas e os 4 últimos dígitos do número da conta, cifrados, enquanto a conexão existir.</li>
-          <li><strong>O que você cadastra:</strong> cartões e parcelamentos que não vieram de um banco, categorias e edições de nome/categoria das transações importadas.</li>
+          <li><strong>Bancos conectados:</strong> contas, saldos, extrato (com horário, tipo da operação e, quando o banco informa, nome, banco e 4 últimos dígitos da conta da outra parte), dados de cartão, investimentos, caixinhas e os 4 últimos dígitos do número da conta, cifrados, enquanto a conexão existir.</li>
+          <li><strong>O que você cadastra:</strong> categorias e edições de nome/categoria das transações importadas.</li>
           <li><strong>Aceites:</strong> qual versão dos Termos e da Política você aceitou e quando, e cada autorização de conexão bancária.</li>
           <li>
             <strong>Prazo do histórico bancário:</strong>{" "}
@@ -129,7 +129,7 @@ export default function Privacidade() {
               automaticamente, mesmo que você exclua a conta antes.
             </li>
           )}
-          <li><strong>Reserva de emergência e metas de economia:</strong> ficam na sua conta, nos nossos servidores, com nome e valores cifrados, até você removê-las em Investimentos ou excluir a conta. Se você marca uma aplicação como reserva ou informa quanto ela rende, guardamos só essa marcação e a regra informada, apagadas junto com a conexão bancária ou a conta.</li>
+          <li><strong>Reserva de emergência e metas de economia:</strong> as metas (nome, valor-alvo e prazo) ficam na sua conta, nos nossos servidores, com nome e valor-alvo cifrados, até você removê-las em Investimentos ou excluir a conta. Da reserva e das metas guardamos só quais investimentos você vinculou a cada uma, apagados junto com a conexão bancária ou a conta. Os valores vêm sempre dos saldos informados pelos bancos.</li>
           <li><strong>Neste navegador:</strong> a conta selecionada no painel e uma conexão bancária em andamento, só para facilitar o uso. São apagados ao sair da conta.</li>
         </ul>
         <p className="privacidade__text">
@@ -209,7 +209,7 @@ export default function Privacidade() {
       <Card title="Cópia dos seus dados">
         <p className="privacidade__text">
           Baixe um arquivo com tudo que guardamos sobre você no servidor: cadastro, aceites, contas, lançamentos,
-          cartões, parcelamentos, categorias, investimentos e caixinhas, reserva de emergência, metas, regras de
+          cartões, categorias, investimentos e caixinhas, reserva de emergência, metas, regras de
           rendimento e, se existirem, registros de acesso.
         </p>
         <div className="privacidade__actions">
@@ -232,7 +232,7 @@ export default function Privacidade() {
       <Card title="Excluir conta" className="privacidade__danger">
         <p className="privacidade__text">
           Apaga de forma definitiva sua conta e tudo que está guardado nos nossos servidores: cadastro, aceites,
-          bancos conectados, contas, lançamentos, cartões, parcelamentos, categorias, investimentos e caixinhas importados,
+          bancos conectados, contas, lançamentos, cartões, categorias, investimentos e caixinhas importados,
           reserva de emergência, metas de economia e regras de rendimento informadas. Também pedimos à Polp que exclua suas
           conexões bancárias. Não dá para desfazer.
         </p>
@@ -261,7 +261,7 @@ export default function Privacidade() {
       <ConfirmDialog
         open={pendingDisconnect !== null}
         title={`Desconectar ${pendingDisconnect?.label}?`}
-        message="Todas as contas e cartões desta conexão saem do Control Finance, e apagamos na hora o saldo, o extrato, os parcelamentos, os investimentos e as caixinhas que vieram desse banco. Também pedimos à Polp que exclua a conexão."
+        message="Todas as contas e cartões desta conexão saem do Control Finance, e apagamos na hora o saldo, o extrato, os investimentos e as caixinhas que vieram desse banco. Também pedimos à Polp que exclua a conexão."
         confirmLabel="Desconectar e apagar dados"
         onConfirm={() => {
           const target = pendingDisconnect;
