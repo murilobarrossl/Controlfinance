@@ -5,11 +5,6 @@ using ControlFinance.API.Services;
 namespace ControlFinance.API.DTOs;
 
 // ── BANK ACCOUNT ──────────────────────────────────────
-public record CreateBankAccountDto(
-    [Required(ErrorMessage = "Nome é obrigatório."), MaxLength(100)] string Name,
-    [MaxLength(20)] string? BankCode,
-    [Range(-1_000_000_000, 1_000_000_000, ErrorMessage = "Saldo fora da faixa permitida.")] decimal Balance
-);
 public record BankAccountDto(Guid Id, string Name, string? BankCode, decimal? Balance, bool IsActive, string Ownership)
 {
     public static BankAccountDto FromEntity(BankAccount b) =>

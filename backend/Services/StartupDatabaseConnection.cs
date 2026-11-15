@@ -19,6 +19,15 @@ internal static class StartupDatabaseConnection
         return connection.ConnectionString;
     }
 
+    private static bool IsTransient(Exception error) => error switch
+    {
+        TimeoutException => true,
+        NpgsqlException provider => provider.IsTransient,
+        // A estratégia padrão do EF encapsula falhas transitórias do Npgsql.
+        InvalidOperationException { InnerException: NpgsqlException provider } => provider.IsTransient,
+        _ => false
+    };
+
     internal static async Task OpenAsync(Func<CancellationToken, Task> open, ILogger logger,
         CancellationToken cancellationToken, Func<TimeSpan, CancellationToken, Task>? delay = null)
     {
@@ -32,7 +41,7 @@ internal static class StartupDatabaseConnection
                 await open(cancellationToken);
                 return;
             }
-            catch (Exception error) when (error is TimeoutException || error is NpgsqlException { IsTransient: true })
+            catch (Exception error) when (IsTransient(error))
             {
                 // Repete só a abertura, antes de qualquer migration/backfill. A mensagem da
                 // exceção do provedor pode conter dados da conexão e não deve ir para o log.

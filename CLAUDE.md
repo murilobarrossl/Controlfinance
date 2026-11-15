@@ -204,6 +204,12 @@ Account deletion (`POST /api/account/deletion`) queues failed provider deletions
 
 ## Conventions
 
+- **NEVER add a button, dialog, form or flow to register a bank account or credit card manually**
+  ("Cadastrar conta manual", "Adicionar cartão", etc.). The whole product is automatic: accounts and
+  cards come only from the bank via Polp. The only way to add an account is "Conectar banco".
+  The backend has no endpoint to create or edit an account's name/balance either (only ownership
+  tag and delete); don't add one back.
+
 - Backend comments are in Portuguese and are used specifically to explain *why* a non-obvious
   security/infra decision was made (cookie flags, CSRF exemptions, forwarded-headers trust, index
   choices): match that style when touching this code rather than describing *what* the code does.

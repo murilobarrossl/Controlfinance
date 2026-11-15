@@ -24,6 +24,23 @@ public class StartupDatabaseConnectionTests
         Assert.Equal(8, result.MaxPoolSize);
     }
 
+    [Fact]
+    public void Configuracao_nao_substitui_destino_remoto_por_localhost()
+    {
+        var original = new NpgsqlConnectionStringBuilder
+        {
+            Host = "database.example.invalid", Port = 6543, Database = "development_remote",
+            Username = "test_user", Password = "test-only", SslMode = SslMode.VerifyFull
+        };
+        var result = new NpgsqlConnectionStringBuilder(StartupDatabaseConnection.Configure(Config(original.ConnectionString)));
+        Assert.Equal(original.Host, result.Host);
+        Assert.Equal(original.Port, result.Port);
+        Assert.Equal(original.Database, result.Database);
+        Assert.Equal(original.Username, result.Username);
+        Assert.Equal(original.Password, result.Password);
+        Assert.Equal(original.SslMode, result.SslMode);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(12)]
@@ -76,6 +93,47 @@ public class StartupDatabaseConnectionTests
             return Task.FromException(new PostgresException("autenticacao recusada", "FATAL", "FATAL", "28P01"));
         }, NullLogger.Instance, default));
         Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task Falha_transitoria_encapsulada_pelo_EF_e_repetida()
+    {
+        var calls = 0;
+        await StartupDatabaseConnection.OpenAsync(_ => ++calls == 1
+            ? Task.FromException(new InvalidOperationException("EF", new NpgsqlException("simulado", new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.ConnectionRefused))))
+            : Task.CompletedTask, NullLogger.Instance, default, (_, _) => Task.CompletedTask);
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
+    public async Task Falha_encapsulada_persistente_nao_expoe_dados_do_provedor()
+    {
+        var calls = 0;
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => StartupDatabaseConnection.OpenAsync(_ =>
+        {
+            calls++;
+            return Task.FromException(new InvalidOperationException("EF", new NpgsqlException("informacao-privada-simulada", new TimeoutException())));
+        }, NullLogger.Instance, default, (_, _) => Task.CompletedTask));
+        Assert.Equal(3, calls);
+        Assert.DoesNotContain("informacao-privada", error.ToString());
+    }
+
+    [Fact]
+    public async Task Erro_de_programacao_ou_autenticacao_encapsulado_nao_e_repetido()
+    {
+        foreach (var failure in new[] {
+            new InvalidOperationException("erro de programacao"),
+            new InvalidOperationException("EF", new PostgresException("recusada", "FATAL", "FATAL", "28P01")) })
+        {
+            var calls = 0;
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => StartupDatabaseConnection.OpenAsync(_ =>
+            {
+                calls++;
+                return Task.FromException(failure);
+            }, NullLogger.Instance, default));
+            Assert.Same(failure, error);
+            Assert.Equal(1, calls);
+        }
     }
 
     [Fact]

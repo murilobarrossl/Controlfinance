@@ -50,7 +50,6 @@ function DashboardLayoutContent() {
     setSelectedScope,
     disconnectConnection,
     removeManualAccount,
-    bumpDataRefresh,
     notice,
     dismissNotice,
   } = useAccount();
@@ -238,7 +237,6 @@ function DashboardLayoutContent() {
                 onSelect={setSelectedScope}
                 onDisconnect={disconnectConnection}
                 onRemoveManual={removeManualAccount}
-                onAccountCreated={bumpDataRefresh}
               />
             )}
             {!isInvestmentsTab && <BalanceSyncButton />}

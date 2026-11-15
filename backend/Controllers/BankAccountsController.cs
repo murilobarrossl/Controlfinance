@@ -36,47 +36,8 @@ public class BankAccountsController(AppDbContext db) : ApiControllerBase
         return Ok(BankAccountDto.FromEntity(account));
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateBankAccountDto dto)
-    {
-        // Mesmo chute inicial que o sync da Polp usa pra conta nova: CNPJ vira Business, CPF
-        // vira Personal (ver AccountOwnershipDefault). Contas criadas manualmente (fora do fluxo
-        // da Polp) não podiam ficar de fora desse default.
-        var documentType = await db.Users.Where(u => u.Id == UserId).Select(u => u.DocumentType).FirstAsync();
-
-        var account = new BankAccount
-        {
-            UserId = UserId,
-            Name = dto.Name,
-            BankCode = dto.BankCode,
-            Balance = dto.Balance,
-            Ownership = AccountOwnershipDefault.FromDocumentType(documentType)
-        };
-
-        db.BankAccounts.Add(account);
-        await db.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(GetById), new { id = account.Id },
-            BankAccountDto.FromEntity(account));
-    }
-
-    [HttpPut("{id}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] CreateBankAccountDto dto)
-    {
-        var account = await db.BankAccounts.FirstOrDefaultAsync(b => b.Id == id && b.UserId == UserId);
-        if (account is null) return NotFound();
-
-        account.Name = dto.Name;
-        account.BankCode = dto.BankCode;
-        account.Balance = dto.Balance;
-
-        await db.SaveChangesAsync();
-        return Ok(BankAccountDto.FromEntity(account));
-    }
-
-    // Endpoint dedicado só pra corrigir o chute pessoal/empresa/mista: reaproveitar o Update
-    // genérico exigiria mandar nome/código/saldo de novo só pra mudar uma tag, igual o SetFixed
-    // de TransactionsController já evita pra IsFixed.
+    // Contas e cartões só nascem e mudam pelo sync da Polp: não há criação nem edição manual de
+    // nome/saldo. A única correção do usuário é o chute pessoal/empresa/mista.
     [HttpPut("{id}/ownership")]
     public async Task<IActionResult> SetOwnership(Guid id, [FromBody] SetAccountOwnershipDto dto)
     {

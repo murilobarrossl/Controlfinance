@@ -30,7 +30,6 @@ public class UserIsolationAccountsAndCategoriesTests
         Assert.DoesNotContain(id.ToString(), list);
 
         Assert.Equal(404, Http.Status(await Accounts(t).GetById(id)));
-        Assert.Equal(404, Http.Status(await Accounts(t).Update(id, new CreateBankAccountDto("Tomada", null, 1m))));
         Assert.Equal(404, Http.Status(await Accounts(t).SetOwnership(id, new SetAccountOwnershipDto("Business"))));
         Assert.Equal(404, Http.Status(await Accounts(t).Delete(id, default)));
         Assert.Equal(404, Http.Status(await Accounts(t).Delete(other.Account.Id, default)));

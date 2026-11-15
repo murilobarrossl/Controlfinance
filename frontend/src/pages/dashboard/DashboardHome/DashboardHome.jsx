@@ -14,7 +14,6 @@ import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading
 import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
-import ManualAccountDialog from "../../../components/dashboard/ManualAccountDialog/ManualAccountDialog.jsx";
 import AreaTrendChart from "../../../components/charts/AreaTrendChart.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
 import CardPicker from "../../../components/dashboard/CardPicker/CardPicker.jsx";
@@ -110,9 +109,8 @@ export default function DashboardHome() {
   usePageTitle("Dashboard inteligente");
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { connectors, accountsStatus, effectiveScope, scopeKey, scopeQuery, dataRefreshKey, bumpDataRefresh } = useAccount();
+  const { connectors, accountsStatus, effectiveScope, scopeKey, scopeQuery, dataRefreshKey } = useAccount();
   const [categories, setCategories] = useState([]);
-  const [manualAccountOpen, setManualAccountOpen] = useState(false);
   const [allCards, setAllCards] = useState([]);
   const [shownCardId, setShownCardId] = useState(null);
 
@@ -199,29 +197,15 @@ export default function DashboardHome() {
 
   if (!summary?.account) {
     return (
-      <>
-        <Card className="dashboard-home__empty">
-          <p>{summary?.message || "Nenhum banco conectado ainda."}</p>
-          <p className="dashboard-home__empty-hint">
-            Conectar um banco traz saldo e extrato sozinho. Prefere não conectar? Cadastre uma conta e lance as
-            entradas e saídas à mão.
-          </p>
-          <div className="dashboard-home__empty-actions">
-            <Button as={Link} to="/conectar-banco" variant="primary" size="md">
-              Conectar banco
-            </Button>
-            <Button as="button" type="button" variant="outline" size="md" onClick={() => setManualAccountOpen(true)}>
-              Cadastrar conta manual
-            </Button>
-          </div>
-        </Card>
-
-        <ManualAccountDialog
-          open={manualAccountOpen}
-          onClose={() => setManualAccountOpen(false)}
-          onCreated={bumpDataRefresh}
-        />
-      </>
+      <Card className="dashboard-home__empty">
+        <p>{summary?.message || "Nenhum banco conectado ainda."}</p>
+        <p className="dashboard-home__empty-hint">Conecte um banco e o saldo e o extrato chegam sozinhos.</p>
+        <div className="dashboard-home__empty-actions">
+          <Button as={Link} to="/conectar-banco" variant="primary" size="md">
+            Conectar banco
+          </Button>
+        </div>
+      </Card>
     );
   }
 
