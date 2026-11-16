@@ -467,11 +467,11 @@
 }
 
 .dashboard-notice--success {
-  border-color: color-mix(in srgb, var(--color-income) 60%, transparent);
+  border-color: color-mix(in srgb, var(--color-success) 60%, transparent);
 }
 
 .dashboard-notice--error {
-  border-color: var(--color-accent);
+  border-color: var(--color-error);
 }
 
 .dashboard-notice button {
@@ -493,9 +493,7 @@
   gap: var(--dash-space-lg);
 }
 
-.dashboard-content :is(.dashboard-home__stats, .dashboard-home__grid, .cartoes__summary, .receitas-despesas__halves, .categorias__grid) {
-  gap: var(--dash-space-md);
-}
+
 
 .dashboard-content .range-picker {
   flex-wrap: wrap;
@@ -530,4 +528,44 @@
   .dashboard-toolbar ~ :is(.no-bank-account, .receitas-despesas__error, .dashboard-home__error) {
     margin-top: calc(var(--dash-header-height) + var(--dash-space-lg));
   }
+}
+
+.dashboard-layout--business .dashboard-sidebar__tab {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.9rem;
+}
+
+.dashboard-layout--business .dashboard-sidebar__tab--active::before {
+  content: none;
+}
+
+.dashboard-sidebar__tab-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  transition: color 0.15s ease;
+}
+
+.dashboard-sidebar__tab-icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.dashboard-sidebar__tab:hover .dashboard-sidebar__tab-icon {
+  color: var(--color-text-secondary);
+}
+
+.dashboard-sidebar__tab--active .dashboard-sidebar__tab-icon,
+.dashboard-sidebar__tab--active:hover .dashboard-sidebar__tab-icon {
+  color: var(--color-accent);
+}
+
+.dashboard-layout--business .dashboard-sidebar__tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

@@ -5,7 +5,6 @@ import { getTransactionAggregates } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import NoBankAccount from "../../../components/dashboard/NoBankAccount/NoBankAccount.jsx";
-import Card from "../../../components/ui/Card/Card.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
@@ -19,13 +18,23 @@ import { formatMonthLong, toIsoDate } from "../../../utils/monthLabel.js";
 import "./Categorias.css";
 import usePageTitle from "../../../hooks/usePageTitle.js";
 
+function CategorySection({ title, action, children, className = "" }) {
+  return (
+    <section className={`categorias__section ${className}`}>
+      <header className="categorias__section-head">
+        <h2 className="categorias__section-title">{title}</h2>
+        {action}
+      </header>
+      {children}
+    </section>
+  );
+}
+
 const EMPTY_LIST = [];
 
 const CUT_RATE_OPTIONS = [0.1, 0.2, 0.3, 0.5];
 
-// Quantas categorias por página na lista à direita: sem paginar, uma conta com muitas categorias
-// deixava essa lista muito mais alta que o gráfico de rosca ao lado, sobrando espaço vazio embaixo
-// do gráfico (o grid estica os dois cards pra mesma altura, a mais alta dos dois).
+// Pagina a lista à direita para manter a leitura próxima do gráfico de rosca.
 const CATEGORY_PAGE_SIZE = 5;
 
 const CATEGORY_SORT_OPTIONS = [
@@ -368,7 +377,7 @@ export default function Categorias() {
       {heading}
 
       <div className="categorias__grid">
-        <Card title="Despesas por categoria" className="categorias__card">
+        <CategorySection title="Despesas por categoria" className="categorias__card">
           {loading ? (
             <div className="categorias__donut-loading">
               <Skeleton width="15rem" height="15rem" style={{ borderRadius: "50%" }} />
@@ -411,9 +420,9 @@ export default function Categorias() {
               )}
             </div>
           )}
-        </Card>
+        </CategorySection>
 
-        <Card
+        <CategorySection
           title="Categorias"
           className="categorias__card"
           action={
@@ -475,7 +484,7 @@ export default function Categorias() {
               )}
             </>
           )}
-        </Card>
+        </CategorySection>
       </div>
 
       {!loading && selectedCategory && (
@@ -516,7 +525,7 @@ export default function Categorias() {
           </div>
 
           {cutImpact && (
-            <Card title="Simular um corte" className="categorias__impact">
+            <CategorySection title="Simular um corte" className="categorias__impact">
               <div className="categorias__impact-rates" role="radiogroup" aria-label="Quanto cortar">
                 {CUT_RATE_OPTIONS.map((rate) => (
                   <button
@@ -569,7 +578,7 @@ export default function Categorias() {
                   Cadastre uma meta em Investimentos para ver quanto esse corte aproxima você dela.
                 </p>
               )}
-            </Card>
+            </CategorySection>
           )}
         </section>
       )}

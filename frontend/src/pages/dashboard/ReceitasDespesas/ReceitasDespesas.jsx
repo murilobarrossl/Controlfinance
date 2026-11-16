@@ -1,37 +1,36 @@
+import { financialTone, transactionTone } from "../../../utils/financialTone.js";
 import { useEffect, useMemo, useState } from "react";
 import { getTransactionAggregates } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
+import { useAuth } from "../../../context/AuthContext.jsx";
+import { isBusinessHolder } from "../../../utils/holder.js";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import NoBankAccount from "../../../components/dashboard/NoBankAccount/NoBankAccount.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
-import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
-import Button from "../../../components/ui/Button/Button.jsx";
-import TransactionFormDialog from "../../../components/dashboard/TransactionFormDialog/TransactionFormDialog.jsx";
 import CategoryBlocks from "./CategoryBlocks.jsx";
 import { TrendUpIcon, TrendDownIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency, roundMoney, formatPercentage } from "../../../utils/financeMath.js";
-import { formatMonthLong } from "../../../utils/monthLabel.js";
-import { getMonthsWindow, monthRange } from "../../../utils/monthlyTrend.js";
 import { computeTrend } from "../../../utils/trend.js";
+import { BUSINESS_PERIOD_OPTIONS, PERIODS } from "../../../utils/periods.js";
+import { breakdownFromAggregates } from "../../../utils/categoryBreakdown.js";
 import "./ReceitasDespesas.css";
 import usePageTitle from "../../../hooks/usePageTitle.js";
 
-function breakdownFromAggregates(categories, type) {
-  const totals = new Map();
-  for (const c of categories ?? []) {
-    if (c.type !== type) continue;
-    const name = c.categoryName || "Sem categoria";
-    const entry = totals.get(name) || { name, value: 0, count: 0 };
-    entry.value += c.amount;
-    entry.count += c.count;
-    totals.set(name, entry);
-  }
-  const total = [...totals.values()].reduce((sum, e) => sum + e.value, 0);
-  return [...totals.values()]
-    .map((e) => ({ ...e, percentage: total > 0 ? (e.value / total) * 100 : 0 }))
-    .sort((a, b) => b.value - a.value);
+function SummaryMetric({ label, value, tone, trend }) {
+  return (
+    <dl className="rd-summary">
+      <dt className="rd-summary__label">{label}</dt>
+      <dd className={`rd-summary__value rd-summary__value--${tone}`}>{value}</dd>
+      {trend && (
+        <dd className={`rd-summary__trend rd-summary__trend--${trend.tone}`}>
+          <span aria-hidden="true">{trend.direction === "up" ? <TrendUpIcon /> : <TrendDownIcon />}</span>
+          {trend.text}
+        </dd>
+      )}
+    </dl>
+  );
 }
 
 function closingSentence(totalIncome, totalExpense) {
@@ -39,49 +38,46 @@ function closingSentence(totalIncome, totalExpense) {
   if (totalIncome === 0 && totalExpense === 0) return "Nenhuma movimentação neste período.";
   if (leftover >= 0) {
     const pct = totalIncome > 0 ? (leftover / totalIncome) * 100 : 0;
-    return `Você recebeu ${formatCurrency(totalIncome)} e gastou ${formatCurrency(
-      totalExpense
-    )} neste período. Sobraram ${formatCurrency(leftover)}, ${formatPercentage(pct)} do que entrou.`;
+    return `${formatPercentage(pct)} das receitas não foram gastas no período.`;
   }
-  return `Você recebeu ${formatCurrency(totalIncome)} mas gastou ${formatCurrency(
-    totalExpense
-  )} neste período, ${formatCurrency(Math.abs(leftover))} a mais do que entrou.`;
+  return "As despesas superaram as receitas no período.";
 }
 
 export default function ReceitasDespesas() {
-  usePageTitle("Receitas e despesas");
-  const { accounts, scopeKey, scopeQuery, effectiveScope, dataRefreshKey, bumpDataRefresh, accountsStatus } = useAccount();
+  const { user } = useAuth();
+  const business = isBusinessHolder(user);
+  usePageTitle(business ? "Fluxo de Caixa" : "Receitas e despesas");
+  const { scopeKey, scopeQuery, dataRefreshKey, accountsStatus } = useAccount();
+  const [granularity, setGranularity] = useState("day");
   const [aggregateResult, setAggregateResult] = useState(null);
-  const [newEntryOpen, setNewEntryOpen] = useState(false);
-  const [monthOffset, setMonthOffset] = useState(0);
+  const [offset, setOffset] = useState(0);
   const [expandedIncome, setExpandedIncome] = useState(() => new Set());
   const [expandedExpense, setExpandedExpense] = useState(() => new Set());
-  const requestKey = `${scopeKey}|${dataRefreshKey}`;
-  const aggregateKey = `${requestKey}|${monthOffset}`;
-  const loading = accountsStatus !== "ready" || aggregateResult?.key !== aggregateKey;
 
-  const currentMonth = useMemo(() => getMonthsWindow(1, monthOffset)[0], [monthOffset]);
-  const previousMonth = useMemo(() => getMonthsWindow(1, monthOffset + 1)[0], [monthOffset]);
+  const period = PERIODS[business ? granularity : "month"];
+  const current = useMemo(() => period.current(offset), [period, offset]);
+  const comparison = useMemo(() => period.previous(offset), [period, offset]);
+  const aggregateKey = `${scopeKey}|${dataRefreshKey}|${period.key}|${offset}`;
+  const loading = accountsStatus !== "ready" || aggregateResult?.key !== aggregateKey;
 
   useEffect(() => {
     if (accountsStatus !== "ready" || !scopeKey) return;
 
     const controller = new AbortController();
     const { signal } = controller;
-    const key = `${scopeKey}|${dataRefreshKey}|${monthOffset}`;
 
     Promise.all([
-      getTransactionAggregates({ ...scopeQuery, ...monthRange(currentMonth) }, { signal }),
-      getTransactionAggregates({ ...scopeQuery, ...monthRange(previousMonth) }, { signal }),
+      getTransactionAggregates({ ...scopeQuery, ...current.range }, { signal }),
+      getTransactionAggregates({ ...scopeQuery, ...comparison.range }, { signal }),
     ])
-      .then(([current, previous]) => {
+      .then(([currentTotals, previousTotals]) => {
         if (signal.aborted) return;
-        setAggregateResult({ key, current, previous, error: "" });
+        setAggregateResult({ key: aggregateKey, current: currentTotals, previous: previousTotals, error: "" });
       })
       .catch((err) => {
         if (signal.aborted || isAbortError(err)) return;
         setAggregateResult({
-          key,
+          key: aggregateKey,
           current: null,
           previous: null,
           error: err.message || "Não foi possível carregar as transações.",
@@ -89,23 +85,23 @@ export default function ReceitasDespesas() {
       });
 
     return () => controller.abort();
-  }, [scopeKey, scopeQuery, dataRefreshKey, monthOffset, currentMonth, previousMonth, accountsStatus]);
+  }, [scopeKey, scopeQuery, accountsStatus, current, comparison, aggregateKey]);
 
-  const current = aggregateResult?.current ?? null;
-  const previous = aggregateResult?.previous ?? null;
+  const totals = aggregateResult?.key === aggregateKey ? aggregateResult.current : null;
+  const previous = aggregateResult?.key === aggregateKey ? aggregateResult.previous : null;
   const error =
     accountsStatus === "error"
       ? "Não foi possível carregar as contas."
       : (aggregateResult?.key === aggregateKey && aggregateResult.error) || "";
 
-  const totalIncome = current?.totalIncome;
-  const totalExpense = current?.totalExpense;
+  const totalIncome = totals?.totalIncome;
+  const totalExpense = totals?.totalExpense;
 
-  const incomeBreakdown = useMemo(() => breakdownFromAggregates(current?.categories, "Income"), [current]);
-  const expenseBreakdown = useMemo(() => breakdownFromAggregates(current?.categories, "Expense"), [current]);
+  const incomeBreakdown = useMemo(() => breakdownFromAggregates(totals?.categories, "Income"), [totals]);
+  const expenseBreakdown = useMemo(() => breakdownFromAggregates(totals?.categories, "Expense"), [totals]);
 
-  const incomeTrend = computeTrend(totalIncome, previous?.totalIncome);
-  const expenseTrend = computeTrend(totalExpense, previous?.totalExpense, { invertTone: true });
+  const incomeTrend = computeTrend(totalIncome, previous?.totalIncome, { label: comparison.trendLabel });
+  const expenseTrend = computeTrend(totalExpense, previous?.totalExpense, { invertTone: true, label: comparison.trendLabel });
 
   function toggleIn(setter) {
     return (name) =>
@@ -117,50 +113,52 @@ export default function ReceitasDespesas() {
       });
   }
 
-  // Categorias só aceita "periodo=mes" para o mês corrente; num mês anterior ela abre no ano.
-  function categoryHref(categoryName) {
+  const categoryHref = (categoryName) => {
+    // Categorias é exclusiva do CPF. No CNPJ, o mesmo link abre as movimentações
+    // da categoria nesta página, sem mudar sua aparência nem sair do período.
+    if (business) return `#rd-expense-${encodeURIComponent(categoryName)}`;
     const params = new URLSearchParams();
-    if (monthOffset === 0) params.set("periodo", "mes");
+    if (offset === 0) params.set("periodo", "mes");
     params.set("categoria", categoryName);
     return `/dashboard/categorias?${params}`;
-  }
+  };
 
   if (error) return <p className="receitas-despesas__error">{error}</p>;
   if (accountsStatus === "ready" && !scopeKey) return <NoBankAccount />;
 
   const leftover = roundMoney(totalIncome - totalExpense);
-  const monthQuery = { ...scopeQuery, ...monthRange(currentMonth), refresh: dataRefreshKey };
+  const periodQuery = { ...scopeQuery, ...current.range, refresh: dataRefreshKey };
 
   return (
     <div className="receitas-despesas">
       <header className="receitas-despesas__header">
-        <SectionHeading title="Receitas e despesas" level={1} />
-        <RangePicker
-          label={formatMonthLong(currentMonth)}
-          onPrev={() => setMonthOffset((prev) => prev + 1)}
-          onNext={() => setMonthOffset((prev) => Math.max(0, prev - 1))}
-          nextDisabled={monthOffset === 0}
-        />
-        <Button as="button" type="button" variant="primary" size="sm" onClick={() => setNewEntryOpen(true)}>
-          + Novo lançamento
-        </Button>
+        <SectionHeading title={business ? "Fluxo de Caixa" : "Receitas e despesas"} level={1} />
+        <div className="receitas-despesas__controls">
+          {business && (
+            <div className="rd-granularity" role="group" aria-label="Período de análise">
+              {BUSINESS_PERIOD_OPTIONS.map((option) => (
+                <button key={option.key} type="button" aria-pressed={granularity === option.key}
+                  onClick={() => { setGranularity(option.key); setOffset(0); }}>
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <RangePicker
+            label={current.label}
+            onPrev={() => setOffset((prev) => prev + 1)}
+            onNext={() => setOffset((prev) => Math.max(0, prev - 1))}
+            nextDisabled={offset === 0}
+          />
+        </div>
       </header>
-
-      <TransactionFormDialog
-        open={newEntryOpen}
-        accounts={accounts}
-        defaultAccountId={effectiveScope?.accountId ?? null}
-        onClose={() => setNewEntryOpen(false)}
-        onCreated={bumpDataRefresh}
-      />
 
       <div className="receitas-despesas__halves">
         <section className="receitas-despesas__half" aria-label="Receitas">
-          <StatCard
-            icon={<TrendUpIcon />}
+          <SummaryMetric
             label="Receitas"
             value={loading ? <Skeleton width="7rem" height="1.5rem" /> : formatCurrency(totalIncome)}
-            valueTone="income"
+            tone={loading ? "default" : financialTone(totalIncome)}
             trend={loading ? null : incomeTrend}
           />
 
@@ -174,17 +172,16 @@ export default function ReceitasDespesas() {
               tone="income"
               expandedNames={expandedIncome}
               onToggle={toggleIn(setExpandedIncome)}
-              detailsQuery={{ ...monthQuery, type: "Income" }}
+              detailsQuery={{ ...periodQuery, type: "Income" }}
             />
           )}
         </section>
 
         <section className="receitas-despesas__half" aria-label="Despesas">
-          <StatCard
-            icon={<TrendDownIcon />}
+          <SummaryMetric
             label="Despesas"
             value={loading ? <Skeleton width="7rem" height="1.5rem" /> : formatCurrency(totalExpense)}
-            valueTone="expense"
+            tone={loading ? "default" : transactionTone("Expense", totalExpense)}
             trend={loading ? null : expenseTrend}
           />
 
@@ -198,8 +195,9 @@ export default function ReceitasDespesas() {
               tone="expense"
               expandedNames={expandedExpense}
               onToggle={toggleIn(setExpandedExpense)}
-              detailsQuery={{ ...monthQuery, type: "Expense" }}
+              detailsQuery={{ ...periodQuery, type: "Expense" }}
               categoryHref={categoryHref}
+              onCategoryOpen={business ? (name) => setExpandedExpense((prev) => new Set(prev).add(name)) : undefined}
             />
           )}
         </section>
@@ -216,7 +214,7 @@ export default function ReceitasDespesas() {
           </div>
         ) : (
           <>
-            <p className={`rd-result__value rd-result__value--${leftover >= 0 ? "income" : "expense"}`}>
+            <p className={`rd-result__value rd-result__value--${financialTone(leftover)}`}>
               {leftover < 0 ? `−${formatCurrency(Math.abs(leftover))}` : formatCurrency(leftover)}
             </p>
             <p className="rd-result__text">{closingSentence(totalIncome, totalExpense)}</p>

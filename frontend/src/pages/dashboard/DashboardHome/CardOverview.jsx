@@ -1,3 +1,4 @@
+import { transactionTone } from "../../../utils/financialTone.js";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { getRecentTransactions } from "../../../api/transactions.js";
@@ -99,12 +100,12 @@ function RecentTransactions({ card, refreshKey }) {
               </span>
             </span>
             <span className="card-overview__end">
-              <span className={`card-overview__amount ${isIncome ? "card-overview__amount--income" : ""}`}>
+              <span className={`card-overview__amount card-overview__amount--${transactionTone(t.type, t.amount, t.isTransfer)}`}>
                 {isIncome ? "+ " : "− "}
                 {formatCurrency(t.amount)}
               </span>
               {t.status !== "Paid" && (
-                <StatusPill status={t.status}>{STATUS_LABELS[t.status] || t.status}</StatusPill>
+                <StatusPill status={t.status} pendingTone="neutral">{STATUS_LABELS[t.status] || t.status}</StatusPill>
               )}
             </span>
           </li>

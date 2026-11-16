@@ -112,7 +112,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         [FromQuery] string sortBy = "dueDate",
         [FromQuery] string sortDir = "desc",
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 25)
+        [FromQuery] int pageSize = 25,
+        [FromQuery] bool excludeTransfers = false)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -120,6 +121,12 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         var today = await UserTodayAsync(db);
         var query = FilteredQuery(bankAccountId, status, type, today);
+
+        // Receitas e despesas (CNPJ) lista o mês sem as transferências entre contas próprias, a mesma
+        // base dos agregados mensais; o Relatórios mostra elas com selo e por isso não passa o filtro.
+        // Filtrar antes da contagem mantém totalCount e páginas coerentes com o que é exibido.
+        if (excludeTransfers)
+            query = query.WithoutSelfTransfers();
 
         // year/month chegam como inteiros (não como DateTime cru na query string) de propósito:
         // o model binder de DateTime da ASP.NET não garante Kind=Utc a partir de string, e essa
@@ -195,6 +202,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
     private static string EstablishmentKey(string name) =>
         InstallmentSuffix.IsMatch(name) ? InstallmentSuffix.Replace(name, "").Trim(JsTrimChars) : name;
 
+    private const int MaxDailyBuckets = 62;
+
     [HttpGet("aggregates")]
     public async Task<IActionResult> GetAggregates(
         [FromQuery] Guid? bankAccountId,
@@ -216,6 +225,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             .AsAsyncEnumerable();
 
         var months = new Dictionary<(int Year, int Month), (decimal Income, decimal Expense, int Count)>();
+        var days = new Dictionary<DateOnly, (decimal Income, decimal Expense)>();
         var categories = new Dictionary<(string? Name, TransactionType Type), (decimal Amount, int Count)>();
         var establishments = new Dictionary<(string? Category, TransactionType Type, string Key), (decimal Amount, int Count, bool IsInstallment)>();
         decimal totalIncome = 0, totalExpense = 0;
@@ -230,6 +240,9 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             months.TryGetValue(monthKey, out var m);
             var isIncome = t.Type == TransactionType.Income;
             months[monthKey] = (m.Income + (isIncome ? t.Amount : 0), m.Expense + (isIncome ? 0 : t.Amount), m.Count + 1);
+            var dayKey = DateOnly.FromDateTime(t.DueDate);
+            days.TryGetValue(dayKey, out var d);
+            days[dayKey] = (d.Income + (isIncome ? t.Amount : 0), d.Expense + (isIncome ? 0 : t.Amount));
 
             if (isIncome) totalIncome += t.Amount; else totalExpense += t.Amount;
             count++;
@@ -251,6 +264,16 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             monthList.Add(new AggregateMonthDto(cursor.Year, cursor.Month, m.Income, m.Expense, m.Count));
         }
 
+        var dayList = new List<AggregateDayDto>();
+        if ((end - start).TotalDays <= MaxDailyBuckets)
+        {
+            for (var cursor = DateOnly.FromDateTime(start); cursor < DateOnly.FromDateTime(end); cursor = cursor.AddDays(1))
+            {
+                days.TryGetValue(cursor, out var d);
+                dayList.Add(new AggregateDayDto(cursor, d.Income, d.Expense));
+            }
+        }
+
         var categoryList = categories
             .Select(kv => new AggregateCategoryDto(kv.Key.Name, kv.Key.Type.ToString(), kv.Value.Amount, kv.Value.Count))
             .OrderByDescending(c => c.Amount)
@@ -261,7 +284,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             .OrderByDescending(e => e.Amount)
             .ToList();
 
-        return Ok(new TransactionAggregatesDto(totalIncome, totalExpense, count, monthList, categoryList, establishmentList));
+        return Ok(new TransactionAggregatesDto(totalIncome, totalExpense, count, monthList, categoryList, establishmentList, dayList));
     }
 
     private sealed record SumRow(DateTime DueDate, TransactionType Type, decimal Amount, bool IsTransfer);
@@ -338,12 +361,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             .ToList();
     }
 
-    // Busca sem diferenciar maiúsculas nem acentos ("pao" acha "Pão"), como o ILIKE fazia para
-    // maiúsculas, agora sobre o nome já decifrado em memória.
-    private static bool MatchesSearch(string name, string search) =>
-        System.Globalization.CultureInfo.InvariantCulture.CompareInfo.IndexOf(
-            name, search.Trim(),
-            System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+    private static bool MatchesSearch(string name, string search) => TextSearch.Matches(name, search);
 
     private static IEnumerable<TransactionDto> SortInMemory(List<TransactionDto> items, string sortBy, bool desc)
     {
@@ -502,76 +520,13 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         return failing ? "delayed" : "importing";
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateTransactionDto dto)
-    {
-        if (!Enum.TryParse<TransactionType>(dto.Type, true, out var type) || !Enum.IsDefined(type))
-            return BadRequest(new { message = "Tipo inválido. Use 'Income' ou 'Expense'." });
+    // Não há criação nem edição livre de lançamento: receitas, despesas e transferências só nascem e
+    // mudam pelo sync da Polp (upsert pelo id da Polp em Description). O usuário só personaliza o que
+    // o sync preserva (nome e categoria, ver SetDetails) e a marca de gasto fixo. Antes existiam
+    // POST /transactions e PUT /transactions/{id}; o PUT sobrescrevia valor, data, tipo, conta e até
+    // o Description, o que quebrava a reconciliação com a Polp.
 
-        if (!Enum.TryParse<TransactionStatus>(dto.Status, true, out var status) || !Enum.IsDefined(status))
-            return BadRequest(new { message = "Status inválido. Use 'Pending', 'Paid' ou 'Overdue'." });
-
-        if (!await OwnsReferencesAsync(dto.BankAccountId, dto.CategoryId))
-            return BadRequest(new { message = "Conta bancária ou categoria inválida." });
-
-        var transaction = new Transaction
-        {
-            UserId = UserId,
-            Name = dto.Name,
-            Description = dto.Description,
-            Type = type,
-            Status = status,
-            Amount = dto.Amount,
-            // O JSON manda datas como "2026-08-20" (sem timezone), então o binder do ASP.NET
-            // gera Kind=Unspecified; o Npgsql exige Kind=Utc pra colunas timestamptz.
-            DueDate = DateTime.SpecifyKind(dto.DueDate, DateTimeKind.Utc),
-            BankAccountId = dto.BankAccountId,
-            CategoryId = dto.CategoryId,
-            IsFixed = dto.IsFixed,
-            PaidAt = status == TransactionStatus.Paid ? DateTime.UtcNow : null
-        };
-
-        db.Transactions.Add(transaction);
-        await db.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(GetAll), new { id = transaction.Id }, TransactionDto.FromEntity(transaction, await UserTodayAsync(db)));
-    }
-
-    [HttpPut("{id}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] CreateTransactionDto dto)
-    {
-        var transaction = await db.Transactions.FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId);
-        if (transaction is null) return NotFound();
-
-        if (!Enum.TryParse<TransactionType>(dto.Type, true, out var type) || !Enum.IsDefined(type))
-            return BadRequest(new { message = "Tipo inválido." });
-
-        if (!Enum.TryParse<TransactionStatus>(dto.Status, true, out var status) || !Enum.IsDefined(status))
-            return BadRequest(new { message = "Status inválido." });
-
-        if (!await OwnsReferencesAsync(dto.BankAccountId, dto.CategoryId))
-            return BadRequest(new { message = "Conta bancária ou categoria inválida." });
-
-        transaction.Name = dto.Name;
-        transaction.Description = dto.Description;
-        transaction.Type = type;
-        transaction.Status = status;
-        transaction.Amount = dto.Amount;
-        var newDueDate = DateTime.SpecifyKind(dto.DueDate, DateTimeKind.Utc);
-        if (newDueDate != transaction.DueDate) transaction.ReminderSentAt = null;
-        transaction.DueDate = newDueDate;
-        transaction.BankAccountId = dto.BankAccountId;
-        transaction.CategoryId = dto.CategoryId;
-        transaction.IsFixed = dto.IsFixed;
-        transaction.PaidAt = status == TransactionStatus.Paid ? transaction.PaidAt ?? DateTime.UtcNow : null;
-
-        await db.SaveChangesAsync();
-        return Ok();
-    }
-
-    // Endpoint dedicado só pra alternar IsFixed: reaproveitar o Update genérico exigiria montar
-    // o CreateTransactionDto inteiro no cliente a partir do TransactionDto (que não expõe
-    // BankAccountId/CategoryId, só os nomes), arriscando sobrescrever campos com dado incompleto.
+    // Só a marca de gasto recorrente: personalização do app, não dado do banco.
     [HttpPut("{id}/fixed")]
     public async Task<IActionResult> SetFixed(Guid id, [FromBody] SetTransactionFixedDto dto)
     {
@@ -586,8 +541,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         return Ok(TransactionDto.FromEntity(transaction, await UserTodayAsync(db)));
     }
 
-    // Endpoint dedicado só pra corrigir nome/categoria (ex.: categorização errada vinda da Polp).
-    // Ver comentário no SetTransactionDetailsDto sobre por que não dá pra reaproveitar o Update genérico.
+    // Nome e categoria são os únicos campos que o usuário corrige (ex.: categorização errada vinda da
+    // Polp). O sync respeita a correção: só completa nome/categoria que ainda são os automáticos.
     [HttpPut("{id}/details")]
     public async Task<IActionResult> SetDetails(Guid id, [FromBody] SetTransactionDetailsDto dto)
     {
@@ -600,7 +555,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         if (dto.CategoryId.HasValue && !await db.Categories.AnyAsync(c => c.Id == dto.CategoryId && c.UserId == UserId))
             return BadRequest(new { message = "Categoria inválida." });
 
-        transaction.Name = dto.Name;
+        transaction.Name = dto.Name.Trim();
         transaction.CategoryId = dto.CategoryId;
 
         await db.SaveChangesAsync();
@@ -611,29 +566,22 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         return Ok(TransactionDto.FromEntity(transaction, await UserTodayAsync(db)));
     }
 
+    // Só sobra para apagar lançamento manual antigo (de antes de o app ser só automático). Linha
+    // importada tem o id da Polp em Description: apagar mudaria os totais com dado do banco e o
+    // próximo webhook da mesma janela a recriaria.
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {
         var transaction = await db.Transactions.FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId);
         if (transaction is null) return NotFound();
 
+        if (IsImported(transaction))
+            return Conflict(new { message = "Movimentações importadas do banco não podem ser apagadas." });
+
         db.Transactions.Remove(transaction);
         await db.SaveChangesAsync();
         return NoContent();
     }
 
-    // Impede que um usuário associe a transação a uma conta bancária ou categoria de outra pessoa
-    // (BOLA/IDOR): os ids vêm do corpo da requisição e não podiam ser confiados sem essa checagem.
-    private async Task<bool> OwnsReferencesAsync(Guid? bankAccountId, Guid? categoryId)
-    {
-        if (bankAccountId.HasValue &&
-            !await db.BankAccounts.AnyAsync(b => b.Id == bankAccountId && b.UserId == UserId))
-            return false;
-
-        if (categoryId.HasValue &&
-            !await db.Categories.AnyAsync(c => c.Id == categoryId && c.UserId == UserId))
-            return false;
-
-        return true;
-    }
+    private static bool IsImported(Transaction t) => Guid.TryParse(t.Description, out _);
 }

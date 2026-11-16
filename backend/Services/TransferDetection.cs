@@ -27,4 +27,8 @@ public static class TransferDetection
     }
 
     public static bool IsSelfTransfer(PolpMovementKind kind) => kind != PolpMovementKind.None;
+
+    // Versão traduzível para SQL de IsSelfTransfer, para filtrar antes de paginar.
+    public static IQueryable<Transaction> WithoutSelfTransfers(this IQueryable<Transaction> query) =>
+        query.Where(t => t.PolpMovementKind == PolpMovementKind.None);
 }

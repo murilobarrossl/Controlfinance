@@ -1,17 +1,18 @@
 import { useRef } from "react";
 import useModalBehavior from "../../../hooks/useModalBehavior.js";
-import Button from "../Button/Button.jsx";
 import "./FormDialog.css";
 
 // Mesma casca do ConfirmDialog (trava de scroll, Esc fecha, foco preso no painel), mas com um
-// <form> dentro: o ConfirmDialog só tem título + mensagem + dois botões e não serve pra entrada
-// de dados. Genérico de propósito: não sabe o que está sendo cadastrado.
+// <form> dentro. Genérico de propósito: não sabe o que está sendo cadastrado. As ações são botões
+// próprios, compactos: o Button global é o de chamada da landing (caixa alta, pílula) e pesa demais
+// dentro de um formulário.
 export default function FormDialog({
   open,
   title,
   description,
   error,
   submitLabel = "Salvar",
+  cancelLabel = "Cancelar",
   submitting = false,
   onSubmit,
   onClose,
@@ -30,16 +31,23 @@ export default function FormDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="form-dialog-title"
+        aria-describedby={description ? "form-dialog-description" : undefined}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="form-dialog-title" className="form-dialog__title">
-          {title}
-        </h2>
-        {description && <p className="form-dialog__description">{description}</p>}
+        <header className="form-dialog__header">
+          <h2 id="form-dialog-title" className="form-dialog__title">
+            {title}
+          </h2>
+          {description && (
+            <p id="form-dialog-description" className="form-dialog__description">
+              {description}
+            </p>
+          )}
+        </header>
 
-        <form className="form-dialog__form" onSubmit={onSubmit}>
-          {children}
+        <form className="form-dialog__form" onSubmit={onSubmit} aria-busy={submitting}>
+          <div className="form-dialog__body">{children}</div>
 
           {error && (
             <p className="form-dialog__error" role="alert">
@@ -48,12 +56,12 @@ export default function FormDialog({
           )}
 
           <div className="form-dialog__actions">
-            <Button as="button" type="button" variant="outline" size="sm" onClick={onClose} disabled={submitting}>
-              Cancelar
-            </Button>
-            <Button as="button" type="submit" variant="primary" size="sm" disabled={submitting}>
-              {submitting ? "Salvando..." : submitLabel}
-            </Button>
+            <button type="button" className="form-dialog__action form-dialog__action--ghost" onClick={onClose} disabled={submitting}>
+              {cancelLabel}
+            </button>
+            <button type="submit" className="form-dialog__action form-dialog__action--primary" disabled={submitting}>
+              {submitting ? "Salvando…" : submitLabel}
+            </button>
           </div>
         </form>
       </div>

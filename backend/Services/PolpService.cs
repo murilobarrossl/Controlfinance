@@ -95,6 +95,7 @@ public class PolpConsentDto
 
 public class PolpBalanceDto
 {
+    [JsonPropertyName("update_date_time")] public string? UpdateDateTime { get; set; }
     [JsonPropertyName("available_amount")] public PolpMoney? AvailableAmount { get; set; }
     [JsonPropertyName("has_reserved_balance")] public bool? HasReservedBalance { get; set; }
 }
@@ -203,6 +204,80 @@ public class PolpCardTransactionDto
     [JsonPropertyName("identification_number")] public string? IdentificationNumber { get; set; }
     [JsonPropertyName("counterparty")] public PolpCounterpartyDto? Counterparty { get; set; }
     [JsonPropertyName("category_ref")] public string? CategoryRef { get; set; }
+}
+
+// 422 da Polp: Fields são só nomes de campo (ex.: "cnpj", "cpf"), nunca valores.
+public sealed class PolpValidationException(string message, IReadOnlyList<string> fields)
+    : HttpRequestException(message, null, HttpStatusCode.UnprocessableEntity)
+{
+    public IReadOnlyList<string> Fields { get; } = fields;
+}
+
+// Resumo de um corpo de erro de validação que pode ir para o log: código, nomes de campo e
+// mensagens com todo dígito trocado por "#" (CPF, CNPJ, conta e valores somem) e tamanho limitado.
+// Só chaves conhecidas são lidas; o resto do corpo é ignorado.
+public sealed record PolpValidationSummary(string? Code, IReadOnlyList<string> Fields, IReadOnlyList<string> Messages)
+{
+    private const int MaxText = 160;
+    private const int MaxItems = 8;
+    private static readonly System.Text.RegularExpressions.Regex Digit = new(@"\d", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex FieldName = new(@"^[A-Za-z_][A-Za-z0-9_.]{0,39}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public static PolpValidationSummary From(string body)
+    {
+        string? code = null;
+        var fields = new List<string>();
+        var messages = new List<string>();
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return new(null, fields, messages);
+
+            code = Text(root, "code");
+            AddMessage(messages, Text(root, "message"));
+            if (root.TryGetProperty("error", out var error))
+            {
+                if (error.ValueKind == JsonValueKind.String) AddMessage(messages, error.GetString());
+                else if (error.ValueKind == JsonValueKind.Object)
+                {
+                    code ??= Text(error, "code");
+                    AddMessage(messages, Text(error, "message"));
+                }
+            }
+            if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var field in errors.EnumerateObject().Take(MaxItems))
+                {
+                    if (!FieldName.IsMatch(field.Name)) continue;
+                    fields.Add(field.Name);
+                    var first = field.Value.ValueKind == JsonValueKind.Array
+                        ? field.Value.EnumerateArray().FirstOrDefault()
+                        : field.Value;
+                    if (first.ValueKind == JsonValueKind.String) AddMessage(messages, first.GetString());
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Corpo que não é JSON não entra no log nem resumido.
+        }
+        return new(code is null ? null : Clean(code), fields, messages);
+    }
+
+    private static string? Text(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static void AddMessage(List<string> messages, string? message)
+    {
+        if (!string.IsNullOrWhiteSpace(message) && messages.Count < MaxItems) messages.Add(Clean(message));
+    }
+
+    private static string Clean(string text)
+    {
+        var masked = Digit.Replace(text.Trim(), "#");
+        return masked.Length > MaxText ? masked[..MaxText] + "…" : masked;
+    }
 }
 
 // OperatorCpf: só em conexão de empresa (Document = CNPJ); a Polp exige o CPF de quem opera a conta.
@@ -565,12 +640,43 @@ public class PolpService : IPolpService
 
     // Só ação e status HTTP vão pro log e pra exceção: o corpo de erro da Polp pode repetir o
     // CPF/CNPJ enviado, dados da conta ou detalhes internos, e a mensagem da exceção chegava até
-    // o navegador do usuário.
-    private Task EnsureSuccess(HttpResponseMessage resp, string action)
+    // o navegador do usuário. A exceção é o 422 (validação): sem saber qual campo a Polp recusou,
+    // uma conexão recusada não tem diagnóstico. Dele sai só um resumo (PolpValidationSummary),
+    // nunca o corpo.
+    private async Task EnsureSuccess(HttpResponseMessage resp, string action)
     {
-        if (resp.IsSuccessStatusCode) return Task.CompletedTask;
+        if (resp.IsSuccessStatusCode) return;
 
-        _logger.LogWarning("Polp API: falha ao {Action} (HTTP {Status})", action, (int)resp.StatusCode);
+        if (resp.StatusCode == HttpStatusCode.UnprocessableEntity)
+        {
+            var summary = PolpValidationSummary.From(await ReadBoundedAsync(resp));
+            _logger.LogWarning("Polp API: falha ao {Action} (HTTP {Status}). Código: {Code}. Campos: {Fields}. Mensagens: {Messages}",
+                action, (int)resp.StatusCode, summary.Code ?? "-", string.Join(", ", summary.Fields), string.Join(" | ", summary.Messages));
+            throw new PolpValidationException($"Falha ao {action} na Polp (HTTP 422).", summary.Fields);
+        }
+
+        // 401/403 aqui é configuração, não instabilidade: a Polp autentica cada chamada só pelos
+        // cabeçalhos x-api-client/x-api-secret (não há token a renovar), então credencial recusada
+        // falha em toda rota até alguém corrigir Polp:ClientId/Polp:ClientSecret. Vai como erro, com
+        // o nome das chaves e nunca o valor.
+        if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            _logger.LogError("Polp API: credenciais recusadas ao {Action} (HTTP {Status}). Confira Polp:ClientId e Polp:ClientSecret no painel da Polp.",
+                action, (int)resp.StatusCode);
+        else
+            _logger.LogWarning("Polp API: falha ao {Action} (HTTP {Status})", action, (int)resp.StatusCode);
         throw new HttpRequestException($"Falha ao {action} na Polp (HTTP {(int)resp.StatusCode}).", null, resp.StatusCode);
+    }
+
+    private static async Task<string> ReadBoundedAsync(HttpResponseMessage resp)
+    {
+        try
+        {
+            var text = await resp.Content.ReadAsStringAsync();
+            return text.Length > 8192 ? text[..8192] : text;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException)
+        {
+            return string.Empty;
+        }
     }
 }

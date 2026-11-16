@@ -1,3 +1,5 @@
+import { financialTone, transactionTone } from "../../../utils/financialTone.js";
+import { CHART_COLORS } from "../../../components/charts/chartTheme.js";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { getDashboardSummary } from "../../../api/dashboard.js";
@@ -8,19 +10,17 @@ import { isAbortError } from "../../../api/client.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import NoBankAccount from "../../../components/dashboard/NoBankAccount/NoBankAccount.jsx";
-import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
-import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
 import AreaTrendChart from "../../../components/charts/AreaTrendChart.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
+import { NEUTRAL_DONUT_SHADES } from "../../../components/charts/chartTheme.js";
 import CardPicker from "../../../components/dashboard/CardPicker/CardPicker.jsx";
-import { cardBrand, cardNetwork, cardPickerOption, connectorsByName } from "../../../utils/cardBrand.js";
+import { cardBrand, cardPickerOption, connectorsByName } from "../../../utils/cardBrand.js";
 import { groupCards } from "../../../utils/cardGroups.js";
 import { resolveCategoryColor, OTHERS_COLOR } from "../../../utils/categoryColors.js";
-import { WalletIcon, TrendUpIcon, TrendDownIcon, TargetIcon, CardIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency, formatPercentage, roundMoney } from "../../../utils/financeMath.js";
 import {
   getMonthsWindow,
@@ -30,6 +30,9 @@ import {
 } from "../../../utils/monthlyTrend.js";
 import { computeTrend } from "../../../utils/trend.js";
 import CardOverview from "./CardOverview.jsx";
+import DashboardSection from "../../../components/dashboard/DashboardPanel/DashboardPanel.jsx";
+import DashboardMetric from "../../../components/dashboard/DashboardMetric/DashboardMetric.jsx";
+import { isBusinessHolder } from "../../../utils/holder.js";
 import "./DashboardHome.css";
 import usePageTitle from "../../../hooks/usePageTitle.js";
 
@@ -45,43 +48,47 @@ function buildDonutData(categoryExpenses, categories) {
   const rest = sorted.slice(MAX_DONUT_SLICES);
   const restTotal = rest.reduce((sum, c) => sum + c.amount, 0);
 
+  // O sync cria uma categoria real chamada "Outros": quando ela está entre as maiores, a fatia do resto
+  // muda de nome para não haver dois itens iguais, e a chave distingue os dois de qualquer forma.
   const data = top.map((c) => ({
+    key: `categoria:${c.categoryName}`,
     name: c.categoryName,
     value: c.amount,
     color: resolveCategoryColor(c.categoryName, categories),
   }));
-  if (restTotal > 0) data.push({ name: "Outros", value: restTotal, color: OTHERS_COLOR, isRest: true });
+  if (restTotal > 0) {
+    const restName = data.some((d) => d.name === "Outros") ? "Demais categorias" : "Outros";
+    data.push({ key: "resto", name: restName, value: restTotal, color: OTHERS_COLOR, isRest: true });
+  }
 
   return data;
 }
 
-function DashboardHomeSkeleton({ firstName }) {
+function welcomeTitle(name) {
+  const firstName = name?.split(" ")[0];
+  return firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)";
+}
+
+function DashboardHomeSkeleton({ title }) {
   return (
     <div className="dashboard-home" aria-busy="true">
       <div className="dashboard-home__header">
-        <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"} level={1} />
+        <SectionHeading title={title} level={1} />
       </div>
 
-      <div className="dashboard-home__stats">
-        <StatCard icon={null} label={<Skeleton width="9rem" />} value={<Skeleton width="7rem" height="1.5rem" />} />
-        <StatCard icon={<TrendUpIcon />} label="Entradas do mês" value={<Skeleton width="7rem" height="1.5rem" />} />
-        <StatCard icon={<TrendDownIcon />} label="Saídas do mês" value={<Skeleton width="7rem" height="1.5rem" />} />
-        <StatCard
-          icon={<TargetIcon />}
+      <div className="dashboard-home__stats summary-dividers summary-dividers--four">
+        <DashboardMetric label={<Skeleton width="9rem" />} value={<Skeleton width="7rem" height="1.5rem" />} />
+        <DashboardMetric label="Entradas do mês" value={<Skeleton width="7rem" height="1.5rem" />} />
+        <DashboardMetric label="Saídas do mês" value={<Skeleton width="7rem" height="1.5rem" />} />
+        <DashboardMetric
           label="Resultado do mês"
           value={<Skeleton width="7rem" height="1.5rem" />}
           secondaryLines={[{ label: "% da receita gasta", value: <Skeleton width="3rem" /> }]}
         />
-        <StatCard
-          icon={<CardIcon />}
-          label="Cartão"
-          value={<Skeleton width="7rem" height="1.5rem" />}
-          secondaryLines={[{ label: <Skeleton width="4rem" />, value: <Skeleton width="6rem" /> }]}
-        />
       </div>
 
       <div className="dashboard-home__grid">
-        <Card
+        <DashboardSection
           title={
             <>
               Receitas x despesas{" "}
@@ -90,8 +97,8 @@ function DashboardHomeSkeleton({ firstName }) {
           }
         >
           <Skeleton width="100%" height="220px" />
-        </Card>
-        <Card
+        </DashboardSection>
+        <DashboardSection
           title={
             <>
               Principais categorias <span className="dashboard-home__title-note">(mês atual)</span>
@@ -99,13 +106,14 @@ function DashboardHomeSkeleton({ firstName }) {
           }
         >
           <Skeleton width="100%" height="220px" />
-        </Card>
+        </DashboardSection>
       </div>
     </div>
   );
 }
 
-export default function DashboardHome() {
+// heading: título no lugar da saudação (o dashboard empresarial usa o nome da empresa).
+export default function DashboardHome({ heading } = {}) {
   usePageTitle("Dashboard inteligente");
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -193,11 +201,12 @@ export default function DashboardHome() {
 
   if (accountsStatus === "ready" && !scopeKey) return <NoBankAccount />;
 
-  if (loading) return <DashboardHomeSkeleton firstName={user?.name?.split(" ")[0]} />;
+  const title = heading ?? welcomeTitle(user?.name);
+  if (loading) return <DashboardHomeSkeleton title={title} />;
 
   if (!summary?.account) {
     return (
-      <Card className="dashboard-home__empty">
+      <DashboardSection className="dashboard-home__empty">
         <p>{summary?.message || "Nenhum banco conectado ainda."}</p>
         <p className="dashboard-home__empty-hint">Conecte um banco e o saldo e o extrato chegam sozinhos.</p>
         <div className="dashboard-home__empty-actions">
@@ -205,7 +214,7 @@ export default function DashboardHome() {
             Conectar banco
           </Button>
         </div>
-      </Card>
+      </DashboardSection>
     );
   }
 
@@ -218,12 +227,12 @@ export default function DashboardHome() {
       ? ((currentMonthTrend.Receitas - currentMonthTrend.Despesas) / currentMonthTrend.Receitas) * 100
       : null;
   const donutData = buildDonutData(categoryExpenses, categories);
-  const openCategory = (name, entry) => {
+  // Categorias não existe no ambiente empresarial: lá a rosca fica só como leitura, sem link.
+  const openCategory = isBusinessHolder(user) ? undefined : (name, entry) => {
     const params = new URLSearchParams({ periodo: "mes" });
     if (!entry?.isRest) params.set("categoria", name);
     navigate(`/dashboard/categorias?${params}`);
   };
-  const firstName = user?.name?.split(" ")[0];
 
   const incomeTrend = computeTrend(currentMonthTrend?.Receitas, previousMonthSamePeriod?.Receitas, {
     label: "vs mesmo período",
@@ -250,7 +259,7 @@ export default function DashboardHome() {
   return (
     <div className="dashboard-home">
       <div className="dashboard-home__header">
-        <SectionHeading title={firstName ? `Bem-vindo(a), ${firstName}` : "Bem-vindo(a)"} level={1} />
+        <SectionHeading title={title} level={1} />
 
         {isCardView && (
           <div className="dashboard-home__account-controls">
@@ -270,49 +279,36 @@ export default function DashboardHome() {
         )}
       </div>
 
-      <div className="dashboard-home__stats">
-        <StatCard
-          icon={isCardView ? <CardIcon /> : <WalletIcon />}
+      <div className="dashboard-home__stats summary-dividers summary-dividers--four">
+        <DashboardMetric
           label={isCardView ? "Saldo do cartão (informado pelo banco)" : "Saldo em conta"}
           value={formatCurrency(account.balance)}
+          valueTone={isCardView ? "default" : financialTone(account.balance)}
           trend={balanceTrend ?? undefined}
           secondaryLines={account.balanceIncomplete ? [{ label: "Saldo", value: "Aguardando sincronização" }] : []}
         />
-        <StatCard
-          icon={<TrendUpIcon />}
+        <DashboardMetric
           label="Entradas do mês"
           value={formatCurrency(totalIncome)}
-          valueTone="income"
+          valueTone={financialTone(totalIncome)}
           trend={incomeTrend}
         />
-        <StatCard
-          icon={<TrendDownIcon />}
+        <DashboardMetric
           label="Saídas do mês"
           value={formatCurrency(totalExpense)}
-          valueTone="expense"
+          valueTone={transactionTone("Expense", totalExpense)}
           trend={expenseTrend}
         />
-        <StatCard
-          icon={<TargetIcon />}
+        <DashboardMetric
           label="Resultado do mês"
           value={formatCurrency(monthlyBalance)}
-          valueTone={monthlyBalance >= 0 ? "income" : "expense"}
-          secondaryLines={[{ label: "% da receita gasta", value: formatPercentage(percentageSpent) }]}
-        />
-        <StatCard
-          icon={<CardIcon />}
-          label="Cartão"
-          value={activeCard ? ["Crédito", cardNetwork(activeCard.brand)?.label].filter(Boolean).join(" · ") : "Nenhum cartão"}
-          secondaryLines={
-            activeCard
-              ? [{ label: "Cartão", value: activeCard.name }]
-              : [{ label: "Cadastre ou conecte em", value: "Cartões" }]
-          }
+          valueTone={financialTone(monthlyBalance)}
+          secondaryLines={[{ label: "% da receita gasta", value: formatPercentage(percentageSpent), tone: percentageSpent > 100 ? "negative" : "default" }]}
         />
       </div>
 
       <div className="dashboard-home__grid">
-        <Card
+        <DashboardSection
           title={
             <>
               Receitas x despesas{" "}
@@ -324,15 +320,15 @@ export default function DashboardHome() {
             height={220}
             formatValue={formatCurrency}
             series={[
-              { key: "Receitas", color: "#4ECDC4" },
-              { key: "Despesas", color: "#ED4A31" },
+              { key: "Receitas", color: CHART_COLORS.income },
+              { key: "Despesas", color: CHART_COLORS.expense, strokeDasharray: "6 4" },
             ]}
             data={monthlyTrend}
-            badge={{ value: formatPercentage(savingsRate), label: "Taxa de poupança" }}
+            badge={{ value: formatPercentage(savingsRate), label: "Taxa de poupança", tone: financialTone(savingsRate) }}
           />
-        </Card>
+        </DashboardSection>
 
-        <Card
+        <DashboardSection
           title={
             <>
               Principais categorias <span className="dashboard-home__title-note">(mês atual)</span>
@@ -343,6 +339,7 @@ export default function DashboardHome() {
             <p className="dashboard-home__hint">Nenhuma despesa categorizada este mês.</p>
           ) : (
             <CategoryDonutChart
+              palette={NEUTRAL_DONUT_SHADES}
               height={220}
               formatValue={formatCurrency}
               data={donutData}
@@ -353,11 +350,11 @@ export default function DashboardHome() {
               onSliceClick={openCategory}
             />
           )}
-        </Card>
+        </DashboardSection>
       </div>
 
       {activeCard && (
-        <Card
+        <DashboardSection
           className="dashboard-home__card-block"
           title="Seu cartão"
           action={
@@ -383,7 +380,7 @@ export default function DashboardHome() {
             onOpenCards={() => setCardConfirmOpen(true)}
             refreshKey={dataRefreshKey}
           />
-        </Card>
+        </DashboardSection>
       )}
 
       <ConfirmDialog

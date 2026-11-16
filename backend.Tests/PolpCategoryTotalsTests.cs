@@ -212,8 +212,7 @@ public class PolpCategoryTotalsTests
 
         var transactions = t.Controller(db => new TransactionsController(db));
         Results.OkValue<TransactionDto>(await transactions.SetDetails(transferOut.Id, new SetTransactionDetailsDto("Mercado", food.Id)));
-        Assert.IsType<Microsoft.AspNetCore.Mvc.OkResult>(await transactions.Update(transferIn.Id,
-            new CreateTransactionDto("Salário extra", null, "Income", "Paid", 1000m, day, savings.Id, food.Id)));
+        Results.OkValue<TransactionDto>(await transactions.SetDetails(transferIn.Id, new SetTransactionDetailsDto("Salário extra", food.Id)));
 
         await AssertTotals();
 
@@ -233,10 +232,10 @@ public class PolpCategoryTotalsTests
         var billCategory = t.AddCategory(TransferDetection.CardBillPaymentCategoryName);
         var selfCategory = t.AddCategory(TransferDetection.SelfTransferCategoryName);
         var day = MonthStart().AddDays(9);
-        var transactions = t.Controller(db => new TransactionsController(db));
-        await transactions.Create(new CreateTransactionDto("Fatura do cartão", null, "Expense", "Paid", 500m, day, account.Id, billCategory.Id));
-        await transactions.Create(new CreateTransactionDto("Pix pra poupança", null, "Expense", "Paid", 800m, day, account.Id, selfCategory.Id));
-        await transactions.Create(new CreateTransactionDto("Reembolso", null, "Income", "Paid", 120m, day, account.Id, selfCategory.Id));
+        // Lançamentos manuais antigos (não há mais como criar): gravados direto, como ficaram no banco.
+        t.AddTransaction(account, TransactionType.Expense, 500m, day, "Fatura do cartão", category: billCategory);
+        t.AddTransaction(account, TransactionType.Expense, 800m, day, "Pix pra poupança", category: selfCategory);
+        t.AddTransaction(account, TransactionType.Income, 120m, day, "Reembolso", category: selfCategory);
         Assert.All(t.Db.Transactions.ToList(), x => Assert.Equal(PolpMovementKind.None, x.PolpMovementKind));
 
         var all = await MonthAggregates(t);

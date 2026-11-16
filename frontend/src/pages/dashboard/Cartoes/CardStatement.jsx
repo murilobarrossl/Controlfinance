@@ -1,3 +1,4 @@
+import { financialTone, transactionTone } from "../../../utils/financialTone.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getTransactionsReport } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
@@ -170,13 +171,13 @@ export default function CardStatement({ card, getBrand }) {
           <dl className="cartoes__statement-totals">
             <div>
               <dt>Compras no mês</dt>
-              <dd className="cartoes__statement-total--expense">
+              <dd className={`cartoes__statement-total--${transactionTone("Expense", summary?.totalExpense)}`}>
                 {summary ? formatCurrency(summary.totalExpense) : <Skeleton width="6rem" height="1.2rem" />}
               </dd>
             </div>
             <div>
               <dt>Pagamentos e estornos</dt>
-              <dd className="cartoes__statement-total--income">
+              <dd className={`cartoes__statement-total--${financialTone(summary?.totalIncome)}`}>
                 {summary ? formatCurrency(summary.totalIncome) : <Skeleton width="6rem" height="1.2rem" />}
               </dd>
             </div>
@@ -211,9 +212,9 @@ export default function CardStatement({ card, getBrand }) {
                           </span>
                           <span className="cartoes__row-end">
                             {t.status !== "Paid" && (
-                              <StatusPill status={t.status}>{STATUS_LABELS[t.status] || t.status}</StatusPill>
+                              <StatusPill status={t.status} pendingTone="neutral">{STATUS_LABELS[t.status] || t.status}</StatusPill>
                             )}
-                            <span className={`cartoes__row-amount${isIncome ? " cartoes__row-amount--income" : ""}`}>
+                            <span className={`cartoes__row-amount cartoes__row-amount--${transactionTone(t.type, t.amount, t.isTransfer)}`}>
                               {isIncome ? "+" : "\u2212"}
                               {formatCurrency(t.amount)}
                             </span>

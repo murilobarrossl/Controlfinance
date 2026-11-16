@@ -81,6 +81,7 @@ public class StartupDatabaseConnectionTests
         Assert.Equal(3, calls);
         Assert.DoesNotContain("informacao-privada", error.ToString());
         Assert.Contains("Nenhuma migration", error.Message);
+        Assert.Contains("NpgsqlException -> TimeoutException", error.Message);
     }
 
     [Fact]
@@ -116,6 +117,7 @@ public class StartupDatabaseConnectionTests
         }, NullLogger.Instance, default, (_, _) => Task.CompletedTask));
         Assert.Equal(3, calls);
         Assert.DoesNotContain("informacao-privada", error.ToString());
+        Assert.Contains("InvalidOperationException -> NpgsqlException -> TimeoutException", error.Message);
     }
 
     [Fact]

@@ -7,6 +7,6 @@ namespace ControlFinance.API.Services;
 public static class LegalDocuments
 {
     public const string TermsVersion = "2026-11-14";
-    public const string PrivacyVersion = "2026-11-14";
+    public const string PrivacyVersion = "2026-11-16";
     public const string BankConnectionNoticeVersion = "2026-11-11";
 }

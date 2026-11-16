@@ -1,0 +1,22 @@
+.dashboard-panel {
+  min-width: 0;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.dashboard-panel__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.dashboard-panel__title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5;
+}

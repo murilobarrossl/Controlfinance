@@ -62,24 +62,6 @@ export const getTransactionDetails = async (
   return apiFetch(`/transactions/details?${params.toString()}`, { signal });
 };
 
-// Lançamento cadastrado à mão. type: "Income" | "Expense"; status: "Pending" | "Paid".
-// dueDate vai como "AAAA-MM-DD" (o backend marca como UTC; ver CreateTransactionDto).
-export const createTransaction = async ({ name, type, status, amount, dueDate, bankAccountId, categoryId, isFixed }) =>
-  apiFetch("/transactions", {
-    method: "POST",
-    body: JSON.stringify({
-      name,
-      description: null,
-      type,
-      status,
-      amount,
-      dueDate,
-      bankAccountId: bankAccountId || null,
-      categoryId: categoryId || null,
-      isFixed: Boolean(isFixed),
-    }),
-  });
-
 export const getRecentTransactions = async ({ bankAccountId, limit }, { signal } = {}) => {
   const params = new URLSearchParams({ bankAccountId });
   if (limit) params.set("limit", limit);

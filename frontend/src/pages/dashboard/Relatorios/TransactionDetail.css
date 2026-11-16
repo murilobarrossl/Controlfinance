@@ -351,3 +351,7 @@
     gap: 0.15rem;
   }
 }
+
+.tx-detail__amount--expense {
+  color: var(--color-expense);
+}

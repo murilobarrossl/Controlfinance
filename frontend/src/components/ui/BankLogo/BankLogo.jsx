@@ -6,8 +6,14 @@ import "./BankLogo.css";
 // imagem falhar), mostra as iniciais do banco na cor dele, em vez de uma imagem quebrada; com
 // fallback="none" não mostra nada, para quando o nome do banco já está ao lado e as iniciais
 // ficariam ilegíveis no tamanho usado.
+// Logos são de servidores dos bancos e algumas URLs informadas pela Polp não carregam (domínio que
+// não resolve, 403 contra uso fora do site deles). Uma URL que já falhou vai direto para as
+// iniciais nas outras ocorrências da tela, em vez de repetir a tentativa a cada logo renderizada.
+const failedLogoUrls = new Set();
+
 export default function BankLogo({ name = "", logoUrl, color, size = 32, fallback = "initials" }) {
-  const [failed, setFailed] = useState(false);
+  const [failedUrl, setFailedUrl] = useState(null);
+  const failed = failedUrl === logoUrl || failedLogoUrls.has(logoUrl);
   const style = { "--bank-logo-size": `${size}px` };
 
   if (!logoUrl || failed) {
@@ -40,7 +46,10 @@ export default function BankLogo({ name = "", logoUrl, color, size = 32, fallbac
       style={style}
       width={size}
       height={size}
-      onError={() => setFailed(true)}
+      onError={() => {
+        failedLogoUrls.add(logoUrl);
+        setFailedUrl(logoUrl);
+      }}
       loading="lazy"
       referrerPolicy="no-referrer"
     />

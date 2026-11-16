@@ -12,7 +12,7 @@ function installmentLabel(name) {
   return name.match(INSTALLMENT_SUFFIX)?.[1] ?? null;
 }
 
-// Blocos do card "Categorias". A barra usa a mesma cor da fatia na rosca, para ligar as duas leituras.
+// Linhas de categorias. A barra usa a mesma cor da fatia na rosca para ligar as duas leituras.
 export function CategoryList({ data, activeName, onSelect }) {
   return (
     <ul className="cat-list">

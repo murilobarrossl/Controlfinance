@@ -60,6 +60,9 @@ namespace ControlFinance.API.Migrations
                         .HasColumnType("text")
                         .HasColumnName("BalanceEncrypted");
 
+                    b.Property<DateTime?>("BalanceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("BankCode")
                         .HasColumnType("text");
 
@@ -140,6 +143,36 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("UserId", "IsActive");
 
                     b.ToTable("BankAccounts");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.BankBalanceObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Balance")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("BalanceEncrypted");
+
+                    b.Property<Guid>("BankAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BankAccountId");
+
+                    b.HasIndex("UserId", "BankAccountId", "ObservedAt")
+                        .IsUnique();
+
+                    b.ToTable("BankBalanceObservations");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.Category", b =>
@@ -223,6 +256,107 @@ namespace ControlFinance.API.Migrations
                     b.HasIndex("BankAccountId");
 
                     b.ToTable("EmergencyReserves");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.Employee", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("AdmissionDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Cpf")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("CpfEncrypted");
+
+                    b.Property<string>("CpfHash")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Department")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("EmploymentType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("FullNameEncrypted");
+
+                    b.Property<string>("GrossSalary")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("GrossSalaryEncrypted");
+
+                    b.Property<string>("PayeeAccount")
+                        .HasColumnType("text")
+                        .HasColumnName("PayeeAccountEncrypted");
+
+                    b.Property<string>("PayeeAccountType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("PayeeBankCode")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("PayeeBranch")
+                        .HasColumnType("text")
+                        .HasColumnName("PayeeBranchEncrypted");
+
+                    b.Property<string>("PixKey")
+                        .HasColumnType("text")
+                        .HasColumnName("PixKeyEncrypted");
+
+                    b.Property<string>("PixKeyHash")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("PixKeyType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateOnly?>("TerminationDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CpfHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "PixKeyHash")
+                        .IsUnique()
+                        .HasFilter("\"PixKeyHash\" IS NOT NULL");
+
+                    b.HasIndex("UserId", "Status", "Department");
+
+                    b.ToTable("Employees");
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.ImportedInvestment", b =>
@@ -1094,6 +1228,89 @@ namespace ControlFinance.API.Migrations
                     b.ToTable("SavingsGoals");
                 });
 
+            modelBuilder.Entity("ControlFinance.API.Models.Supplier", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Document")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("DocumentEncrypted");
+
+                    b.Property<string>("DocumentHash")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("LegalName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("LegalNameEncrypted");
+
+                    b.Property<string>("PayeeAccount")
+                        .HasColumnType("text")
+                        .HasColumnName("PayeeAccountEncrypted");
+
+                    b.Property<string>("PayeeAccountType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("PayeeBankCode")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("PayeeBranch")
+                        .HasColumnType("text")
+                        .HasColumnName("PayeeBranchEncrypted");
+
+                    b.Property<string>("PixKey")
+                        .HasColumnType("text")
+                        .HasColumnName("PixKeyEncrypted");
+
+                    b.Property<string>("PixKeyHash")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("PixKeyType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TradeName")
+                        .HasColumnType("text")
+                        .HasColumnName("TradeNameEncrypted");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "DocumentHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "PixKeyHash")
+                        .IsUnique()
+                        .HasFilter("\"PixKeyHash\" IS NOT NULL");
+
+                    b.ToTable("Suppliers");
+                });
+
             modelBuilder.Entity("ControlFinance.API.Models.Transaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1332,6 +1549,21 @@ namespace ControlFinance.API.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ControlFinance.API.Models.BankBalanceObservation", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.BankAccount", null)
+                        .WithMany()
+                        .HasForeignKey("BankAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ControlFinance.API.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ControlFinance.API.Models.Category", b =>
                 {
                     b.HasOne("ControlFinance.API.Models.User", "User")
@@ -1364,6 +1596,17 @@ namespace ControlFinance.API.Migrations
                     b.HasOne("ControlFinance.API.Models.User", "User")
                         .WithOne()
                         .HasForeignKey("ControlFinance.API.Models.EmergencyReserve", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.Employee", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -1549,6 +1792,17 @@ namespace ControlFinance.API.Migrations
                 });
 
             modelBuilder.Entity("ControlFinance.API.Models.SavingsGoal", b =>
+                {
+                    b.HasOne("ControlFinance.API.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ControlFinance.API.Models.Supplier", b =>
                 {
                     b.HasOne("ControlFinance.API.Models.User", "User")
                         .WithMany()

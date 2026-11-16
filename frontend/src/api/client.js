@@ -1,3 +1,5 @@
+import { publicIntegrationMessage } from "../utils/integrationMessages.js";
+
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5080/api";
 
 // Segredo anti-CSRF da sessão atual (ver backend/Services/CsrfProtection.cs). Só em memória:
@@ -61,7 +63,7 @@ export async function readError(response) {
   // Erros de validação (ex: ModelState do ASP.NET) trazem a causa específica em "errors":
   // isso é mais útil pro usuário do que o "title" genérico ("One or more validation errors...").
   const fieldErrors = data.errors ? Object.values(data.errors).flat().join(" ") : "";
-  return fieldErrors || data.message || ERROR_MESSAGES.unknown;
+  return publicIntegrationMessage(fieldErrors || data.message) || ERROR_MESSAGES.unknown;
 }
 
 export const apiFetch = async (endpoint, options = {}) => {

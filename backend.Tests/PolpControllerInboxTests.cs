@@ -20,6 +20,7 @@ public class FakePolpProxy : DispatchProxy
     public Action? DuringGetConsent { get; set; }
     public Exception? CreateConsentError { get; set; }
     public CreatePolpConsentRequest? LastCreateRequest { get; set; }
+    public List<PolpInstitutionDto> Institutions { get; } = [];
 
     protected override object? Invoke(MethodInfo? method, object?[]? args)
     {
@@ -35,6 +36,7 @@ public class FakePolpProxy : DispatchProxy
         return method.Name switch
         {
             nameof(IPolpService.CreateConsentAsync) or nameof(IPolpService.GetConsentAsync) => Task.FromResult(Consent!),
+            nameof(IPolpService.GetInstitutionsAsync) => Task.FromResult(Institutions),
             _ => throw new NotSupportedException(method.Name)
         };
     }
@@ -127,7 +129,9 @@ public class PolpControllerInboxTests
         Assert.Equal(PolpWebhookEventStatus.Pending, row.Status);
 
         await Task.Delay(50);
-        Assert.Equal([nameof(IPolpService.CreateConsentAsync)], polp.Calls.ToArray());
+        // A lista pública de instituições (tipo PF/PJ) é consultada antes; dado de conta nenhum é lido no request.
+        Assert.Equal([nameof(IPolpService.CreateConsentAsync)],
+            polp.Calls.Where(c => c != nameof(IPolpService.GetInstitutionsAsync)).ToArray());
     }
 
     [Fact]
@@ -159,6 +163,90 @@ public class PolpControllerInboxTests
 
         Assert.Equal(Cnpj, polp.LastCreateRequest!.Document);
         Assert.Equal(OperatorCpf, polp.LastCreateRequest.OperatorCpf);
+    }
+
+    [Theory]
+    [InlineData(Cpf, null, "BUSINESS")]
+    [InlineData(Cnpj, OperatorCpf, "PERSONAL")]
+    public async Task Connect_em_banco_que_nao_atende_o_tipo_do_titular_recusa_sem_criar_consentimento(
+        string document, string? operatorCpf, string institutionType)
+    {
+        using var h = new InboxHarness();
+        h.T.User.DocumentHash = h.T.Encryption.ComputeLookupHash(document);
+        h.T.Db.SaveChanges();
+        var (controller, polp) = Build(h);
+        var institution = Guid.NewGuid();
+        polp.Institutions.Add(new PolpInstitutionDto { Id = institution, Name = "Banco", Type = institutionType });
+        polp.Consent = Consent(Guid.NewGuid(), "AWAITING_AUTHORIZATION");
+
+        var result = await controller.Connect(
+            new PolpConnectDto(institution.ToString(), document, LegalDocuments.BankConnectionNoticeVersion, operatorCpf), default);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.DoesNotContain(nameof(IPolpService.CreateConsentAsync), polp.Calls);
+        Assert.False(await h.T.NewContext().PolpIntegrations.AnyAsync());
+    }
+
+    [Theory]
+    [InlineData(Cpf, null, "PERSONAL")]
+    [InlineData(Cpf, null, "BOTH")]
+    [InlineData(Cnpj, OperatorCpf, "BUSINESS")]
+    [InlineData(Cnpj, OperatorCpf, "BOTH")]
+    [InlineData(Cnpj, OperatorCpf, null)]
+    public async Task Connect_em_banco_compativel_ou_de_tipo_desconhecido_segue_para_a_Polp(
+        string document, string? operatorCpf, string? institutionType)
+    {
+        using var h = new InboxHarness();
+        h.T.User.DocumentHash = h.T.Encryption.ComputeLookupHash(document);
+        h.T.Db.SaveChanges();
+        var (controller, polp) = Build(h);
+        var institution = Guid.NewGuid();
+        if (institutionType is not null)
+            polp.Institutions.Add(new PolpInstitutionDto { Id = institution, Name = "Banco", Type = institutionType });
+        polp.Consent = Consent(Guid.NewGuid(), "AWAITING_AUTHORIZATION");
+
+        Json(await controller.Connect(
+            new PolpConnectDto(institution.ToString(), document, LegalDocuments.BankConnectionNoticeVersion, operatorCpf), default));
+
+        Assert.Equal(document, polp.LastCreateRequest!.Document);
+    }
+
+    [Fact]
+    public async Task Connect_de_empresa_com_CNPJ_de_outra_empresa_e_recusado_sem_chamar_a_Polp()
+    {
+        using var h = new InboxHarness();
+        h.T.User.DocumentHash = h.T.Encryption.ComputeLookupHash(Cnpj);
+        h.T.User.DocumentType = DocumentTypes.Cnpj;
+        h.T.Db.SaveChanges();
+        var (controller, polp) = Build(h);
+        polp.Consent = Consent(Guid.NewGuid(), "AWAITING_AUTHORIZATION");
+        const string otherCompanyCnpj = "31872495000104";
+
+        var result = await controller.Connect(
+            new PolpConnectDto(Guid.NewGuid().ToString(), otherCompanyCnpj, LegalDocuments.BankConnectionNoticeVersion, OperatorCpf), default);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Contains("empresa cadastrada", Http.Json(result));
+        Assert.DoesNotContain(otherCompanyCnpj, Http.Json(result));
+        Assert.Empty(polp.Calls);
+    }
+
+    [Fact]
+    public async Task Lista_de_bancos_so_repassa_logo_https()
+    {
+        using var h = new InboxHarness();
+        var (controller, polp) = Build(h);
+        polp.Institutions.Add(new PolpInstitutionDto { Id = Guid.NewGuid(), Name = "Seguro", LogoUrl = "https://banco.example/logo.svg" });
+        polp.Institutions.Add(new PolpInstitutionDto { Id = Guid.NewGuid(), Name = "Http", LogoUrl = "http://banco.example/logo.svg" });
+        polp.Institutions.Add(new PolpInstitutionDto { Id = Guid.NewGuid(), Name = "Script", LogoUrl = "javascript:alert(1)" });
+        polp.Institutions.Add(new PolpInstitutionDto { Id = Guid.NewGuid(), Name = "Relativa", LogoUrl = "/logo.svg" });
+
+        var json = Http.Json(await controller.GetConnectors(default));
+
+        Assert.Contains("https://banco.example/logo.svg", json);
+        Assert.DoesNotContain("http://banco.example", json);
+        Assert.DoesNotContain("javascript:", json);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(json, "\"logoUrl\":\""));
     }
 
     [Fact]

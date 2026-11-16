@@ -84,7 +84,7 @@
 }
 
 .balance-sync__feedback--error {
-  color: var(--color-accent-soft);
+  color: var(--color-error);
 }
 
 @keyframes balance-sync-in {

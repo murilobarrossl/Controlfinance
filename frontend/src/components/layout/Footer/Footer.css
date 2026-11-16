@@ -44,7 +44,7 @@
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  color: var(--color-income);
+  color: var(--color-text-secondary);
 }
 
 .footer__col {

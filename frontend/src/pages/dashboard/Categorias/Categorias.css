@@ -12,7 +12,7 @@
 }
 
 .categorias__error {
-  color: var(--color-accent);
+  color: var(--color-error);
   font-size: 0.9rem;
 }
 
@@ -88,19 +88,48 @@
   outline-offset: 2px;
 }
 
-/* ── Os dois cards principais ── */
+/* ── Gráfico e lista diretamente no fundo da página ── */
 
 .categorias__grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.25rem;
-  /* Cada card fica do tamanho do próprio conteúdo: esticar o mais curto deixava um vazio no fundo. */
+  gap: 2.5rem;
   align-items: start;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
 }
 
-.categorias__card .card__header {
+.categorias__grid > .categorias__section {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.categorias__card .categorias__section-head {
   min-height: 2.25rem;
   margin-bottom: 1.5rem;
+}
+
+.categorias__section {
+  min-width: 0;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.categorias__section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.categorias__section-title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 /* Rosca */
@@ -247,7 +276,11 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.cat-list > li {
+  border-bottom: 1px solid var(--color-border);
 }
 
 .cat-row {
@@ -255,15 +288,14 @@
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  padding: 0.85rem 0.95rem 0.8rem;
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface-alt);
+  padding: 1rem 0.5rem;
+  border: 0;
+  background-color: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
 .cat-row:hover {
@@ -272,7 +304,6 @@
 
 .cat-row--active,
 .cat-row--active:hover {
-  border-color: var(--color-text-tertiary);
   background-color: var(--color-surface-hover);
 }
 
@@ -306,7 +337,7 @@
 
 .cat-row__track {
   display: block;
-  height: 6px;
+  height: 3px;
   border-radius: var(--radius-pill);
   background-color: var(--color-border);
   overflow: hidden;
@@ -464,7 +495,6 @@
   gap: 0.45rem;
   padding: 0.85rem 0.75rem;
   border: 0;
-  border-radius: var(--radius-md);
   background: none;
   color: inherit;
   font: inherit;
@@ -552,7 +582,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background-color: var(--color-accent);
+  background-color: var(--color-expense);
 }
 
 .est__meta {
@@ -582,7 +612,7 @@
 
 p.est-tx {
   padding-block: 0.5rem;
-  color: var(--color-accent-soft);
+  color: var(--color-error);
   font-size: 0.85rem;
 }
 
@@ -611,15 +641,15 @@ p.est-tx {
 }
 
 .est-tx__amount {
-  color: var(--color-accent-soft);
+  color: var(--color-expense);
   font-weight: 500;
   text-align: right;
   white-space: nowrap;
 }
 
-/* Simulação de corte: continua em card por ser uma ferramenta, não um dado da categoria. */
+/* Simulação de corte separada por uma divisória. */
 
-.categorias__impact .card__header {
+.categorias__impact .categorias__section-head {
   margin-bottom: 1rem;
 }
 
@@ -703,6 +733,11 @@ p.est-tx {
 @container categorias (max-width: 52rem) {
   .categorias__grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .categorias__grid > .categorias__section + .categorias__section {
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-border);
   }
 
   .categorias__donut-block {
@@ -795,3 +830,7 @@ p.est-tx {
     transition: none;
   }
 }
+
+.cat-row__value,
+.est__value,
+.categorias__legend-value { color: var(--color-expense); }

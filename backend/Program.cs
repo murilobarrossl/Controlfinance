@@ -17,6 +17,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Segredos reais ficam em appsettings.Local.json (gitignorado) ou em variáveis de
 // ambiente: appsettings.json versionado no git só tem placeholders.
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+// Overrides do ambiente/deploy e da linha de comando prevalecem sobre o arquivo local.
+builder.Configuration.AddEnvironmentVariables();
+builder.Configuration.AddCommandLine(args);
 
 // Fora de Development, segredo ausente ou placeholder impede a subida: senão a API sobe usando um
 // valor público do repositório como chave.
@@ -36,8 +39,10 @@ if (secretErrors.Count > 0)
 // Centraliza timeout e limites do pool, preservando parâmetros explícitos da conexão.
 builder.Configuration["ConnectionStrings:DefaultConnection"] = StartupDatabaseConnection.Configure(builder.Configuration);
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddSingleton<DatabaseConnectionDiagnostics>();
+builder.Services.AddDbContext<AppDbContext>((services, options) =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+        .AddInterceptors(services.GetRequiredService<DatabaseConnectionDiagnostics>()));
 
 // ──────────────────────────────────────────
 //  SERVIÇOS DA APLICAÇÃO
@@ -233,6 +238,35 @@ builder.Services.AddSwaggerGen(c =>
 // ──────────────────────────────────────────
 var app = builder.Build();
 
+// Diagnóstico explícito: não inicia o servidor/jobs e sai antes de migrations/backfills.
+if (args.Contains("--check-database", StringComparer.Ordinal))
+{
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.Database.OpenConnectionAsync();
+        await using var query = db.Database.GetDbConnection().CreateCommand();
+        query.CommandText = "SELECT 1, ssl, version FROM pg_stat_ssl WHERE pid = pg_backend_pid()";
+        await using var result = await query.ExecuteReaderAsync();
+        if (!await result.ReadAsync() || result.GetInt32(0) != 1)
+            throw new InvalidOperationException("Verificação da conexão sem resultado.");
+        app.Logger.LogInformation("Conexão PostgreSQL confirmada pelo EF Core: SELECT 1 OK; TLS ativo: {Tls}; versão: {TlsVersion}. Nenhuma migration ou backfill executado.",
+            result.GetBoolean(1), result.IsDBNull(2) ? "nenhuma" : result.GetString(2));
+    }
+    catch (Exception error)
+    {
+        app.Logger.LogError("Verificação PostgreSQL falhou: {Failure}. Nenhuma migration ou backfill executado.",
+            DatabaseConnectionDiagnostics.Describe(error));
+        Environment.ExitCode = 1;
+    }
+    finally
+    {
+        await app.DisposeAsync();
+    }
+    return;
+}
+
 if (ConfigSecrets.IsPolpEnabled(app.Configuration) && !ConfigSecrets.IsWebhookSignatureRequired(app.Configuration))
     app.Logger.LogWarning("Assinatura do webhook da Polp desativada (Polp:WebhookRequireSignature=false): só o token da URL protege o endpoint");
 
@@ -303,9 +337,9 @@ forwardedHeadersOptions.KnownNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
-app.UseHttpsRedirection();
 if (!app.Environment.IsDevelopment())
 {
+    app.UseHttpsRedirection();
     app.UseHsts();
 }
 

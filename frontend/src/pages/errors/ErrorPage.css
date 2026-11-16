@@ -64,6 +64,14 @@
   white-space: normal;
 }
 
+.error-page__actions--single {
+  align-items: center;
+}
+
+.error-page__actions--single .btn {
+  width: min(100%, 14rem);
+}
+
 .error-page--embedded {
   min-height: 55vh;
   padding: 2rem 1rem;

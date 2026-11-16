@@ -11,10 +11,11 @@ export default function CategoryDonutChart({
   onSliceClick,
   centerLabel,
   centerCaption = "Total",
+  palette,
 }) {
   const format = (value) => (formatValue ? formatValue(value) : value);
   const total = data.reduce((sum, entry) => sum + entry.value, 0);
-  const colors = donutSliceColors(data);
+  const colors = donutSliceColors(data, palette);
 
   return (
     <div className={`category-donut ${showLegend ? "category-donut--with-legend" : ""}`}>
@@ -37,7 +38,7 @@ export default function CategoryDonutChart({
               cursor={onSliceClick ? "pointer" : "default"}
             >
               {data.map((entry, index) => (
-                <Cell key={entry.name ?? index} fill={colors[index]} />
+                <Cell key={entry.key ?? entry.name ?? index} fill={colors[index]} />
               ))}
             </Pie>
             <Tooltip
@@ -80,7 +81,7 @@ export default function CategoryDonutChart({
               </>
             );
             return (
-              <li key={entry.name ?? index}>
+              <li key={entry.key ?? entry.name ?? index}>
                 {onSliceClick ? (
                   <button
                     type="button"

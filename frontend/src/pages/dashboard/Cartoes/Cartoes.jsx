@@ -9,9 +9,7 @@ import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
-import StatCard from "../../../components/ui/StatCard/StatCard.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
-import { CardIcon, WalletIcon, BellIcon, HistoryIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import LimitBar from "../../../components/dashboard/LimitBar/LimitBar.jsx";
 import { formatCurrency, formatDate, formatPercentage } from "../../../utils/financeMath.js";
 import { summarizeCards, groupCards } from "../../../utils/cardGroups.js";
@@ -38,6 +36,18 @@ function Section({ id, title, aside, children }) {
       </header>
       {children}
     </section>
+  );
+}
+
+function SummaryMetric({ label, value, warning = false, tone = "default", note }) {
+  return (
+    <div className="cartoes__metric">
+      <dt>{label}</dt>
+      <dd className={`cartoes__metric-value cartoes__metric-value--${warning ? "warning" : tone}`}>
+        {value}
+      </dd>
+      {note && <dd className="cartoes__metric-note">{note}</dd>}
+    </div>
   );
 }
 
@@ -142,7 +152,7 @@ export default function Cartoes() {
           <span className="cartoes__tile-stats">
             <span className="cartoes__tile-stat">
               <span>Fatura atual</span>
-              <strong>{card.currentInvoice != null ? formatCurrency(card.currentInvoice) : "—"}</strong>
+              <strong className={pastDue ? "cartoes__tile-value--overdue" : undefined}>{card.currentInvoice != null ? formatCurrency(card.currentInvoice) : "—"}</strong>
             </span>
             <span className="cartoes__tile-stat">
               <span>Vencimento</span>
@@ -192,18 +202,16 @@ export default function Cartoes() {
         </Card>
       ) : (
         <div className="cartoes__overview">
-          <div className="cartoes__summary">
-            <StatCard
-              icon={<CardIcon />}
+          <dl className="cartoes__summary summary-dividers summary-dividers--four" aria-label="Resumo dos cartões" aria-busy={loading}>
+            <SummaryMetric
               label="Limite usado"
               value={summaryValue(summary.usedLimit)}
-              valueTone={!loading && summary.overLimitCards > 0 ? "expense" : "default"}
-              secondaryLines={!loading && usageLine ? [{ label: usageLine, value: "" }] : []}
+              warning={!loading && summary.overLimitCards > 0}
+              note={!loading && usageLine}
             />
-            <StatCard icon={<WalletIcon />} label="Limite disponível" value={summaryValue(summary.availableLimit)} />
-            <StatCard icon={<BellIcon />} label="Fatura atual" value={summaryValue(summary.currentInvoice)} />
-            <StatCard
-              icon={<HistoryIcon />}
+            <SummaryMetric label="Limite disponível" value={summaryValue(summary.availableLimit)} />
+            <SummaryMetric label="Fatura atual" value={summaryValue(summary.currentInvoice)} />
+            <SummaryMetric
               label="Próximo vencimento"
               value={
                 loading
@@ -214,10 +222,10 @@ export default function Cartoes() {
                       ? formatDueDay(summary.nextDue.date)
                       : formatDate(summary.nextDue.date)
               }
-              valueTone={!loading && summary.nextDue?.pastDue ? "expense" : "default"}
-              secondaryLines={!loading && nextDueLine ? [{ label: nextDueLine, value: "" }] : []}
+              warning={!loading && summary.nextDue?.pastDue}
+              note={!loading && nextDueLine}
             />
-          </div>
+          </dl>
           <p className="cartoes__scope-note">{loading ? <Skeleton width="14rem" height="0.9rem" /> : scopeNote}</p>
         </div>
       )}
@@ -242,8 +250,8 @@ export default function Cartoes() {
                   </span>
                 </span>
                 <span className="cartoes__row-end">
-                  <StatusPill status={item.status}>{STATUS_LABELS[item.status] || item.status}</StatusPill>
-                  <span className="cartoes__row-amount">{item.amount != null ? formatCurrency(item.amount) : "—"}</span>
+                  <StatusPill status={item.status} pendingTone="neutral">{STATUS_LABELS[item.status] || item.status}</StatusPill>
+                  <span className={`cartoes__row-amount${item.status === "Overdue" ? " cartoes__row-amount--expense" : ""}`}>{item.amount != null ? formatCurrency(item.amount) : "—"}</span>
                 </span>
               </li>
             ))}

@@ -17,6 +17,9 @@ dist-ssr
 # Claude Code local settings (per-developer permissions, not shared config)
 .claude/settings.local.json
 
+# Configurações locais exclusivas do Codex
+.codex/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

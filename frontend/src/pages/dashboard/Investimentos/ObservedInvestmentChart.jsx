@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import { AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer } from "recharts";
-import { TOOLTIP_STYLE } from "../../../components/charts/chartTheme.js";
+import { CHART_COLORS, TOOLTIP_STYLE } from "../../../components/charts/chartTheme.js";
 import { chartCoordinates, formatMoney } from "../../../utils/importedInvestments.js";
-import { readCssVar } from "../../../utils/cssVar.js";
 import useIsNarrow from "./useIsNarrow.js";
 
 const tickDate = (time) => new Date(time).toLocaleDateString("pt-BR", { timeZone: "UTC", day: "2-digit", month: "short" });
@@ -20,11 +19,7 @@ export default function ObservedInvestmentChart({ points, idPrefix }) {
   const [selected, setSelected] = useState(null);
   const [chartRef, narrow] = useIsNarrow();
   const data = useMemo(() => chartCoordinates(points), [points]);
-  const colors = useMemo(() => ({
-    area: readCssVar("--color-income", "#4ecdc4"),
-    grid: readCssVar("--color-border", "#2a2a2a"),
-    cursor: readCssVar("--color-border-strong", "#3a3a3a"),
-  }), []);
+  const colors = { ...CHART_COLORS, area: CHART_COLORS.neutral };
   const index = Math.min(selected ?? data.length - 1, Math.max(0, data.length - 1));
   const row = data[index];
   const gradientId = `inv-area-${String(idPrefix).replace(/[^a-zA-Z0-9_-]/g, "")}`;

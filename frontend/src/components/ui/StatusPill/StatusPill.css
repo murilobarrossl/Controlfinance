@@ -10,17 +10,22 @@
 }
 
 .status-pill--paid {
-  background-color: color-mix(in srgb, var(--color-income) 18%, transparent);
-  color: var(--color-income);
+  background-color: var(--color-positive-bg);
+  color: var(--color-positive);
 }
 
 .status-pill--overdue {
-  background-color: color-mix(in srgb, var(--color-amber) 22%, transparent);
-  color: var(--color-amber-soft);
+  background-color: var(--color-negative-bg);
+  color: var(--color-negative);
 }
 
 .status-pill--pending {
-  background-color: color-mix(in srgb, var(--color-text-tertiary) 20%, transparent);
-  color: var(--color-text-secondary);
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
   border: 1px solid var(--color-border-strong);
+}
+
+.status-pill--neutral {
+  background-color: var(--color-neutral-bg);
+  color: var(--color-neutral);
 }

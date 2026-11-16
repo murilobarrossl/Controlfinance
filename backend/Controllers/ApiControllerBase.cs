@@ -14,11 +14,11 @@ public abstract class ApiControllerBase : ControllerBase
     // toda rota autenticada quebraria de uma vez com NullReferenceException.
     private Guid? _userId;
 
-    protected Guid UserId => _userId ??= ReadUserId();
+    protected Guid UserId => _userId ??= ReadUserId(User);
 
-    private Guid ReadUserId()
+    internal static Guid ReadUserId(ClaimsPrincipal user)
     {
-        var sub = User.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var sub = user.FindFirstValue(JwtRegisteredClaimNames.Sub) ?? user.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(sub, out var userId))
             throw new InvalidOperationException("Token autenticado sem claim 'sub' válida.");
 

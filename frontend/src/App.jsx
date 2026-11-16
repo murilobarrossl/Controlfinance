@@ -1,7 +1,8 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router";
+import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
+import { BusinessOnlyRoute, HolderSwitch, PersonalOnlyRoute } from "./routes/HolderRoute.jsx";
 import usePolpConnectionWatcher from "./hooks/usePolpConnectionWatcher.js";
 import HomePage from "./pages/home/HomePage.jsx";
 import ErrorBoundary from "./components/ErrorBoundary/ErrorBoundary.jsx";
@@ -20,6 +21,12 @@ const Relatorios = lazy(() => import("./pages/dashboard/Relatorios/Relatorios.js
 const TransactionDetail = lazy(() => import("./pages/dashboard/Relatorios/TransactionDetail.jsx"));
 const Categorias = lazy(() => import("./pages/dashboard/Categorias/Categorias.jsx"));
 const Investimentos = lazy(() => import("./pages/dashboard/Investimentos/Investimentos.jsx"));
+const DashboardEmpresa = lazy(() => import("./pages/dashboard/empresa/DashboardEmpresa.jsx"));
+const FolhaPagamento = lazy(() => import("./pages/dashboard/empresa/FolhaPagamento.jsx"));
+const EmployeeDetail = lazy(() => import("./pages/dashboard/empresa/EmployeeDetail.jsx"));
+const Fornecedores = lazy(() => import("./pages/dashboard/empresa/Fornecedores.jsx"));
+const SupplierDetail = lazy(() => import("./pages/dashboard/empresa/SupplierDetail.jsx"));
+const Patrimonio = lazy(() => import("./pages/dashboard/empresa/Patrimonio.jsx"));
 const Privacidade = lazy(() => import("./pages/dashboard/Privacidade/Privacidade.jsx"));
 const TermosDeUso = lazy(() => import("./pages/legal/TermosDeUso.jsx"));
 const PoliticaDePrivacidade = lazy(() => import("./pages/legal/PoliticaDePrivacidade.jsx"));
@@ -58,14 +65,23 @@ function AppRoutes() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<DashboardHome />} />
+            <Route index element={<HolderSwitch personal={<DashboardHome />} business={<DashboardEmpresa />} />} />
             <Route path="cartoes" element={<Cartoes />} />
-            <Route path="receitas-despesas" element={<ReceitasDespesas />} />
+            <Route
+              path="receitas-despesas"
+              element={<HolderSwitch personal={<ReceitasDespesas />} business={<Navigate to="/dashboard/fluxo-de-caixa" replace />} />}
+            />
             <Route path="relatorios" element={<Relatorios />} />
             <Route path="relatorios/:transactionId" element={<TransactionDetail />} />
-            <Route path="categorias" element={<Categorias />} />
-            <Route path="investimentos" element={<Investimentos />} />
+            <Route path="categorias" element={<PersonalOnlyRoute><Categorias /></PersonalOnlyRoute>} />
+            <Route path="investimentos" element={<PersonalOnlyRoute><Investimentos /></PersonalOnlyRoute>} />
             <Route path="privacidade" element={<Privacidade />} />
+            <Route path="folha-de-pagamento" element={<BusinessOnlyRoute><FolhaPagamento /></BusinessOnlyRoute>} />
+            <Route path="folha-de-pagamento/:employeeId" element={<BusinessOnlyRoute><EmployeeDetail /></BusinessOnlyRoute>} />
+            <Route path="fornecedores" element={<BusinessOnlyRoute><Fornecedores /></BusinessOnlyRoute>} />
+            <Route path="fornecedores/:supplierId" element={<BusinessOnlyRoute><SupplierDetail /></BusinessOnlyRoute>} />
+            <Route path="fluxo-de-caixa" element={<BusinessOnlyRoute><ReceitasDespesas /></BusinessOnlyRoute>} />
+            <Route path="patrimonio" element={<BusinessOnlyRoute><Patrimonio /></BusinessOnlyRoute>} />
             <Route path="*" element={<ErrorPage code={404} embedded />} />
           </Route>
           <Route path="/403" element={<ErrorPage code={403} />} />

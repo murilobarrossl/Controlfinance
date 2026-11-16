@@ -1,3 +1,4 @@
+import { financialTone } from "../../../utils/financialTone.js";
 import { useMemo, useState } from "react";
 import Button from "../../../components/ui/Button/Button.jsx";
 import { ShieldIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
@@ -22,9 +23,11 @@ function MoneyRow({ label, document, field, className }) {
   const money = moneyField(document, field);
   const prior = !money && moneyField(document, field, true);
   const evidence = document?.provenance?.[field];
-  return <div className={className}><dt>{label}</dt><dd>{formatMoney(money)}{prior && <small className="inv-real__prior">Último informado: {formatMoney(prior)}{evidence?.observed_at ? ` · coleta em ${dateLabel(evidence.observed_at)}` : ""}</small>}</dd></div>;
+  const cost = ["income_tax", "financial_transaction_tax", "transaction_exit_fee"].includes(field);
+  const tone = cost && money ? financialTone(-Number(money.amount)) : "default";
+  return <div className={className}><dt>{label}</dt><dd className={`inv-financial--${tone}`}>{formatMoney(money)}{prior && <small className="inv-real__prior">Último informado: {formatMoney(prior)}{evidence?.observed_at ? ` · coleta em ${dateLabel(evidence.observed_at)}` : ""}</small>}</dd></div>;
 }
-function TextRow({ label, value }) { return <div><dt>{label}</dt><dd>{value || "Não informado"}</dd></div>; }
+function TextRow({ label, value, tone = "default" }) { return <div><dt>{label}</dt><dd className={`inv-financial--${tone}`}>{value || "Não informado"}</dd></div>; }
 function ScalarRow({ label, document, field }) {
   return <TextRow label={label} value={document?.availability?.[field] === "available" ? formatExact(document.values?.[field]) : null} />;
 }
@@ -114,8 +117,8 @@ function MonthlyResults({ state, month, setMonth }) {
       : state.status === "error" ? <p className="investimentos__hint" role="alert">Não foi possível consultar os resultados deste período. Atualize o detalhamento para tentar novamente.</p>
       : <>
         <dl className="inv-real__rows">
-          <TextRow label={`Rendimento bruto · ${period}`} value={result?.monthlyGrossIncome?.status !== "unavailable" ? formatMoney(result?.monthlyGrossIncome?.value) : "Não determinado"} />
-          <TextRow label={`Rendimento líquido · ${period}`} value={result?.monthlyNetIncome?.status !== "unavailable" ? formatMoney(result?.monthlyNetIncome?.value) : "Não determinado"} />
+          <TextRow label={`Rendimento bruto · ${period}`} tone={result?.monthlyGrossIncome?.status !== "unavailable" && validMoney(result?.monthlyGrossIncome?.value) ? financialTone(Number(result.monthlyGrossIncome.value.amount)) : "default"} value={result?.monthlyGrossIncome?.status !== "unavailable" ? formatMoney(result?.monthlyGrossIncome?.value) : "Não determinado"} />
+          <TextRow label={`Rendimento líquido · ${period}`} tone={result?.monthlyNetIncome?.status !== "unavailable" && validMoney(result?.monthlyNetIncome?.value) ? financialTone(Number(result.monthlyNetIncome.value.amount)) : "default"} value={result?.monthlyNetIncome?.status !== "unavailable" ? formatMoney(result?.monthlyNetIncome?.value) : "Não determinado"} />
         </dl>
         <p className="investimentos__fineprint">Variações de saldo também incluem aportes, resgates, amortizações e impostos.</p>
         {result?.operations?.length > 0 && <details className="investimentos__explain"><summary>Operações recebidas em {period}</summary>

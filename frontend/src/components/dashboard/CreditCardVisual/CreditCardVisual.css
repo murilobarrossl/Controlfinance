@@ -108,7 +108,7 @@
 
 .credit-card-visual__over {
   order: 1;
-  color: var(--color-accent-soft);
+  color: var(--color-negative);
   font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
 }
@@ -127,4 +127,11 @@
   .credit-card-visual__face--interactive:hover .card-face {
     transform: none;
   }
+}
+
+.credit-card-visual__stat-value--income { color: var(--color-income); }
+.credit-card-visual__stat-value--expense { color: var(--color-expense); }
+
+.credit-card-visual__limit-labels strong.credit-card-visual__used--over {
+  color: var(--color-negative);
 }

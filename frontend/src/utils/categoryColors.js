@@ -1,15 +1,15 @@
 import { DONUT_SHADES, FALLBACK_COLORS } from "../components/charts/chartTheme.js";
 
 // Cinza neutro, fora da paleta de matizes: "Outros" é o que sobra, não uma categoria a mais.
-export const OTHERS_COLOR = "#8a8f98";
+export const OTHERS_COLOR = "var(--color-neutral)";
 
 // Cor de cada fatia da rosca, por posição (os dados já chegam do maior para o menor). Fica aqui, e
 // não só no componente, pra legenda, o resumo de Categorias e a rosca usarem a mesma cor. "Outros"
-// mantém o cinza e não consome um tom do laranja.
-export function donutSliceColors(data) {
+// mantém o cinza e não consome um tom de despesa.
+export function donutSliceColors(data, shades = DONUT_SHADES) {
   let shade = 0;
   return data.map((entry) =>
-    entry.color === OTHERS_COLOR ? OTHERS_COLOR : DONUT_SHADES[shade++ % DONUT_SHADES.length]
+    entry.color === OTHERS_COLOR ? OTHERS_COLOR : shades[shade++ % shades.length]
   );
 }
 
@@ -36,12 +36,10 @@ function assignColors(categories) {
   const assigned = new Map();
   const used = new Set();
 
-  // Primeiro quem já tem cor da paleta cadastrada (a primeira de cada cor, em ordem alfabética).
-  // Cores fora da paleta existem só em categorias antigas: a sincronização da Polp v1 gravava a
-  // cor que a Polp mandava, e nenhuma tela deixa o usuário escolher cor, então ignorá-las não
-  // descarta escolha de ninguém.
+  // Cores persistidas continuam intactas. A apresentação só aceita tokens da paleta
+  // neutra; cores antigas do banco não podem reintroduzir a cor da marca nas despesas.
   for (const c of sorted) {
-    const registered = c.color && (c.color.startsWith("#") ? c.color : `#${c.color}`);
+    const registered = c.color;
     const key = registered?.toLowerCase();
     if (key && PALETTE.has(key) && !used.has(key)) {
       assigned.set(c.name, registered);

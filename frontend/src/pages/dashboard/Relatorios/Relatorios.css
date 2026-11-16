@@ -183,7 +183,7 @@
 }
 
 .relatorios__error {
-  color: var(--color-accent);
+  color: var(--color-error);
   font-size: 0.9rem;
 }
 
@@ -402,7 +402,7 @@
 }
 
 .relatorios__edit-error {
-  color: var(--color-accent-soft);
+  color: var(--color-error);
   font-size: 0.75rem;
   white-space: normal;
 }
@@ -557,7 +557,7 @@
 }
 
 .relatorios__amount--expense {
-  color: var(--color-accent);
+  color: var(--color-expense);
 }
 
 .relatorios__table .relatorios__empty {
@@ -831,4 +831,8 @@
   padding-inline: 0;
   background-color: transparent;
   color: var(--color-text-secondary);
+}
+
+.relatorios__table .relatorios__amount-cell--expense {
+  color: var(--color-expense);
 }

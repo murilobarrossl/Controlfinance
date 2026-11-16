@@ -45,6 +45,14 @@ export default function ErrorPage({ code = 500, embedded = false, onRetry, onNav
   const returnLabel = isAuthenticated ? "Voltar ao Dashboard inteligente" : "Voltar à página inicial";
   const Container = embedded ? "section" : "main";
 
+  function retryUnavailable(event) {
+    if (status === "error") return retrySession();
+    if (onRetry) return onRetry(event);
+    // A rota dedicada não representa a página que falhou: recarregá-la exibiria outro 503.
+    if (window.location.pathname === "/503") return window.location.replace(destination);
+    window.location.reload();
+  }
+
   useEffect(() => {
     const previousTitle = document.title;
     document.title = `${errorCode} · ${error.title} | Control Finance`;
@@ -59,18 +67,30 @@ export default function ErrorPage({ code = 500, embedded = false, onRetry, onNav
         <p className="error-page__code" aria-hidden="true">{errorCode}</p>
         <h1 id={headingId} ref={heading} tabIndex={-1} className="error-page__title">{error.title}</h1>
         <p className="error-page__description">{error.description}</p>
-        <div className="error-page__actions">
-          {status === "loading" ? (
-            <Button type="button" disabled>Verificando sessão…</Button>
-          ) : status === "error" ? (
-            <Button type="button" onClick={retrySession}>Verificar sessão novamente</Button>
-          ) : (
-            <Button as={Link} to={destination} replace onClick={onNavigate}>{returnLabel}</Button>
-          )}
-          {error.retry && (
-            <Button type="button" variant="outline" onClick={status === "error" ? retrySession : onRetry ?? (() => window.location.reload())}>
-              Tentar novamente
+        <div className={`error-page__actions${errorCode === 503 ? " error-page__actions--single" : ""}`}>
+          {errorCode === 503 ? (
+            <Button
+              type="button"
+              disabled={status === "loading"}
+              onClick={retryUnavailable}
+            >
+              {status === "loading" ? "Tentando novamente…" : "Tentar novamente"}
             </Button>
+          ) : (
+            <>
+              {status === "loading" ? (
+                <Button type="button" disabled>Verificando sessão…</Button>
+              ) : status === "error" ? (
+                <Button type="button" onClick={retrySession}>Verificar sessão novamente</Button>
+              ) : (
+                <Button as={Link} to={destination} replace onClick={onNavigate}>{returnLabel}</Button>
+              )}
+              {error.retry && (
+                <Button type="button" variant="outline" onClick={status === "error" ? retrySession : onRetry ?? (() => window.location.reload())}>
+                  Tentar novamente
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>

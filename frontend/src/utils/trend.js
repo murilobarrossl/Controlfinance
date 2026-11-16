@@ -7,7 +7,7 @@ export function computeTrend(current, previous, { invertTone = false, label = "v
   const isGood = invertTone ? change < 0 : change >= 0;
   return {
     direction,
-    tone: isGood ? "positive" : "negative",
+    tone: Math.abs(change) < 0.05 ? "neutral" : isGood ? "positive" : "negative",
     text: `${change >= 0 ? "+" : ""}${change.toFixed(1)}% ${label}`,
   };
 }

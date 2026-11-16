@@ -306,7 +306,7 @@
 }
 
 .register__error {
-  color: var(--color-accent);
+  color: var(--color-error);
   font-size: 0.9rem;
   margin: 0;
 }

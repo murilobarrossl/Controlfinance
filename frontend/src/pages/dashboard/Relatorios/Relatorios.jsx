@@ -1,3 +1,4 @@
+import { financialTone, transactionTone } from "../../../utils/financialTone.js";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { getTransactionsReport, setTransactionDetails } from "../../../api/transactions.js";
@@ -563,7 +564,7 @@ export default function Relatorios() {
                 {incomeFiltered ? (
                   <span className="relatorios__totals-value relatorios__totals-value--muted">Fora do filtro</span>
                 ) : (
-                  <span className="relatorios__totals-value relatorios__amount--income">
+                  <span className={`relatorios__totals-value relatorios__amount--${loading ? "default" : financialTone(totalIncome)}`}>
                     {loading ? amountSkeleton : formatCurrency(totalIncome)}
                   </span>
                 )}
@@ -573,7 +574,7 @@ export default function Relatorios() {
                 {expenseFiltered ? (
                   <span className="relatorios__totals-value relatorios__totals-value--muted">Fora do filtro</span>
                 ) : (
-                  <span className="relatorios__totals-value relatorios__amount--expense">
+                  <span className={`relatorios__totals-value relatorios__amount--${loading ? "default" : transactionTone("Expense", totalExpense)}`}>
                     {loading ? amountSkeleton : formatCurrency(totalExpense)}
                   </span>
                 )}
@@ -584,9 +585,7 @@ export default function Relatorios() {
                   <span className="relatorios__totals-value relatorios__totals-value--muted">Fora do filtro</span>
                 ) : (
                   <span
-                    className={`relatorios__totals-value ${
-                      balance === null || balance >= 0 ? "relatorios__amount--income" : "relatorios__amount--expense"
-                    }`}
+                    className={`relatorios__totals-value relatorios__amount--${loading ? "default" : financialTone(balance)}`}
                   >
                     {loading ? amountSkeleton : balance < 0 ? formatSigned(balance, true) : formatCurrency(balance)}
                   </span>
@@ -779,7 +778,7 @@ export default function Relatorios() {
                           <StatusPill status={t.status}>{STATUS_LABELS[t.status] || t.status}</StatusPill>
                         </td>
                         <td
-                          className={`relatorios__amount-cell${t.type === "Income" ? " relatorios__amount-cell--income" : ""}`}
+                          className={`relatorios__amount-cell relatorios__amount-cell--${transactionTone(t.type, t.amount, t.isTransfer)}`}
                           role="cell"
                         >
                           {formatSigned(t.amount, t.type !== "Income")}

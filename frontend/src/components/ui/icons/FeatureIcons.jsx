@@ -248,3 +248,53 @@ export function CandlestickIcon() {
     </svg>
   );
 }
+
+export function LayoutIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <rect x="4" y="4" width="7" height="9" rx="1" />
+      <rect x="13" y="4" width="7" height="5" rx="1" />
+      <rect x="13" y="11" width="7" height="9" rx="1" />
+      <rect x="4" y="15" width="7" height="5" rx="1" />
+    </svg>
+  );
+}
+
+export function UsersIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <circle cx="9" cy="8" r="3.25" />
+      <path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" />
+      <path d="M15.5 4.9a3.25 3.25 0 0 1 0 6.2" />
+      <path d="M17.5 14.8c1.6.7 2.7 2.3 3 4.7" />
+    </svg>
+  );
+}
+
+export function CashFlowIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <path d="M8 20V5M4.5 8.5 8 5l3.5 3.5" />
+      <path d="M16 4v15M12.5 15.5 16 19l3.5-3.5" />
+    </svg>
+  );
+}
+
+export function ReportIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <path d="M6 3.5h8l4 4v13H6z" />
+      <path d="M14 3.5v4h4" />
+      <path d="M9 12h6M9 15h6M9 18h3.5" />
+    </svg>
+  );
+}
+
+export function SidebarIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <path d="M9.5 4.5v15" />
+    </svg>
+  );
+}

@@ -1,3 +1,4 @@
+import { publicIntegrationMessage } from "../../utils/integrationMessages.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import Button from "../../components/ui/Button/Button.jsx";
@@ -6,8 +7,11 @@ import { ShieldIcon, SyncIcon } from "../../components/ui/icons/FeatureIcons.jsx
 import { EyeSlashIcon } from "../../components/ui/icons/EyeIcons.jsx";
 import { getConnectors, createIntegration, getIntegrationStatus } from "../../api/polp.js";
 import { filterConnectorsByName, groupConnectorsByType } from "../../utils/bankSorting.js";
-import { applyMask, getCpfCnpjMask, CNPJ_MASK } from "../../utils/masks.js";
+import { applyMask, getCpfCnpjMask, CNPJ_MASK, CPF_MASK } from "../../utils/masks.js";
 import { BANK_CONNECTION_NOTICE_VERSION } from "../../legal/versions.js";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { isValidCnpj, isValidCpf } from "../../utils/authRules.js";
+import { getHolderType, HOLDER_CNPJ, HOLDER_CPF, HOLDER_DOCUMENT_LENGTH } from "../../utils/holder.js";
 import { setPendingIntegrationId, watchPolpConnection, wait } from "../../services/polpConnection.js";
 import logo from "../../assets/images/cflogobranco.svg";
 import "./ConectarBanco.css";
@@ -27,12 +31,17 @@ function isSafeHttpUrl(url) {
 export default function ConnectBankPage() {
   usePageTitle("Conectar banco");
   const navigate = useNavigate();
+  // O backend só aceita o documento do cadastro; com o tipo conhecido, a tela pede só ele e mostra
+  // só os bancos que atendem esse tipo de titular.
+  const holderType = getHolderType(useAuth()?.user);
+  const documentMaxDigits = holderType ? HOLDER_DOCUMENT_LENGTH[holderType] : 14;
   const [step, setStep] = useState("intro"); // "intro" | "choosing"
   const [connectors, setConnectors] = useState([]);
   const [personType, setPersonType] = useState("personal"); // "personal" | "business"
   const [search, setSearch] = useState("");
   const [loadingConnectors, setLoadingConnectors] = useState(false);
   const [connectingId, setConnectingId] = useState(null);
+  const [selectedConnectorId, setSelectedConnectorId] = useState(null);
   const [connectingStage, setConnectingStage] = useState(null); // "creating" | "waiting"
   const [error, setError] = useState("");
   const cancelledRef = useRef(false);
@@ -61,6 +70,8 @@ export default function ConnectBankPage() {
     [personType, personal, business, search]
   );
 
+  const selectedConnector = visibleConnectors.find((connector) => connector.id === selectedConnectorId) ?? null;
+
   const isBusinessDocument = document.replace(/\D/g, "").length === 14;
 
   function handleOperatorDocumentChange(e) {
@@ -69,7 +80,7 @@ export default function ConnectBankPage() {
   }
 
   function handleDocumentChange(e) {
-    const digits = e.target.value.replace(/\D/g, "").slice(0, 14);
+    const digits = e.target.value.replace(/\D/g, "").slice(0, documentMaxDigits);
     setDocument(applyMask(digits, getCpfCnpjMask(digits), document.replace(/\D/g, "")));
   }
 
@@ -77,12 +88,22 @@ export default function ConnectBankPage() {
     e.preventDefault();
     setError("");
     const digits = document.replace(/\D/g, "");
+    if (holderType && digits.length !== HOLDER_DOCUMENT_LENGTH[holderType]) {
+      setError(holderType === HOLDER_CNPJ ? "Informe o CNPJ da empresa, o mesmo do cadastro." : "Informe o seu CPF, o mesmo do cadastro.");
+      return;
+    }
     if (digits.length !== 11 && digits.length !== 14) {
       setError("Informe o CPF ou CNPJ do titular da conta.");
       return;
     }
-    if (digits.length === 14 && operatorDocument.replace(/\D/g, "").length !== 11) {
-      setError("Informe o CPF de quem opera a conta da empresa no banco.");
+    // Mesmo dígito verificador que o backend confere: um número digitado errado avisa aqui, antes de
+    // abrir a aba do banco e gastar uma tentativa.
+    if (digits.length === 14 ? !isValidCnpj(digits) : !isValidCpf(digits)) {
+      setError(digits.length === 14 ? "CNPJ inválido. Confira os números digitados." : "CPF inválido. Confira os números digitados.");
+      return;
+    }
+    if (digits.length === 14 && !isValidCpf(operatorDocument.replace(/\D/g, ""))) {
+      setError("Informe um CPF válido de quem opera a conta da empresa no banco.");
       return;
     }
     setLoadingConnectors(true);
@@ -177,7 +198,7 @@ export default function ConnectBankPage() {
 
       if (["login_error", "outdated", "revoked"].includes(status?.status)) {
         authWindow.close();
-        setError(status.error || "Não foi possível autenticar com o banco. Tente novamente.");
+        setError(publicIntegrationMessage(status.error) || "Não foi possível autenticar com o banco. Tente novamente.");
         return;
       }
     }
@@ -221,154 +242,173 @@ export default function ConnectBankPage() {
 
   return (
     <div className="connect-bank">
-      <div className="connect-bank__card">
-        <img src={logo} alt="Control Finance" className="connect-bank__logo" />
-
-        <h1 className="connect-bank__title">Conecte sua conta</h1>
+      <main className="connect-bank__content">
+        <header className="connect-bank__header">
+          <div className="connect-bank__brand"><img src={logo} alt="" className="connect-bank__logo" /><span>Control Finance</span></div>
+          <Link to="/dashboard" className="connect-bank__return">Voltar ao painel</Link>
+        </header>
+        <div className="connect-bank__heading">
+          <h1 className="connect-bank__title">{step === "intro" ? "Conectar banco" : "Escolha sua instituição financeira"}</h1>
+          <p className="connect-bank__description">
+            {step === "intro"
+              ? "Confira como seus dados serão utilizados antes de iniciar a conexão bancária."
+              : "Escolha a instituição e clique em Conectar para continuar no ambiente do banco."}
+          </p>
+        </div>
 
         {connectingStage === "waiting" && (
-          <p className="connect-bank__notice">
+          <p className="connect-bank__notice" role="status">
             Conclua a autenticação na aba que abrimos. A sincronização pode levar alguns minutos;
             você será levado ao dashboard assim que terminar.
           </p>
         )}
 
-        {error && <p className="connect-bank__error">{error}</p>}
+        {error && <p className="connect-bank__error" role="alert">{error}</p>}
 
         {step === "intro" && (
           <form className="connect-bank__consent" onSubmit={handleStart}>
-            <h2 className="connect-bank__consent-title">Antes de conectar, veja o que acontece</h2>
-            <dl className="connect-bank__facts">
-              <dt>O que vamos acessar</dt>
-              <dd>
-                Contas, saldos, extrato de transações e, se houver, cartões de crédito (limite, fatura e
-                vencimento), além de investimentos disponíveis por Open Finance do banco que você escolher.
-              </dd>
+            <section className="connect-bank__information" aria-labelledby="connection-information">
+              <h2 id="connection-information" className="connect-bank__consent-title">Sobre o compartilhamento de dados</h2>
+              <dl className="connect-bank__facts">
+                <dt>O que vamos acessar</dt>
+                <dd>
+                  Contas, saldos, extrato de transações e, se houver, cartões de crédito (limite, fatura e
+                  vencimento), além de investimentos disponíveis por Open Finance do banco que você escolher.
+                </dd>
 
-              <dt>Para quê</dt>
-              <dd>
-                Só para montar o seu painel: saldo, receitas e despesas, categorias, cartões, investimentos e relatórios.
-                Não vendemos seus dados e não usamos para publicidade.
-              </dd>
+                <dt>Para quê</dt>
+                <dd>
+                  Só para montar o seu painel: saldo, receitas e despesas, categorias, cartões, investimentos e relatórios.
+                  Não vendemos seus dados e não usamos para publicidade.
+                </dd>
 
-              <dt>Quem participa</dt>
-              <dd>
-                Você faz login direto no seu banco, pelo Open Finance. A conexão é intermediada pela Polp
-                Tecnologia, nossa fornecedora, que recebe os dados por uma instituição participante do Open
-                Finance e repassa ao Control Finance. Não recebemos a senha do seu banco. Para criar a
-                conexão, a Polp precisa do seu CPF/CNPJ e, no caso de empresa, também do CPF de quem opera a
-                conta no banco. Esses números são enviados só para criar a conexão e não ficam guardados.
-              </dd>
+                <dt>Quem participa</dt>
+                <dd>
+                  Você faz login direto no seu banco, pelo Open Finance. A conexão é intermediada pela Polp
+                  Tecnologia, nossa fornecedora, que recebe os dados por uma instituição participante do Open
+                  Finance e repassa ao Control Finance. Não recebemos a senha do seu banco. Para criar a
+                  conexão bancária, é necessário informar seu CPF/CNPJ e, no caso de empresa, também o CPF de quem opera a
+                  conta no banco. Esses números são enviados só para criar a conexão e não ficam guardados.
+                </dd>
 
-              <dt>O que guardamos</dt>
-              <dd>
-                Saldos, extrato, dados de cartão e investimentos disponibilizados pela conexão, e só os 4 últimos dígitos do número da conta, cifrados no
-                nosso banco de dados, enquanto a conexão estiver ativa.
-              </dd>
+                <dt>O que guardamos</dt>
+                <dd>
+                  Saldos, extrato, dados de cartão e investimentos disponibilizados pela conexão, e só os 4 últimos dígitos do número da conta, cifrados no
+                  nosso banco de dados, enquanto a conexão estiver ativa.
+                </dd>
 
-              <dt>Como a sincronização funciona</dt>
-              <dd>
-                Depois da primeira importação, os dados são atualizados periodicamente, conforme a agenda
-                de cada banco. Não é em tempo real. Você também pode atualizar o saldo de uma conta no
-                seletor de contas.
-              </dd>
+                <dt>Como a sincronização funciona</dt>
+                <dd>
+                  Depois da primeira importação, os dados são atualizados periodicamente, conforme a agenda
+                  de cada banco. Não é em tempo real. Você também pode atualizar o saldo de uma conta no
+                  seletor de contas.
+                </dd>
 
-              <dt>Como desconectar</dt>
-              <dd>
-                A qualquer momento, no seletor de contas ou em Privacidade e dados. Ao desconectar,
-                apagamos na hora tudo que veio desse banco e pedimos à Polp que exclua a conexão. Você
-                também pode revogar a autorização no aplicativo do seu banco, na área de Open Finance.
-              </dd>
-            </dl>
+                <dt>Como desconectar</dt>
+                <dd>
+                  A qualquer momento, no seletor de contas ou em Privacidade e dados. Ao desconectar,
+                  apagamos na hora tudo que veio desse banco e solicitamos a exclusão da conexão ao serviço de integração bancária. Você
+                  também pode revogar a autorização no aplicativo do seu banco, na área de Open Finance.
+                </dd>
+              </dl>
+            </section>
 
-            <label className="connect-bank__field">
-              <span className="connect-bank__field-label">CPF/CNPJ do titular</span>
-              <input
-                id="connect-bank-holder-document"
-                name="holderDocument"
-                type="text"
-                value={document}
-                onChange={handleDocumentChange}
-                inputMode="numeric"
-                maxLength={CNPJ_MASK.length}
-                autoComplete="off"
-                placeholder="O mesmo informado no cadastro"
-                required
-              />
-            </label>
-
-            {isBusinessDocument && (
+            <div className="connect-bank__identification">
+              <h2 className="connect-bank__consent-title">Identificação do titular</h2>
+              <p className="connect-bank__field-help">Informe o mesmo documento utilizado no cadastro do Control Finance.</p>
               <label className="connect-bank__field">
-                <span className="connect-bank__field-label">CPF de quem opera a conta da empresa</span>
+                <span className="connect-bank__field-label">
+                  {holderType === HOLDER_CNPJ ? "CNPJ da empresa" : holderType === HOLDER_CPF ? "Seu CPF" : "CPF/CNPJ do titular"}
+                </span>
                 <input
-                  id="connect-bank-operator-document"
-                  name="operatorDocument"
+                  id="connect-bank-holder-document"
+                  name="holderDocument"
                   type="text"
-                  value={operatorDocument}
-                  onChange={handleOperatorDocumentChange}
+                  value={document}
+                  onChange={handleDocumentChange}
                   inputMode="numeric"
-                  maxLength={14}
+                  maxLength={holderType === HOLDER_CPF ? CPF_MASK.length : CNPJ_MASK.length}
                   autoComplete="off"
-                  placeholder="CPF de quem acessa o banco"
+                  placeholder="O mesmo informado no cadastro"
                   required
                 />
               </label>
-            )}
 
-            <label className="connect-bank__checkbox">
-              <input
-                type="checkbox"
-                checked={noticeAccepted}
-                onChange={(e) => setNoticeAccepted(e.target.checked)}
-                required
-              />
-              <span>
-                Li as informações sobre a conexão. O compartilhamento de contas, cartões e investimentos será autorizado diretamente no banco. Detalhes na{" "}
-                <Link to="/politica-de-privacidade" target="_blank" rel="noopener noreferrer">
-                  Política de privacidade
-                </Link>
-                .
-              </span>
-            </label>
+              {isBusinessDocument && (
+                <label className="connect-bank__field">
+                  <span className="connect-bank__field-label">CPF de quem opera a conta da empresa</span>
+                  <input
+                    id="connect-bank-operator-document"
+                    name="operatorDocument"
+                    type="text"
+                    value={operatorDocument}
+                    onChange={handleOperatorDocumentChange}
+                    inputMode="numeric"
+                    maxLength={14}
+                    autoComplete="off"
+                    placeholder="CPF de quem acessa o banco"
+                    required
+                  />
+                </label>
+              )}
 
-            <Button
-              as="button"
-              type="submit"
-              variant="primary"
-              size="md"
-              className="connect-bank__button"
-              disabled={loadingConnectors || !noticeAccepted}
-            >
-              {loadingConnectors ? "Carregando bancos..." : "Escolher banco"}
-            </Button>
-            <Link to="/dashboard" className="connect-bank__skip">
-              Agora não, conectar depois
-            </Link>
+              <label className="connect-bank__checkbox">
+                <input
+                  type="checkbox"
+                  checked={noticeAccepted}
+                  onChange={(e) => setNoticeAccepted(e.target.checked)}
+                  required
+                />
+                <span>
+                  Li as informações sobre a conexão. O compartilhamento de contas, cartões e investimentos será autorizado diretamente no banco. Detalhes na{" "}
+                  <Link to="/politica-de-privacidade" target="_blank" rel="noopener noreferrer">
+                    Política de privacidade
+                  </Link>
+                  .
+                </span>
+              </label>
+
+              <Button
+                as="button"
+                type="submit"
+                variant="primary"
+                size="md"
+                className="connect-bank__button"
+                disabled={loadingConnectors || !noticeAccepted}
+              >
+                {loadingConnectors ? "Carregando bancos..." : "Escolher banco"}
+              </Button>
+            </div>
           </form>
         )}
 
         {step === "choosing" && (
-          <>
-            <div className="connect-bank__tabs" role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={personType === "personal"}
-                className={`connect-bank__tab ${personType === "personal" ? "connect-bank__tab--active" : ""}`}
-                onClick={() => setPersonType("personal")}
-              >
-                Pessoa física
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={personType === "business"}
-                className={`connect-bank__tab ${personType === "business" ? "connect-bank__tab--active" : ""}`}
-                onClick={() => setPersonType("business")}
-              >
-                Pessoa jurídica
-              </button>
-            </div>
+          <section className="connect-bank__selection" aria-label="Instituições disponíveis">
+            <button type="button" className="connect-bank__back" disabled={connectingId !== null} onClick={() => { setStep("intro"); setError(""); }}>
+              Voltar à identificação
+            </button>
+            {!holderType && (
+              <div className="connect-bank__tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={personType === "personal"}
+                  className={`connect-bank__tab ${personType === "personal" ? "connect-bank__tab--active" : ""}`}
+                  onClick={() => setPersonType("personal")}
+                >
+                  Pessoa física
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={personType === "business"}
+                  className={`connect-bank__tab ${personType === "business" ? "connect-bank__tab--active" : ""}`}
+                  onClick={() => setPersonType("business")}
+                >
+                  Pessoa jurídica
+                </button>
+              </div>
+            )}
 
             <input
               type="search"
@@ -390,25 +430,21 @@ export default function ConnectBankPage() {
                   {visibleConnectors.map((connector) => {
                     const logoUrl = connector.logoUrl;
                     const rawColor = connector.color || "3a3a3a";
-                    const stripeColor = rawColor.startsWith("#") ? rawColor : `#${rawColor}`;
 
                     return (
                       <li key={connector.id}>
                         <button
                           type="button"
-                          className="connect-bank__connector"
-                          onClick={() => handleSelectConnector(connector.id)}
+                          className={`connect-bank__connector${selectedConnectorId === connector.id ? " connect-bank__connector--selected" : ""}`}
+                          aria-pressed={selectedConnectorId === connector.id}
+                          onClick={() => { setSelectedConnectorId(connector.id); setError(""); }}
                           disabled={connectingId !== null}
                         >
-                          <span
-                            className="connect-bank__connector-stripe"
-                            style={{ backgroundColor: stripeColor }}
-                          />
                           <BankLogo name={connector.name} logoUrl={logoUrl} color={rawColor} size={40} />
                           <span className="connect-bank__connector-name">{connector.name}</span>
                           {connectingId === connector.id && (
-                            <span className="connect-bank__connector-status">
-                              <span className="connect-bank__spinner" />
+                            <span className="connect-bank__connector-status" role="status">
+                              <span className="connect-bank__spinner" aria-hidden="true" />
                               {connectingStage === "waiting"
                                 ? "Aguardando confirmação do banco..."
                                 : "Conectando..."}
@@ -421,10 +457,26 @@ export default function ConnectBankPage() {
                 </ul>
               )}
             </div>
-          </>
+            <div className="connect-bank__connect-action">
+              <p className="connect-bank__selected" role="status">
+                {selectedConnector ? `Banco selecionado: ${selectedConnector.name}` : "Selecione um banco para continuar."}
+              </p>
+              <Button
+                as="button"
+                type="button"
+                variant="primary"
+                size="md"
+                className="connect-bank__button"
+                disabled={!selectedConnector || connectingId !== null}
+                onClick={() => selectedConnector && handleSelectConnector(selectedConnector.id)}
+              >
+                {connectingId !== null ? "Conectando..." : "Conectar"}
+              </Button>
+            </div>
+          </section>
         )}
 
-      </div>
+      </main>
 
       <ul className="connect-bank__security">
         <li>

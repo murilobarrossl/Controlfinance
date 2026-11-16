@@ -67,10 +67,17 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
             }
             catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
             {
+                // Fica na fila até a Polp confirmar: nunca é descartado por número de tentativas.
                 item.LastAttemptAt = DateTime.UtcNow;
             }
         }
-        if (orphaned.Count > 0) await db.SaveChangesAsync(ct);
+        if (orphaned.Count > 0)
+        {
+            await db.SaveChangesAsync(ct);
+            var stillPending = orphaned.Count(i => db.Entry(i).State != EntityState.Detached);
+            if (stillPending > 0)
+                logger.LogWarning("{Count} revogação(ões) de contas excluídas seguem pendentes na Polp.", stillPending);
+        }
     }
 
     private Task<List<Guid>> DeleteConnectionDataLockedAsync(PolpIntegration local, CancellationToken ct) =>
@@ -96,11 +103,12 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
     }
 
     /// <summary>
-    /// Usado na exclusão da conta: tenta pedir a exclusão de todas as integrações na Polp na hora;
-    /// as que falharem viram PendingProviderDeletion (só o id técnico, sem vínculo com o usuário)
-    /// pra serem refeitas depois. Devolve quantas ficaram pendentes.
+    /// Usado na exclusão da conta: pede à Polp a revogação de todas as integrações do usuário, em
+    /// qualquer status. Só conta como revogada a que a Polp confirmou (2xx, ou 404 de consentimento
+    /// que já não existe). As outras entram na fila em QueueUnconfirmedProviderDeletionsAsync, dentro
+    /// da transação que apaga a conta.
     /// </summary>
-    public async Task<int> RequestProviderDeletionForAccountAsync(Guid userId, CancellationToken ct)
+    public async Task<AccountProviderDeletion> RequestProviderDeletionForAccountAsync(Guid userId, CancellationToken ct)
     {
         // Stop new authorization requests and in-flight sync before calling the provider.
         await db.PolpIntegrations.Where(p => p.UserId == userId)
@@ -111,24 +119,68 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
             authorizationIds.AddRange(await integrationLock.RunAsync(db, parentId,
                 () => CancelStoredConsentMetadataAsync(parentId, ct), ct));
         await CleanupStoredConsentMetadataAsync(ct, authorizationIds);
-        var integrations = await db.PolpIntegrations.Where(p => p.UserId == userId).ToListAsync(ct);
-        var pendingCount = 0;
+        var consentIds = await db.PolpIntegrations.Where(p => p.UserId == userId).Select(p => p.PolpIntegrationId).ToListAsync(ct);
+        var confirmed = new HashSet<Guid>();
 
-        foreach (var local in integrations)
+        foreach (var consentId in consentIds.Distinct())
         {
             try
             {
-                await polp.DeleteConsentAsync(local.PolpIntegrationId, ct);
+                await polp.DeleteConsentAsync(consentId, ct);
+                confirmed.Add(consentId);
             }
             catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
             {
-                db.PendingProviderDeletions.Add(new PendingProviderDeletion { PolpIntegrationId = local.PolpIntegrationId });
-                pendingCount++;
+                logger.LogWarning("Revogação de consentimento na exclusão de conta ficou pendente ({ErrorType})", ex.GetType().Name);
             }
         }
 
-        if (pendingCount > 0) await db.SaveChangesAsync(ct);
-        return pendingCount + await db.PolpInvestmentAuthorizations.CountAsync(a => a.IsSupplemental && authorizationIds.Contains(a.Id), ct);
+        // Complementares sem confirmação continuam em PolpInvestmentAuthorizations (sem vínculo com
+        // o usuário, IntegrationId vira nulo) e são refeitas por CleanupStoredConsentMetadataAsync.
+        var supplementalPending = await db.PolpInvestmentAuthorizations.CountAsync(a => a.IsSupplemental && authorizationIds.Contains(a.Id), ct);
+        return new AccountProviderDeletion(confirmed, supplementalPending);
+    }
+
+    /// <summary>
+    /// Chamar dentro da transação que apaga a conta, antes de apagar o usuário. Trava a linha do
+    /// usuário (Postgres) e enfileira a revogação de toda integração dele que a Polp não confirmou,
+    /// inclusive uma criada por um Connect concorrente depois de RequestProviderDeletionForAccountAsync.
+    /// A fila guarda só o id técnico do consentimento. Devolve quantas revogações ficaram pendentes.
+    /// </summary>
+    public async Task<int> QueueUnconfirmedProviderDeletionsAsync(Guid userId, IReadOnlySet<Guid> confirmed, CancellationToken ct)
+    {
+        // Sem a trava, um Connect que grava a integração depois desta leitura e antes do commit teria
+        // a linha apagada pelo cascade de Users sem revogação. Com ela, esse INSERT espera o commit,
+        // falha pela FK e o próprio Connect enfileira a revogação (QueueOrphanConsentAsync).
+        if (db.Database.IsNpgsql())
+            await db.Database.ExecuteSqlAsync($"SELECT 1 FROM \"Users\" WHERE \"Id\" = {userId} FOR UPDATE", ct);
+
+        var unconfirmed = (await db.PolpIntegrations.Where(p => p.UserId == userId).Select(p => p.PolpIntegrationId).ToListAsync(ct))
+            .Where(id => !confirmed.Contains(id))
+            .Distinct()
+            .ToList();
+        if (unconfirmed.Count == 0) return 0;
+
+        var alreadyQueued = await db.PendingProviderDeletions.Where(x => unconfirmed.Contains(x.PolpIntegrationId))
+            .Select(x => x.PolpIntegrationId).ToListAsync(ct);
+        db.PendingProviderDeletions.AddRange(unconfirmed.Except(alreadyQueued)
+            .Select(id => new PendingProviderDeletion { PolpIntegrationId = id }));
+        await db.SaveChangesAsync(ct);
+        return unconfirmed.Count;
+    }
+
+    /// <summary>
+    /// Consentimento que a Polp criou mas que não ficou registrado localmente porque a conta foi
+    /// excluída durante a conexão: ninguém mais vai reaproveitá-lo, então entra na fila de revogação
+    /// e os avisos atrasados dele são descartados.
+    /// </summary>
+    public async Task QueueOrphanConsentAsync(Guid consentId, CancellationToken ct)
+    {
+        await RemovedPolpResources.MarkAsync(db, [consentId], DateTime.UtcNow, ct);
+        if (await db.PendingProviderDeletions.AnyAsync(x => x.PolpIntegrationId == consentId, ct)) return;
+        db.PendingProviderDeletions.Add(new PendingProviderDeletion { PolpIntegrationId = consentId });
+        await db.SaveChangesAsync(ct);
+        logger.LogWarning("Consentimento criado para uma conta excluída durante a conexão; revogação enfileirada.");
     }
 
     // Also handles technical orphan rows retained by ON DELETE SET NULL. An unknown POST
@@ -278,3 +330,7 @@ public class PendingDisconnectRetryService(IServiceScopeFactory scopeFactory, IJ
         }
     }
 }
+
+/// <summary>Resultado da revogação na exclusão de conta: Confirmed são os consentimentos que a Polp
+/// confirmou; SupplementalPending, autorizações complementares que seguem para nova tentativa.</summary>
+public sealed record AccountProviderDeletion(IReadOnlySet<Guid> Confirmed, int SupplementalPending);

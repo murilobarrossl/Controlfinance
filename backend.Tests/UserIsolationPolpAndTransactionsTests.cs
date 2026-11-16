@@ -131,9 +131,6 @@ public class UserIsolationTransactionTests
     private static string MonthFrom() => new DateTime(Dates.Today.Year, Dates.Today.Month, 1).AddMonths(-1).ToString("yyyy-MM-dd");
     private static string MonthTo() => new DateTime(Dates.Today.Year, Dates.Today.Month, 1).AddMonths(2).ToString("yyyy-MM-dd");
 
-    private static CreateTransactionDto Dto(Guid? accountId, Guid? categoryId, string name = "Editada") =>
-        new(name, null, "Expense", "Paid", 10m, Dates.Today, accountId, categoryId);
-
     private static void AssertTransactionUntouched(TestDb t, OtherUser other)
     {
         using var db = t.NewContext();
@@ -147,14 +144,12 @@ public class UserIsolationTransactionTests
     }
 
     [Fact]
-    public async Task Editar_marcar_fixa_renomear_e_apagar_transacao_alheia_respondem_404()
+    public async Task Marcar_fixa_renomear_e_apagar_transacao_alheia_respondem_404()
     {
         using var t = new TestDb();
         var other = OtherUser.Add(t);
-        var mine = t.AddAccount();
         var id = other.Transaction.Id;
 
-        Assert.Equal(404, Http.Status(await Controller(t).Update(id, Dto(mine.Id, null))));
         Assert.Equal(404, Http.Status(await Controller(t).SetFixed(id, new SetTransactionFixedDto(true))));
         Assert.Equal(404, Http.Status(await Controller(t).SetDetails(id, new SetTransactionDetailsDto("Renomeada", null))));
         Assert.Equal(404, Http.Status(await Controller(t).Delete(id)));
@@ -163,21 +158,7 @@ public class UserIsolationTransactionTests
     }
 
     [Fact]
-    public async Task Criar_transacao_com_conta_ou_categoria_alheia_e_recusado()
-    {
-        using var t = new TestDb();
-        var other = OtherUser.Add(t);
-
-        Assert.Equal(400, Http.Status(await Controller(t).Create(Dto(other.Account.Id, null, "Nova"))));
-        Assert.Equal(400, Http.Status(await Controller(t).Create(Dto(null, other.Category.Id, "Nova"))));
-
-        await using var db = t.NewContext();
-        Assert.False(await db.Transactions.AnyAsync(x => x.UserId == t.User.Id));
-        Assert.Equal(1, await db.Transactions.CountAsync(x => x.BankAccountId == other.Account.Id));
-    }
-
-    [Fact]
-    public async Task Mover_transacao_propria_para_conta_ou_categoria_alheia_e_recusado()
+    public async Task Recategorizar_transacao_propria_com_categoria_alheia_e_recusado()
     {
         using var t = new TestDb();
         var other = OtherUser.Add(t);
@@ -185,8 +166,6 @@ public class UserIsolationTransactionTests
         var category = t.AddCategory("Minha");
         var own = t.AddTransaction(mine, TransactionType.Expense, 50m, Dates.Today, "Minha compra", category: category);
 
-        Assert.Equal(400, Http.Status(await Controller(t).Update(own.Id, Dto(other.Account.Id, category.Id))));
-        Assert.Equal(400, Http.Status(await Controller(t).Update(own.Id, Dto(mine.Id, other.Category.Id))));
         Assert.Equal(400, Http.Status(await Controller(t).SetDetails(own.Id, new SetTransactionDetailsDto("Minha compra", other.Category.Id))));
 
         await using var db = t.NewContext();

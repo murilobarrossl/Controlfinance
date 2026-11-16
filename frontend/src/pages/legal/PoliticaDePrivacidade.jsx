@@ -30,7 +30,10 @@ export default function PoliticaDePrivacidade() {
         <li>No painel, em <strong>Privacidade e dados</strong>, você baixa uma cópia de tudo, desconecta bancos, desliga e-mails e exclui a conta.</li>
       </ul>
 
-      <h2>O que mudou nesta versão (14 de novembro de 2026)</h2>
+      <h2>O que mudou nesta versão (16 de novembro de 2026)</h2>
+      <p>Para contas CNPJ, guardamos também as observações de saldo disponível com a data informada pelo banco, para exibir sua evolução no Fluxo de Caixa. Os valores são cifrados e seguem o mesmo prazo de retenção do histórico bancário, exportação e exclusão da conexão. Não reconstruímos saldos anteriores às observações recebidas.</p>
+
+      <h2>O que mudou na versão de 14 de novembro de 2026</h2>
       <ul>
         <li>
           Deixamos de guardar valores digitados à mão no planejamento: o valor anotado da reserva de emergência e o valor
@@ -88,7 +91,7 @@ export default function PoliticaDePrivacidade() {
       <p><strong>Dados de bancos conectados (só se você conectar)</strong></p>
       <ul>
         <li>Na hora de conectar, você digita o CPF/CNPJ. Ele é enviado à Polp, que o exige para criar a conexão, e descartado em seguida.</li>
-        <li>Contas: nome do produto, tipo, saldo e os 4 últimos dígitos do número. O número completo não é guardado.</li>
+        <li>Contas: nome do produto, tipo, saldo e os 4 últimos dígitos do número. Para CNPJ, também as observações de saldo disponível com a data fornecida pelo banco. O número completo não é guardado.</li>
         <li>Cartões: bandeira, limite, limite usado, dia de fechamento e vencimento, valor e vencimento da fatura.</li>
         <li>
           Transações: valor, data, horário (quando o banco informa), se é entrada ou saída, tipo da operação (Pix, TED,

@@ -52,21 +52,6 @@ public class StatusAndDatesTests
     }
 
     [Fact]
-    public async Task Criar_transacao_com_data_so_dia_grava_meia_noite_utc_e_nao_muda_o_dia_apos_ler()
-    {
-        using var t = new TestDb();
-        var dto = new CreateTransactionDto("Aluguel", null, "Expense", "Pending", 1500.00m,
-            DateTime.SpecifyKind(new DateTime(2026, 8, 20), DateTimeKind.Unspecified), null, null);
-
-        await t.Controller(db => new TransactionsController(db)).Create(dto);
-
-        await using var other = t.NewContext();
-        var saved = other.Transactions.Single();
-        Assert.Equal(new DateTime(2026, 8, 20, 0, 0, 0), saved.DueDate);
-        Assert.Equal(1500.00m, saved.Amount);
-    }
-
-    [Fact]
     public async Task Listagem_filtra_status_Overdue_incluindo_pendentes_vencidas_e_exclui_a_que_vence_hoje()
     {
         using var t = new TestDb();

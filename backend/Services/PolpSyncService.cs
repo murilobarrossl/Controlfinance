@@ -322,7 +322,7 @@ public class PolpSyncService(
                 account.Name = $"{bankName} · {AccountKindLabel(remote.Type)}";
 
             // Saldo null = ainda não sincronizado na Polp: mantém o que já temos em vez de zerar.
-            if (remote.Balance?.AvailableAmount?.Value is { } balance) account.Balance = balance;
+            await BankBalanceHistory.ApplyAsync(db, account, remote, documentType, config, now, ct);
             if (remote.Balance?.HasReservedBalance is { } hasReserved) account.HasReservedBalance = hasReserved;
             account.PolpAccountType = remote.Type;
             account.PolpAccountSubtype = remote.Subtype;

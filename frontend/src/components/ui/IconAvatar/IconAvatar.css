@@ -14,11 +14,11 @@
 }
 
 .icon-avatar--income {
-  background-color: color-mix(in srgb, var(--color-income) 16%, transparent);
+  background-color: var(--color-positive-bg);
   color: var(--color-income);
 }
 
 .icon-avatar--expense {
-  background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
-  color: var(--color-accent);
+  background-color: var(--color-negative-bg);
+  color: var(--color-expense);
 }

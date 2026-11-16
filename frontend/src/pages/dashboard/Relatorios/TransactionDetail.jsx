@@ -1,3 +1,5 @@
+import { transactionTone } from "../../../utils/financialTone.js";
+import { resolveCategoryColor } from "../../../utils/categoryColors.js";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { getTransaction } from "../../../api/transactions.js";
@@ -388,7 +390,7 @@ export default function TransactionDetail() {
               </p>
             )}
           </div>
-          <p className={`tx-detail__amount${income ? " tx-detail__amount--income" : ""}`}>
+          <p className={`tx-detail__amount tx-detail__amount--${transactionTone(t.type, t.amount, isTransfer)}`}>
             <span aria-hidden="true">{income ? "+" : "−"}</span>
             {formatCurrency(t.amount)}
             <span className="visually-hidden">{income ? " de entrada" : " de saída"}</span>
@@ -419,7 +421,7 @@ export default function TransactionDetail() {
                 <span className="tx-detail__category">
                   <span
                     className="tx-detail__category-dot"
-                    style={t.categoryColor ? { backgroundColor: t.categoryColor } : undefined}
+                    style={{ backgroundColor: resolveCategoryColor(t.categoryName) }}
                     aria-hidden="true"
                   />
                   {t.categoryName || "Sem categoria"}

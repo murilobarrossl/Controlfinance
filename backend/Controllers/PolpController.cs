@@ -19,7 +19,7 @@ public class PolpController(
     IEncryptionService encryption,
     PolpDisconnectService disconnectService,
     IPolpInbox inbox,
-    IMemoryCache cache) : ApiControllerBase
+    IMemoryCache cache, IIntegrationLock? balanceHistoryLock = null) : ApiControllerBase
 {
     private const string ConnectorsCacheKey = "polp:connectors";
     private static readonly TimeSpan ConnectorsCacheDuration = TimeSpan.FromMinutes(10);
@@ -50,7 +50,7 @@ public class PolpController(
                 color,
                 textColor = ResolveTextColor(color),
                 initials = BuildInitials(i.Name),
-                logoUrl = i.LogoUrl,
+                logoUrl = SafeLogoUrl(i.LogoUrl),
                 status = i.Status,
                 type = i.Type
             };
@@ -105,8 +105,17 @@ public class PolpController(
         // consentimento, então o usuário digita na hora, ele vai direto pra Polp e é descartado.
         // Conferir contra o hash do cadastro impede conectar o banco de outra pessoa nesta conta.
         var document = new string((dto.Document ?? string.Empty).Where(char.IsDigit).ToArray());
+        // A mensagem nomeia só o tipo do cadastro da própria sessão; nunca diz a quem pertence o
+        // documento digitado nem se ele existe em outra conta.
         if (!DocumentValidator.IsValid(document) || !encryption.ComputeLookupHashCandidates(document).Contains(user.DocumentHash))
-            return BadRequest(new { message = "O CPF/CNPJ informado não confere com o do seu cadastro." });
+            return BadRequest(new
+            {
+                message = user.DocumentType == DocumentTypes.Cnpj
+                    ? "O CNPJ informado não é o da empresa cadastrada nesta conta. Só é possível conectar contas desse CNPJ."
+                    : user.DocumentType == DocumentTypes.Cpf
+                        ? "O CPF informado não é o do cadastro desta conta. Só é possível conectar contas desse CPF."
+                        : "O CPF/CNPJ informado não confere com o do seu cadastro."
+            });
 
         // Conexão de empresa: a Polp exige, além do CNPJ, o CPF de quem opera a conta no banco (sem
         // ele responde 422). Esse CPF não é conferido com nada nosso (só guardamos o hash do CNPJ do
@@ -118,6 +127,15 @@ public class PolpController(
             if (!DocumentValidator.IsValidCpf(operatorCpf))
                 return BadRequest(new { message = "Informe o CPF de quem opera a conta da empresa no banco." });
         }
+
+        var documentType = DocumentTypes.FromDigits(document);
+        if (!DocumentTypes.InstitutionAccepts(await institutionNames.FindTypeAsync(institutionId, ct), documentType))
+            return BadRequest(new
+            {
+                message = documentType == DocumentTypes.Cnpj
+                    ? "Esse banco atende só pessoa física. Escolha um banco que atenda empresas."
+                    : "Esse banco atende só empresas. Escolha um banco que atenda pessoa física."
+            });
 
         // Mesmo motivo do login por CPF: o documento acabou de ser digitado, então regrava o hash
         // com a chave de busca ativa se ele ainda estiver numa chave antiga.
@@ -145,12 +163,7 @@ public class PolpController(
         // dizer "serviço instável" e a pessoa tentar de novo sem nunca conseguir.
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.UnprocessableEntity)
         {
-            return BadRequest(new
-            {
-                message = document.Length == 14
-                    ? "A Polp não aceitou esses dados para esse banco. Confira o CNPJ, o CPF de quem opera a conta e se o banco escolhido atende empresas."
-                    : "A Polp não aceitou esses dados para esse banco. Confira o CPF e se o banco escolhido atende pessoa física."
-            });
+            return BadRequest(new { message = ConsentRefusedMessage(document.Length == 14, (ex as PolpValidationException)?.Fields) });
         }
         catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
         {
@@ -236,7 +249,20 @@ public class PolpController(
             db.ChangeTracker.Clear();
             var existing = await db.PolpIntegrations.AsNoTracking()
                 .SingleOrDefaultAsync(p => p.PolpIntegrationId == created.Id && p.UserId == UserId && p.InstitutionId == institutionId, ct);
-            if (existing is null) throw;
+            if (existing is null)
+            {
+                // A conta foi excluída enquanto a Polp criava o consentimento (a exclusão trava a
+                // linha do usuário, então este INSERT falhou pela FK). Sem dono local ninguém o
+                // reaproveita: em vez de deixá-lo ativo, entra na fila de revogação. Para um usuário
+                // que ainda existe, o erro segue adiante e a próxima tentativa recebe o mesmo
+                // consentimento pelo avoidDuplicates.
+                if (!await db.Users.AnyAsync(u => u.Id == UserId, CancellationToken.None))
+                {
+                    await disconnectService.QueueOrphanConsentAsync(created.Id, CancellationToken.None);
+                    return Unauthorized();
+                }
+                throw;
+            }
             return Conflict(new { message = "Esta conexão já está em andamento. Acompanhe a autorização existente.", integrationId = existing.Id, status = existing.Status });
         }
 
@@ -278,7 +304,7 @@ public class PolpController(
         // conta continua com sua própria visão de dados, nada é somado entre elas.
         var accounts = await db.BankAccounts
             .Where(b => b.UserId == UserId && b.IsActive)
-            .Select(b => new { b.Id, b.Name, b.Balance, b.BankCode, b.PolpIntegrationId, b.PolpAccountId, b.PolpAccountType, b.PolpAccountSubtype, b.Number })
+            .Select(b => new { b.Id, b.Name, b.Balance, b.BalanceUpdatedAt, b.BankCode, b.PolpIntegrationId, b.PolpAccountId, b.PolpAccountType, b.PolpAccountSubtype, b.Number })
             .ToListAsync(ct);
 
         // BankAccount.PolpIntegrationId guarda o id do consentimento na Polp, mas o frontend
@@ -302,6 +328,7 @@ public class PolpController(
                 a.Name,
                 a.Number,
                 Balance = a.PolpAccountId.HasValue && isCreditCard ? (decimal?)null : a.Balance,
+                balanceUpdatedAt = a.BalanceUpdatedAt,
                 a.BankCode,
                 a.PolpIntegrationId,
                 localIntegrationId = local?.Id,
@@ -438,16 +465,12 @@ public class PolpController(
             return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível atualizar o saldo agora." });
         }
 
-        if (remote.Balance?.AvailableAmount?.Value is { } balance)
+        if (remote.Balance?.AvailableAmount?.Value is not null)
         {
             if (remote.Id != remoteId || remote.ConsentId != account.PolpIntegrationId)
                 return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível validar o saldo recebido." });
-            var updated = await db.BankAccounts.Where(b => b.Id == account.Id && b.UserId == UserId
-                && b.PolpAccountId == remoteId && b.PolpIntegrationId == account.PolpIntegrationId
-                && db.PolpIntegrations.Any(p => p.UserId == UserId && p.PolpIntegrationId == b.PolpIntegrationId && p.Status == "AUTHORISED"))
-                .ExecuteUpdateAsync(s => s.SetProperty(b => b.Balance, balance), ct);
-            if (updated == 0) return NotFound();
-            account.Balance = balance;
+            if (!await PersistBalanceAsync(account, remote, ct)) return NotFound();
+            await db.Entry(account).ReloadAsync(ct);
         }
         if (remote.Balance?.HasReservedBalance is { } hasReserved)
         {
@@ -500,13 +523,9 @@ public class PolpController(
                     failed++;
                     continue;
                 }
-                if (remote.Balance?.AvailableAmount?.Value is { } balance)
+                if (remote.Balance?.AvailableAmount?.Value is not null)
                 {
-                    var updated = await db.BankAccounts.Where(b => b.Id == account.Id && b.UserId == UserId
-                        && b.PolpIntegrationId == integration.PolpIntegrationId && b.PolpAccountId == remote.Id
-                        && db.PolpIntegrations.Any(p => p.Id == integration.Id && p.UserId == UserId && p.Status == "AUTHORISED"))
-                        .ExecuteUpdateAsync(s => s.SetProperty(b => b.Balance, balance), ct);
-                    if (updated == 0) failed++;
+                    if (!await PersistBalanceAsync(account, remote, ct)) failed++;
                 }
                 if (remote.Balance?.HasReservedBalance is { } hasReserved)
                 {
@@ -527,6 +546,31 @@ public class PolpController(
             return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível atualizar o saldo agora." });
 
         return Ok(new { updated = due.Count - failed, failed, skipped = accounts.Count - due.Count });
+    }
+
+    private static readonly IntegrationLock FallbackBalanceHistoryLock = new();
+
+    private async Task<bool> PersistBalanceAsync(BankAccount source, PolpAccountDto remote, CancellationToken ct)
+    {
+        var integration = await db.PolpIntegrations.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == UserId && p.PolpIntegrationId == source.PolpIntegrationId
+                && p.Status == "AUTHORISED", ct);
+        if (integration is null) return false;
+        var config = HttpContext.RequestServices.GetService<IConfiguration>() ?? new ConfigurationBuilder().Build();
+        var clock = HttpContext.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System;
+        return await (balanceHistoryLock ?? FallbackBalanceHistoryLock).RunAsync(db, integration.Id, async () =>
+        {
+            // Revalidar dentro do mesmo lock usado por sync/desconexão; a chamada remota já terminou.
+            var account = await db.BankAccounts.FirstOrDefaultAsync(b => b.Id == source.Id && b.UserId == UserId
+                && b.IsActive && b.PolpAccountId == remote.Id && b.PolpIntegrationId == remote.ConsentId
+                && db.PolpIntegrations.Any(p => p.Id == integration.Id && p.UserId == UserId && p.Status == "AUTHORISED"), ct);
+            if (account is null) return false;
+            await db.Entry(account).ReloadAsync(ct);
+            var documentType = await db.Users.Where(u => u.Id == UserId).Select(u => u.DocumentType).FirstAsync(ct);
+            await BankBalanceHistory.ApplyAsync(db, account, remote, documentType, config, clock.GetUtcNow(), ct);
+            await db.SaveChangesAsync(ct);
+            return true;
+        }, ct);
     }
 
     private bool TryReserveBalanceSync(Guid accountId, out TimeSpan retryAfter)
@@ -602,6 +646,28 @@ public class PolpController(
             return "#fff";
         }
     }
+
+    // Só o nome do campo recusado orienta a mensagem; o texto da Polp nunca chega ao navegador.
+    private static string ConsentRefusedMessage(bool business, IReadOnlyList<string>? fields)
+    {
+        var refused = fields ?? [];
+        if (business && refused.Contains("cnpj"))
+            return "A Polp não aceitou o CNPJ para esse banco. Confira o número e se o banco escolhido atende empresas.";
+        if (refused.Contains("cpf"))
+            return business
+                ? "A Polp não aceitou o CPF de quem opera a conta da empresa. Confira o número informado."
+                : "A Polp não aceitou o CPF para esse banco. Confira o número e se o banco escolhido atende pessoa física.";
+        if (refused.Contains("institution_id"))
+            return "Esse banco não está disponível para conexão no momento. Escolha outro banco ou tente mais tarde.";
+        return business
+            ? "A Polp não aceitou esses dados para esse banco. Confira o CNPJ, o CPF de quem opera a conta e se o banco escolhido atende empresas."
+            : "A Polp não aceitou esses dados para esse banco. Confira o CPF e se o banco escolhido atende pessoa física.";
+    }
+
+    // A logo vem de servidores dos bancos, informada pela Polp. Só https absoluto chega ao navegador:
+    // http viraria conteúdo misto e qualquer outro esquema não é imagem. O resto cai nas iniciais.
+    private static string? SafeLogoUrl(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps ? uri.AbsoluteUri : null;
 
     private static string BuildInitials(string name)
     {

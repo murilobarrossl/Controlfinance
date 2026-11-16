@@ -4,7 +4,7 @@ import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.js
 import { TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE } from "../../../components/charts/chartTheme.js";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import { buildPriceSchedule, compareTerms } from "../../../utils/investmentMath.js";
-import { readCssVar } from "../../../utils/cssVar.js";
+import { CHART_COLORS } from "../../../components/charts/chartTheme.js";
 import useIsNarrow from "./useIsNarrow.js";
 
 function formatAxisCurrency(value) {
@@ -20,17 +20,7 @@ const COMPARE_TERMS = [12, 24, 36, 48, 60];
 // custo, que é o que costuma faltar numa proposta de banco: só a parcela aparece em destaque.
 export default function FinancingSimulator() {
   const [form, setForm] = useState(EMPTY_FORM);
-  const colors = useMemo(
-    () => ({
-      axis: readCssVar("--color-text-tertiary", "#8b8b8b"),
-      grid: readCssVar("--color-border", "#2a2a2a"),
-      cursor: readCssVar("--color-border-strong", "#3a3a3a"),
-      label: readCssVar("--color-text-secondary", "#b8b8b8"),
-      principal: readCssVar("--color-income", "#4ecdc4"),
-      interest: readCssVar("--color-accent", "#ed4a31"),
-    }),
-    [],
-  );
+  const colors = { ...CHART_COLORS, principal: CHART_COLORS.neutral, interest: CHART_COLORS.expense };
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
   const [chartRef, narrowChart] = useIsNarrow();
 

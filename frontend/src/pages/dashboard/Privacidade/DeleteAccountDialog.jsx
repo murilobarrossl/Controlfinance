@@ -55,7 +55,7 @@ export default function DeleteAccountDialog({ deleting, error, onConfirm, onClos
           <Button as="button" type="button" variant="outline" size="sm" onClick={onClose} disabled={deleting}>
             Cancelar
           </Button>
-          <Button as="button" type="submit" variant="primary" size="sm" disabled={!confirmed || !password || deleting}>
+          <Button as="button" type="submit" variant="danger" size="sm" disabled={!confirmed || !password || deleting}>
             {deleting ? "Excluindo..." : "Excluir definitivamente"}
           </Button>
         </div>

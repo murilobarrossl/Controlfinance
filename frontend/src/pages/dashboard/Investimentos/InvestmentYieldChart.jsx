@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { financialTone } from "../../../utils/financialTone.js";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer } from "recharts";
 import { formatCurrency } from "../../../utils/financeMath.js";
 import ObservedInvestmentChart from "./ObservedInvestmentChart.jsx";
@@ -44,12 +45,12 @@ function ProjectedYieldChart({ data, series, view, onViewChange, idPrefix, narro
         </div>
       </div>
       <div className="inv-yield__value">
-        <strong>{formatCurrency(selected[primary.key])}</strong>
+        <strong className={isYield ? `inv-financial--${financialTone(selected[primary.key])}` : undefined}>{formatCurrency(selected[primary.key])}</strong>
         <span>{isYield ? "Rendimento bruto estimado" : "Saldo estimado"} · {selected.period}</span>
       </div>
       <div className="inv-yield__legend">
-        {series.map((entry) => (
-          <span key={entry.key}><i style={{ borderColor: entry.color }} aria-hidden="true" />{entry.label}</span>
+        {series.map((entry, seriesIndex) => (
+          <span key={entry.key}><i style={{ borderColor: entry.color, borderTopStyle: seriesIndex === 0 ? "dashed" : "dotted" }} aria-hidden="true" />{entry.label}</span>
         ))}
         <span className="inv-yield__projection-label">Linhas tracejadas: projeções</span>
       </div>
@@ -66,9 +67,9 @@ function ProjectedYieldChart({ data, series, view, onViewChange, idPrefix, narro
           <YAxis hide domain={["auto", "auto"]} />
           <Tooltip content={<YieldTooltip />} cursor={{ stroke: "var(--color-border-strong)", strokeDasharray: "3 4" }} />
           <ReferenceLine x={selected.month} stroke="var(--color-text-tertiary)" strokeDasharray="3 5" />
-          {series.map((entry) => (
+          {series.map((entry, seriesIndex) => (
             <Line key={entry.key} type="monotone" dataKey={entry.key} name={entry.label}
-              stroke={entry.color} strokeWidth={2.5} strokeDasharray="5 5"
+              stroke={entry.color} strokeWidth={2.5} strokeDasharray={seriesIndex === 0 ? "5 5" : "2 4"}
               dot={(point) => point.index === index
                 ? <circle key={point.index} cx={point.cx} cy={point.cy} r={4} fill={entry.color} stroke="var(--color-surface)" strokeWidth={2} />
                 : <g key={point.index} />}

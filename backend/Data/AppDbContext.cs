@@ -17,6 +17,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<User> Users => Set<User>();
     public DbSet<BankAccount> BankAccounts => Set<BankAccount>();
+    public DbSet<BankBalanceObservation> BankBalanceObservations => Set<BankBalanceObservation>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<PolpIntegration> PolpIntegrations => Set<PolpIntegration>();
@@ -40,6 +41,8 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<RemovedPolpResource> RemovedPolpResources => Set<RemovedPolpResource>();
     public DbSet<EmergencyReserve> EmergencyReserves => Set<EmergencyReserve>();
     public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
+    public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<PlanningAllocation> PlanningAllocations => Set<PlanningAllocation>();
     public DbSet<InvestmentRateProfile> InvestmentRateProfiles => Set<InvestmentRateProfile>();
     public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
@@ -112,6 +115,15 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
              .WithMany()
              .HasForeignKey(b => b.UserId)
              .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BankBalanceObservation>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Balance).HasConversion(decimalConverter).HasColumnName("BalanceEncrypted");
+            e.HasIndex(x => new { x.UserId, x.BankAccountId, x.ObservedAt }).IsUnique();
+            e.HasOne<BankAccount>().WithMany().HasForeignKey(x => x.BankAccountId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Category>(e =>
@@ -233,6 +245,53 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
 
         // Nome da meta é digitado pelo usuário e pode revelar planos pessoais ("Tratamento", "Divórcio"…):
         // cifrado como a descrição dos parcelamentos, junto com o valor-alvo.
+        modelBuilder.Entity<Employee>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // Unicidade por empresa calculada sobre hashes: CPF e chave Pix ficam cifrados e não dá
+            // pra comparar o valor no banco. O índice parcial deixa vários funcionários sem Pix.
+            e.HasIndex(x => new { x.UserId, x.CpfHash }).IsUnique();
+            e.HasIndex(x => new { x.UserId, x.PixKeyHash }).IsUnique().HasFilter("\"PixKeyHash\" IS NOT NULL");
+            e.HasIndex(x => new { x.UserId, x.Status, x.Department });
+            e.Property(x => x.FullName).HasConversion(textConverter).HasColumnName("FullNameEncrypted");
+            e.Property(x => x.Cpf).HasConversion(textConverter).HasColumnName("CpfEncrypted");
+            e.Property(x => x.CpfHash).HasMaxLength(120);
+            e.Property(x => x.Role).HasMaxLength(100);
+            e.Property(x => x.Department).HasMaxLength(80);
+            e.Property(x => x.EmploymentType).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.GrossSalary).HasConversion(decimalConverter).HasColumnName("GrossSalaryEncrypted");
+            e.Property(x => x.PixKeyType).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.PixKey).HasConversion(nullableTextConverter).HasColumnName("PixKeyEncrypted");
+            e.Property(x => x.PixKeyHash).HasMaxLength(120);
+            e.Property(x => x.PayeeBankCode).HasMaxLength(3);
+            e.Property(x => x.PayeeBranch).HasConversion(nullableTextConverter).HasColumnName("PayeeBranchEncrypted");
+            e.Property(x => x.PayeeAccount).HasConversion(nullableTextConverter).HasColumnName("PayeeAccountEncrypted");
+            e.Property(x => x.PayeeAccountType).HasConversion<string>().HasMaxLength(20);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Supplier>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.UserId, x.DocumentHash }).IsUnique();
+            e.HasIndex(x => new { x.UserId, x.PixKeyHash }).IsUnique().HasFilter("\"PixKeyHash\" IS NOT NULL");
+            e.Property(x => x.LegalName).HasConversion(textConverter).HasColumnName("LegalNameEncrypted");
+            e.Property(x => x.TradeName).HasConversion(nullableTextConverter).HasColumnName("TradeNameEncrypted");
+            e.Property(x => x.DocumentType).HasMaxLength(4);
+            e.Property(x => x.Document).HasConversion(textConverter).HasColumnName("DocumentEncrypted");
+            e.Property(x => x.DocumentHash).HasMaxLength(120);
+            e.Property(x => x.Category).HasMaxLength(60);
+            e.Property(x => x.PixKeyType).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.PixKey).HasConversion(nullableTextConverter).HasColumnName("PixKeyEncrypted");
+            e.Property(x => x.PixKeyHash).HasMaxLength(120);
+            e.Property(x => x.PayeeBankCode).HasMaxLength(3);
+            e.Property(x => x.PayeeBranch).HasConversion(nullableTextConverter).HasColumnName("PayeeBranchEncrypted");
+            e.Property(x => x.PayeeAccount).HasConversion(nullableTextConverter).HasColumnName("PayeeAccountEncrypted");
+            e.Property(x => x.PayeeAccountType).HasConversion<string>().HasMaxLength(20);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<SavingsGoal>(e =>
         {
             e.HasKey(g => g.Id);

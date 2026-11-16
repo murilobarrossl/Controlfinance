@@ -51,8 +51,10 @@ internal static class StartupDatabaseConnection
                         "Não foi possível abrir a conexão com PostgreSQL após 3 tentativas. " +
                         "Nenhuma migration ou backfill desta inicialização foi executado. " +
                         "Verifique a disponibilidade do banco, rede/VPN, host, porta e SSL da configuração local. " +
-                        "O timeout pode ser ajustado em Database:ConnectionTimeoutSeconds.");
-                logger.LogWarning("Falha transitória ao abrir a conexão com PostgreSQL (tentativa {Attempt}/{Attempts}). Tentando novamente antes de executar migrations.", attempt, attempts);
+                        "O timeout pode ser ajustado em Database:ConnectionTimeoutSeconds. " +
+                        "Diagnóstico: " + DatabaseConnectionDiagnostics.Describe(error));
+                logger.LogWarning("Falha transitória ao abrir a conexão com PostgreSQL (tentativa {Attempt}/{Attempts}): {Failure}. Tentando novamente antes de executar migrations.",
+                    attempt, attempts, DatabaseConnectionDiagnostics.Describe(error));
                 await delay(TimeSpan.FromSeconds(attempt), cancellationToken);
             }
         }

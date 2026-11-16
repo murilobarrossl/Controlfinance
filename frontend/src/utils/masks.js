@@ -16,6 +16,7 @@ export const applyMask = (value, mask, prev) => {
   return result;
 };
 
-const CPF_MASK = "###.###.###-##";
+export const CPF_MASK = "###.###.###-##";
 export const CNPJ_MASK = "##.###.###/####-##";
 export const getCpfCnpjMask = (digits) => (digits.length <= 11 ? CPF_MASK : CNPJ_MASK);
+export const DATE_MASK = "##/##/####";

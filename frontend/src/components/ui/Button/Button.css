@@ -43,6 +43,19 @@
   filter: brightness(0.84);
 }
 
+.btn--danger {
+  background-color: var(--color-danger-strong);
+  color: var(--color-text-primary);
+}
+
+.btn--danger:hover {
+  filter: brightness(0.92);
+}
+
+.btn--danger:active {
+  filter: brightness(0.84);
+}
+
 .btn--secondary {
   background-color: var(--color-border);
   color: var(--color-text-primary);

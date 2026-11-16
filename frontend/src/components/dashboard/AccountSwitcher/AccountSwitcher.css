@@ -240,7 +240,7 @@
   border: none;
   border-radius: var(--radius-sm);
   padding: 0.5rem 0.6rem;
-  color: var(--color-accent-soft);
+  color: var(--color-error);
   font-family: inherit;
   font-size: 0.82rem;
   text-align: left;

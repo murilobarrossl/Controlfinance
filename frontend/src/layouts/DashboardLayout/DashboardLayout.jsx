@@ -12,19 +12,12 @@ import BalanceSyncButton from "../../components/dashboard/BalanceSyncButton/Bala
 import Skeleton from "../../components/ui/Skeleton/Skeleton.jsx";
 import Avatar from "../../components/ui/Avatar/Avatar.jsx";
 import { MenuIcon, CloseIcon } from "../../components/ui/icons/FeatureIcons.jsx";
+import { isBusinessHolder } from "../../utils/holder.js";
+import { getNavigation } from "./navigation.js";
 import logo from "../../assets/images/cflogobranco.svg";
 import "./DashboardLayout.css";
 
-const TABS = [
-  { label: "Dashboard inteligente", to: "/dashboard", end: true },
-  { label: "Cartões", to: "/dashboard/cartoes" },
-  { label: "Receitas e despesas", to: "/dashboard/receitas-despesas" },
-  { label: "Relatórios", to: "/dashboard/relatorios" },
-  { label: "Categorias", to: "/dashboard/categorias" },
-  { label: "Investimentos", to: "/dashboard/investimentos" },
-];
-
-const ACCOUNT_SCOPED_PATHS = new Set(["/dashboard", "/dashboard/receitas-despesas", "/dashboard/relatorios", "/dashboard/categorias"]);
+const ACCOUNT_SCOPED_PATHS = new Set(["/dashboard", "/dashboard/receitas-despesas", "/dashboard/fluxo-de-caixa", "/dashboard/relatorios", "/dashboard/categorias"]);
 const CARDS_PATH = "/dashboard/cartoes";
 
 export default function DashboardLayout() {
@@ -56,14 +49,19 @@ function DashboardLayoutContent() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const business = isBusinessHolder(user);
+  const tabs = getNavigation(user);
   const [headerSlot, setHeaderSlot] = useState(null);
   const contentRef = useRef(null);
   const toolbarRef = useRef(null);
+  const tabsRef = useRef(null);
 
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   const isCardsTab = path === CARDS_PATH;
   const isInvestmentsTab = path === "/dashboard/investimentos";
-  const showToolbar = isCardsTab || isInvestmentsTab || ACCOUNT_SCOPED_PATHS.has(path);
+  // Só abas do próprio titular: uma rota do outro ambiente cai no 404 sem seletor de conta por cima.
+  const inNavigation = tabs.some((tab) => tab.to === path);
+  const showToolbar = inNavigation && (isCardsTab || isInvestmentsTab || ACCOUNT_SCOPED_PATHS.has(path));
 
   // No desktop a barra fica na linha do título da aba, sobreposta ao topo da página; a largura
   // real dela (que muda com o nome da conta ou o seletor de Cartões) vira o espaço reservado ao
@@ -94,9 +92,16 @@ function DashboardLayoutContent() {
       import("../../pages/dashboard/Cartoes/Cartoes.jsx");
       import("../../pages/dashboard/ReceitasDespesas/ReceitasDespesas.jsx");
       import("../../pages/dashboard/Relatorios/Relatorios.jsx");
-      import("../../pages/dashboard/Categorias/Categorias.jsx");
-      import("../../pages/dashboard/Investimentos/Investimentos.jsx");
       import("../../pages/dashboard/Privacidade/Privacidade.jsx");
+      if (!business) {
+        import("../../pages/dashboard/Categorias/Categorias.jsx");
+        import("../../pages/dashboard/Investimentos/Investimentos.jsx");
+      } else {
+        import("../../pages/dashboard/empresa/DashboardEmpresa.jsx");
+        import("../../pages/dashboard/empresa/FolhaPagamento.jsx");
+        import("../../pages/dashboard/empresa/Fornecedores.jsx");
+        import("../../pages/dashboard/empresa/Patrimonio.jsx");
+      }
     };
     if ("requestIdleCallback" in window) {
       const id = requestIdleCallback(prefetch);
@@ -104,7 +109,7 @@ function DashboardLayoutContent() {
     }
     const id = setTimeout(prefetch, 1500);
     return () => clearTimeout(id);
-  }, []);
+  }, [business]);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -124,6 +129,27 @@ function DashboardLayoutContent() {
     };
   }, [sidebarOpen]);
 
+  // No CNPJ, mantém a aba ativa visível quando a navegação horizontal não cabe.
+  // Ajusta apenas a rolagem da barra, sem deslocar a página ou mudar a navegação CPF.
+  useEffect(() => {
+    const nav = tabsRef.current;
+    if (!business || !nav) return undefined;
+    function revealActiveTab() {
+      const active = nav.querySelector('[aria-current="page"]');
+      if (!active || nav.clientWidth === 0) return;
+      const bounds = nav.getBoundingClientRect();
+      const tabBounds = active.getBoundingClientRect();
+      if (tabBounds.left < bounds.left) nav.scrollLeft += tabBounds.left - bounds.left;
+      else if (tabBounds.right > bounds.right) nav.scrollLeft += tabBounds.right - bounds.right;
+    }
+    revealActiveTab();
+    const observer = new ResizeObserver(revealActiveTab);
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, [business, pathname]);
+
+  const layoutClass = `dashboard-layout${business ? " dashboard-layout--business" : ""}`;
+
   async function handleLogout() {
     try {
       await logoutRequest();
@@ -135,7 +161,7 @@ function DashboardLayoutContent() {
   }
 
   return (
-    <div className="dashboard-layout">
+    <div className={layoutClass}>
       <header className="dashboard-nav">
         <button
           type="button"
@@ -149,17 +175,17 @@ function DashboardLayoutContent() {
 
         <img src={logo} alt="Control Finance" className="dashboard-nav__logo" />
 
-        <nav className="dashboard-nav__tabs">
-          {TABS.map((tab) => (
+        <nav ref={tabsRef} className="dashboard-nav__tabs" aria-label="Seções do painel">
+          {tabs.map(({ label, to, end }) => (
             <NavLink
-              key={tab.to}
-              to={tab.to}
-              end={tab.end}
+              key={to}
+              to={to}
+              end={end}
               className={({ isActive }) =>
                 `dashboard-nav__tab ${isActive ? "dashboard-nav__tab--active" : ""}`
               }
             >
-              {tab.label}
+              {label}
             </NavLink>
           ))}
         </nav>
@@ -187,17 +213,22 @@ function DashboardLayoutContent() {
         </div>
 
         <nav className="dashboard-sidebar__tabs" aria-label="Seções do painel">
-          {TABS.map((tab) => (
+          {tabs.map(({ label, to, end, Icon }) => (
             <NavLink
-              key={tab.to}
-              to={tab.to}
-              end={tab.end}
+              key={to}
+              to={to}
+              end={end}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
                 `dashboard-sidebar__tab ${isActive ? "dashboard-sidebar__tab--active" : ""}`
               }
             >
-              {tab.label}
+              {Icon && (
+                <span className="dashboard-sidebar__tab-icon" aria-hidden="true">
+                  <Icon />
+                </span>
+              )}
+              <span className="dashboard-sidebar__tab-label">{label}</span>
             </NavLink>
           ))}
         </nav>

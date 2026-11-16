@@ -1,18 +1,39 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuth } from "../../../context/AuthContext.jsx";
+import { isBusinessHolder } from "../../../utils/holder.js";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import { logoutAllSessions } from "../../../api/auth.js";
 import { downloadMyData, updateNotificationPreferences, deleteMyAccount, getDataPolicy } from "../../../api/account.js";
 import { clearLocalDataFor, setCurrentUserId } from "../../../utils/authToken.js";
-import Card from "../../../components/ui/Card/Card.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
 import DeleteAccountDialog from "./DeleteAccountDialog.jsx";
 import "./Privacidade.css";
 import usePageTitle from "../../../hooks/usePageTitle.js";
+import { ChevronDownIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
+
+const SETTINGS = [
+  { id: "data", label: "Seus dados", description: "Saiba quais informações são armazenadas e por quanto tempo." },
+  { id: "banks", label: "Bancos conectados", description: "Consulte suas conexões bancárias e gerencie o acesso aos dados." },
+  { id: "notifications", label: "Avisos por e-mail", description: "Escolha quais avisos deseja receber do Control Finance." },
+  { id: "export", label: "Baixar seus dados", description: "Obtenha uma cópia das informações da sua conta em formato JSON." },
+  { id: "sessions", label: "Sessões e acesso", description: "Encerre o acesso à sua conta nos aparelhos e navegadores conectados." },
+  { id: "delete", label: "Excluir conta", description: "Entenda o que será apagado antes de solicitar a exclusão definitiva." },
+];
+
+function PrivacySection({ id, active, title, children, className = "" }) {
+  const setting = SETTINGS.find((item) => item.id === id);
+  return (
+    <section id={`privacy-${id}`} hidden={!active} aria-labelledby={`privacy-title-${id}`} className={`privacidade__section ${className}`}>
+      <h2 id={`privacy-title-${id}`} className="privacidade__section-title" tabIndex={-1}>{title}</h2>
+      <p className="privacidade__section-description">{setting.description}</p>
+      <div className="privacidade__section-body">{children}</div>
+    </section>
+  );
+}
 
 // Tudo que o titular pode fazer sobre os próprios dados, num lugar só e funcionando de verdade
 // (cada botão chama um endpoint real; nenhum só muda texto na tela).
@@ -21,6 +42,22 @@ export default function Privacidade() {
   const navigate = useNavigate();
   const { user, logout, updateUser } = useAuth();
   const { accounts, connections: bankConnections, connectionsStatus, disconnectConnection } = useAccount();
+
+  const [activeSection, setActiveSection] = useState("data");
+  const [mobileDetail, setMobileDetail] = useState(false);
+  const detailRef = useRef(null);
+  const menuRef = useRef(null);
+
+  function openSection(id) {
+    setActiveSection(id);
+    setMobileDetail(true);
+    requestAnimationFrame(() => detailRef.current?.querySelector("section:not([hidden]) h2")?.focus());
+  }
+
+  function backToSettings() {
+    setMobileDetail(false);
+    requestAnimationFrame(() => menuRef.current?.querySelector('[aria-current="true"]')?.focus());
+  }
 
   const [prefs, setPrefs] = useState({
     dueRemindersEnabled: user?.dueRemindersEnabled ?? true,
@@ -87,7 +124,7 @@ export default function Privacidade() {
     if (deleting) return;
     setDeleteOpen(false);
     setDeleteError("");
-  }, [deleting]);
+  }, [deleting, setDeleteOpen, setDeleteError]);
 
   async function handleDeleteAccount(password) {
     setDeleteError("");
@@ -105,13 +142,38 @@ export default function Privacidade() {
   }
 
   return (
-    <div className="privacidade">
+    <div className={`privacidade${mobileDetail ? " privacidade--detail" : ""}`}>
       <SectionHeading title="Privacidade e dados" level={1} />
 
-      <Card title="O que guardamos sobre você">
+      <div className="privacidade__settings">
+        <aside className="privacidade__menu" ref={menuRef}>
+          <h2 className="privacidade__menu-title">Configurações</h2>
+          <nav aria-label="Configurações de privacidade">
+            {SETTINGS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`privacidade__menu-item${item.id === activeSection ? " privacidade__menu-item--active" : ""}`}
+                aria-current={item.id === activeSection ? "true" : undefined}
+                aria-controls={`privacy-${item.id}`}
+                onClick={() => openSection(item.id)}
+              >
+                <span>{item.label}</span>
+                <span className="privacidade__menu-chevron" aria-hidden="true"><ChevronDownIcon /></span>
+              </button>
+            ))}
+          </nav>
+        </aside>
+        <div className="privacidade__content" ref={detailRef}>
+          <button type="button" className="privacidade__back" onClick={backToSettings}>
+            <span aria-hidden="true"><ChevronDownIcon /></span>
+            Voltar às configurações
+          </button>
+
+      <PrivacySection id="data" active={activeSection === "data"} title="O que guardamos sobre você">
         <ul className="privacidade__list">
           <li><strong>Cadastro:</strong> nome, e-mail, senha (só em forma irreversível), fuso horário e o tipo de documento. O número do CPF/CNPJ não fica guardado, só um código de verificação gerado a partir dele.</li>
-          <li><strong>Bancos conectados:</strong> contas, saldos, extrato (com horário, tipo da operação e, quando o banco informa, nome, banco e 4 últimos dígitos da conta da outra parte), dados de cartão, investimentos, caixinhas e os 4 últimos dígitos do número da conta, cifrados, enquanto a conexão existir.</li>
+          <li><strong>Bancos conectados:</strong> contas, saldos, extrato (com horário, tipo da operação e, quando o banco informa, nome, banco e 4 últimos dígitos da conta da outra parte), dados de cartão, investimentos, caixinhas e os 4 últimos dígitos do número da conta, cifrados, enquanto a conexão existir.{isBusinessHolder(user) && " Inclui observações de saldo disponível com data do banco, sujeitas ao mesmo prazo do histórico bancário."}</li>
           <li><strong>O que você cadastra:</strong> categorias e edições de nome/categoria das transações importadas.</li>
           <li><strong>Aceites:</strong> qual versão dos Termos e da Política você aceitou e quando, e cada autorização de conexão bancária.</li>
           <li>
@@ -136,9 +198,9 @@ export default function Privacidade() {
           Detalhes, fornecedores envolvidos e prazos estão na{" "}
           <Link to="/politica-de-privacidade" target="_blank" rel="noopener noreferrer">Política de privacidade</Link>.
         </p>
-      </Card>
+      </PrivacySection>
 
-      <Card title="Bancos conectados">
+      <PrivacySection id="banks" active={activeSection === "banks"} title="Bancos conectados">
         {connectionsStatus === "loading" ? (
           <Skeleton width="100%" height="4rem" />
         ) : connectionsStatus === "error" ? (
@@ -164,13 +226,13 @@ export default function Privacidade() {
           </ul>
         )}
         <p className="privacidade__hint">
-          Desconectar apaga do Control Finance tudo que veio daquele banco, inclusive investimentos e caixinhas, e pede à
-          Polp que exclua a conexão.
+          Desconectar apaga do Control Finance tudo que veio daquele banco, inclusive investimentos e caixinhas, e solicita a
+          exclusão da conexão ao serviço de integração bancária.
           Sua conta no Control Finance continua existindo.
         </p>
-      </Card>
+      </PrivacySection>
 
-      <Card title="Avisos por e-mail">
+      <PrivacySection id="notifications" active={activeSection === "notifications"} title="Avisos por e-mail">
         <form className="privacidade__prefs" onSubmit={handleSavePrefs}>
           <label>
             <input
@@ -201,12 +263,12 @@ export default function Privacidade() {
             <Button as="button" type="submit" variant="primary" size="sm">
               Salvar preferências
             </Button>
-            {prefsStatus && <span className="privacidade__status">{prefsStatus}</span>}
+            {prefsStatus && <span className="privacidade__status" role="status">{prefsStatus}</span>}
           </div>
         </form>
-      </Card>
+      </PrivacySection>
 
-      <Card title="Cópia dos seus dados">
+      <PrivacySection id="export" active={activeSection === "export"} title="Cópia dos seus dados">
         <p className="privacidade__text">
           Baixe um arquivo com tudo que guardamos sobre você no servidor: cadastro, aceites, contas, lançamentos,
           cartões, categorias, investimentos e caixinhas, reserva de emergência, metas, regras de
@@ -216,24 +278,24 @@ export default function Privacidade() {
           <Button as="button" type="button" variant="outline" size="sm" onClick={handleExport}>
             Baixar meus dados (JSON)
           </Button>
-          {exportStatus && <span className="privacidade__status">{exportStatus}</span>}
+          {exportStatus && <span className="privacidade__status" role="status">{exportStatus}</span>}
         </div>
-      </Card>
+      </PrivacySection>
 
-      <Card title="Sessões">
+      <PrivacySection id="sessions" active={activeSection === "sessions"} title="Sessões">
         <p className="privacidade__text">
           Encerra o acesso em todos os aparelhos e navegadores onde você está conectado, inclusive este.
         </p>
         <Button as="button" type="button" variant="outline" size="sm" onClick={handleLogoutAll}>
           Sair de todos os aparelhos
         </Button>
-      </Card>
+      </PrivacySection>
 
-      <Card title="Excluir conta" className="privacidade__danger">
+      <PrivacySection id="delete" active={activeSection === "delete"} title="Excluir conta" className="privacidade__danger">
         <p className="privacidade__text">
           Apaga de forma definitiva sua conta e tudo que está guardado nos nossos servidores: cadastro, aceites,
           bancos conectados, contas, lançamentos, cartões, categorias, investimentos e caixinhas importados,
-          reserva de emergência, metas de economia e regras de rendimento informadas. Também pedimos à Polp que exclua suas
+          reserva de emergência, metas de economia e regras de rendimento informadas. Também solicitamos ao serviço de integração bancária a exclusão das suas
           conexões bancárias. Não dá para desfazer.
         </p>
         <p className="privacidade__hint">
@@ -243,11 +305,14 @@ export default function Privacidade() {
           Se quiser uma cópia dos seus dados, baixe antes de excluir.
         </p>
         <div className="privacidade__actions privacidade__delete-actions">
-          <Button as="button" type="button" variant="primary" size="sm" onClick={() => setDeleteOpen(true)}>
+          <Button as="button" type="button" variant="danger" size="sm" onClick={() => setDeleteOpen(true)}>
             Excluir minha conta
           </Button>
         </div>
-      </Card>
+      </PrivacySection>
+
+        </div>
+      </div>
 
       {deleteOpen && (
         <DeleteAccountDialog
@@ -259,9 +324,10 @@ export default function Privacidade() {
       )}
 
       <ConfirmDialog
+        confirmVariant="danger"
         open={pendingDisconnect !== null}
         title={`Desconectar ${pendingDisconnect?.label}?`}
-        message="Todas as contas e cartões desta conexão saem do Control Finance, e apagamos na hora o saldo, o extrato, os investimentos e as caixinhas que vieram desse banco. Também pedimos à Polp que exclua a conexão."
+        message="Todas as contas e cartões desta conexão saem do Control Finance, e apagamos na hora o saldo, o extrato, os investimentos e as caixinhas que vieram desse banco. Também solicitamos ao serviço de integração bancária a exclusão da conexão."
         confirmLabel="Desconectar e apagar dados"
         onConfirm={() => {
           const target = pendingDisconnect;

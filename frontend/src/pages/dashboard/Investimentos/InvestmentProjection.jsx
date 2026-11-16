@@ -4,7 +4,8 @@ import InvestmentYieldChart from "./InvestmentYieldChart.jsx";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import { simulateGrowth } from "../../../utils/investmentMath.js";
 import { formatRateDate } from "../../../utils/investmentRates.js";
-import { readCssVar } from "../../../utils/cssVar.js";
+import { CHART_COLORS } from "../../../components/charts/chartTheme.js";
+import { financialTone } from "../../../utils/financialTone.js";
 import useIsNarrow from "./useIsNarrow.js";
 
 const HORIZONS = [
@@ -139,13 +140,21 @@ function ManualInvestmentProjection({ balance, rule, isCompany, idPrefix }) {
   }, [initial, monthly, months, rule.annualPct, rule.taxed, rule.source, startDate]);
 
   const series = useMemo(() => {
-    const list = [{ key: view === "yield" ? "baseYield" : "base", label: "Sem novos aportes", color: monthly > 0
-      ? readCssVar("--color-text-secondary", "#b8b8b8") : readCssVar("--color-income", "#4ecdc4") }];
+    const yieldColor = (value) => CHART_COLORS[financialTone(value)] ?? CHART_COLORS.neutral;
+    const list = [{
+      key: view === "yield" ? "baseYield" : "base",
+      label: "Sem novos aportes",
+      color: view === "yield" && monthly === 0 ? yieldColor(result?.base.incomeGross) : CHART_COLORS.neutral,
+    }];
     if (monthly > 0) {
-      list.push({ key: view === "yield" ? "contributionsYield" : "contributions", label: `Com ${formatCurrency(monthly)} por mês`, color: readCssVar("--color-income", "#4ecdc4") });
+      list.push({
+        key: view === "yield" ? "contributionsYield" : "contributions",
+        label: `Com ${formatCurrency(monthly)} por mês`,
+        color: view === "yield" ? yieldColor(result?.withContributions?.incomeGross) : CHART_COLORS.label,
+      });
     }
     return list;
-  }, [monthly, view]);
+  }, [monthly, view, result]);
 
   const horizonLabel = HORIZONS.find((h) => h.months === months)?.label;
   const contributed = monthly * months;
@@ -226,7 +235,7 @@ function ManualInvestmentProjection({ balance, rule, isCompany, idPrefix }) {
                 <dt>{rule.taxed ? "IR estimado" : "Imposto de renda"}</dt>
                 <dd>{beforeTax ? "Não calculado" : rule.taxed ? formatCurrency((result.withContributions ?? result.base).tax) : "Isento"}</dd>
               </div>
-              <div><dt>{beforeTax ? "Rendimento antes do IR" : "Rendimento após IR estimado"}</dt><dd>{formatCurrency((result.withContributions ?? result.base).incomeNet)}</dd></div>
+              <div><dt>{beforeTax ? "Rendimento antes do IR" : "Rendimento após IR estimado"}</dt><dd className={`inv-financial--${financialTone((result.withContributions ?? result.base).incomeNet)}`}>{formatCurrency((result.withContributions ?? result.base).incomeNet)}</dd></div>
             </dl>
             {rule.taxed && <p>IR sobre os ganhos futuros. Sem as datas originais, o saldo atual é tratado como uma nova aplicação.</p>}
           </div>

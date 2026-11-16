@@ -1,7 +1,6 @@
-import { useMemo } from "react";
+import { useId } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE } from "./chartTheme.js";
-import { readCssVar } from "../../utils/cssVar.js";
+import { CHART_COLORS, TOOLTIP_STYLE, TOOLTIP_ITEM_STYLE } from "./chartTheme.js";
 import "./AreaTrendChart.css";
 
 const DEFAULT_X_PADDING = { right: 12 };
@@ -15,12 +14,12 @@ export default function AreaTrendChart({
   badge,
   xAxisPadding = DEFAULT_X_PADDING,
 }) {
-  const axisColor = useMemo(() => readCssVar("--color-text-tertiary", "#8b8b8b"), []);
+  const gradientId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   return (
     <div className="area-trend-chart">
       {badge && (
         <div className="area-trend-chart__badge">
-          <span className="area-trend-chart__badge-value">{badge.value}</span>
+          <span className={`area-trend-chart__badge-value area-trend-chart__badge-value--${badge.tone ?? "default"}`}>{badge.value}</span>
           <span className="area-trend-chart__badge-label">{badge.label}</span>
         </div>
       )}
@@ -29,23 +28,23 @@ export default function AreaTrendChart({
         <AreaChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 8 }}>
           <defs>
             {series.map((s, index) => (
-              <linearGradient key={s.key} id={`area-trend-${index}`} x1="0" y1="0" x2="0" y2="1">
+              <linearGradient key={s.key} id={`${gradientId}-${index}`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={s.color} stopOpacity={0.35} />
                 <stop offset="95%" stopColor={s.color} stopOpacity={0} />
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey={xKey} stroke={axisColor} tick={{ fontSize: 12 }} padding={xAxisPadding} />
-          <YAxis stroke={axisColor} tick={{ fontSize: 12 }} tickFormatter={formatValue} width={76} />
+          <CartesianGrid stroke={CHART_COLORS.grid} strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey={xKey} stroke={CHART_COLORS.axis} tick={{ fontSize: 12 }} padding={xAxisPadding} />
+          <YAxis stroke={CHART_COLORS.axis} tick={{ fontSize: 12 }} tickFormatter={formatValue} width={76} />
           <Tooltip
             formatter={(value) => (formatValue ? formatValue(value) : value)}
             contentStyle={TOOLTIP_STYLE}
-            labelStyle={{ color: "#b8b8b8" }}
+            labelStyle={{ color: CHART_COLORS.label }}
             itemStyle={TOOLTIP_ITEM_STYLE}
-            cursor={{ stroke: "#3a3a3a", strokeWidth: 1 }}
+            cursor={{ stroke: CHART_COLORS.cursor, strokeWidth: 1 }}
           />
-          <Legend wrapperStyle={{ fontSize: 12, color: "#b8b8b8" }} />
+          <Legend wrapperStyle={{ fontSize: 12, color: CHART_COLORS.label }} />
           {series.map((s, index) => (
             <Area
               key={s.key}
@@ -54,7 +53,8 @@ export default function AreaTrendChart({
               name={s.label ?? s.key}
               stroke={s.color}
               strokeWidth={2}
-              fill={`url(#area-trend-${index})`}
+              strokeDasharray={s.strokeDasharray}
+              fill={`url(#${gradientId}-${index})`}
               dot={false}
               activeDot={{ r: 4 }}
             />

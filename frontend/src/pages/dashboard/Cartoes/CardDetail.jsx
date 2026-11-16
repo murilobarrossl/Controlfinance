@@ -43,7 +43,7 @@ export default function CardDetail({ id, card, bankName }) {
         <div className="cartoes__detail-group">
           <dl className="cartoes__detail-figure cartoes__detail-figure--lead">
             <dt>Fatura atual</dt>
-            <dd>{card.currentInvoice != null ? formatCurrency(card.currentInvoice) : "—"}</dd>
+            <dd className={pastDue ? "cartoes__detail-value--overdue" : undefined}>{card.currentInvoice != null ? formatCurrency(card.currentInvoice) : "—"}</dd>
           </dl>
           <dl className="cartoes__detail-figure">
             <dt>Próximo vencimento</dt>
@@ -52,7 +52,7 @@ export default function CardDetail({ id, card, bankName }) {
                 {!card.invoiceDueDate ? "—" : pastDue ? formatDueDay(card.invoiceDueDate) : formatDate(card.invoiceDueDate)}
               </span>
               {card.invoiceStatus && (
-                <StatusPill status={card.invoiceStatus}>{STATUS_LABELS[card.invoiceStatus] || card.invoiceStatus}</StatusPill>
+                <StatusPill status={card.invoiceStatus} pendingTone="neutral">{STATUS_LABELS[card.invoiceStatus] || card.invoiceStatus}</StatusPill>
               )}
             </dd>
           </dl>
@@ -62,7 +62,7 @@ export default function CardDetail({ id, card, bankName }) {
         <div className="cartoes__detail-group">
           <dl className="cartoes__detail-figure cartoes__detail-figure--lead">
             <dt>Limite usado</dt>
-            <dd>
+            <dd className={overLimit ? "cartoes__detail-value--overdue" : undefined}>
               {card.usedLimit != null ? formatCurrency(card.usedLimit) : "—"}
               {hasLimit && <span className="cartoes__detail-of"> de {formatCurrency(card.creditLimit)}</span>}
             </dd>

@@ -1,5 +1,5 @@
 import SectionHeading from "../../../../components/ui/SectionHeading/SectionHeading.jsx";
-import { PLANS, FREE_TRIAL_DAYS, formatPrice, splitPrice } from "../../../../utils/pricing.js";
+import { PLANS, formatPrice, splitPrice } from "../../../../utils/pricing.js";
 import "./Planos.css";
 
 const { monthly, quarterly, annual } = PLANS;
@@ -38,12 +38,6 @@ export default function Planos() {
   return (
     <section id="planos" className="planos">
       <SectionHeading title="Planos" />
-
-      <p role="note" className="planos__notice">
-        Preços de referência: a contratação paga ainda não está aberta e nenhuma cobrança é feita.
-        Quando abrir, cada plano terá {FREE_TRIAL_DAYS} dias grátis, e as condições completas (renovação,
-        cancelamento e reembolso) serão publicadas antes de qualquer cobrança.
-      </p>
 
       <div className="planos__grid">
         {PLAN_CARDS.map(({ plan, billingNote, benefitsTitle, benefits, extraNotes }) => {

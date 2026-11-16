@@ -80,6 +80,7 @@ public class AccountController(
                 instituicaoId = a.BankCode,
                 origem = a.PolpAccountId.HasValue ? "sincronizada" : "manual",
                 saldo = a.Balance,
+                saldoAtualizadoEm = a.BalanceUpdatedAt,
                 tipo = a.PolpAccountType,
                 subtipo = a.PolpAccountSubtype,
                 numero = a.Number,
@@ -92,6 +93,10 @@ public class AccountController(
                 faturaAtual = a.CurrentInvoiceAmount,
                 vencimentoFatura = a.InvoiceDueDate,
             }),
+            historicoSaldosDisponiveis = await db.BankBalanceObservations.AsNoTracking()
+                .Where(x => x.UserId == UserId).OrderBy(x => x.ObservedAt)
+                .Select(x => new { contaId = x.BankAccountId, dataInformadaPeloBanco = x.ObservedAt, saldoDisponivel = x.Balance })
+                .ToListAsync(ct),
             categorias = categories.Select(c => new { c.Name, cor = c.Color }),
             transacoes = transactions.Select(t => new
             {
@@ -153,6 +158,35 @@ public class AccountController(
                 .OrderBy(g => g.CreatedAt)
                 .ToListAsync(ct))
                 .Select(g => new { id = g.Id, nome = g.Name, valorAlvo = g.TargetAmount, prazo = g.Deadline, criadaEm = g.CreatedAt }),
+            // Cadastro digitado pela própria empresa: vai completo, porque esta exportação é a cópia
+            // dos dados da conta para o titular dela.
+            funcionarios = (await db.Employees
+                .AsNoTracking()
+                .Where(e => e.UserId == UserId)
+                .OrderBy(e => e.CreatedAt)
+                .ToListAsync(ct))
+                .Select(e => new
+                {
+                    id = e.Id, nome = e.FullName, cpf = e.Cpf, cargo = e.Role, departamento = e.Department,
+                    admissao = e.AdmissionDate, vinculo = e.EmploymentType?.ToString(), salarioBruto = e.GrossSalary,
+                    situacao = e.Status.ToString(), desligamento = e.TerminationDate,
+                    pix = e.PixKeyType is null ? null : new { tipo = e.PixKeyType.ToString(), chave = e.PixKey },
+                    contaBancaria = e.PayeeBankCode is null ? null : new { banco = e.PayeeBankCode, agencia = e.PayeeBranch, conta = e.PayeeAccount, tipo = e.PayeeAccountType.ToString() },
+                    criadoEm = e.CreatedAt, atualizadoEm = e.UpdatedAt,
+                }),
+            fornecedores = (await db.Suppliers
+                .AsNoTracking()
+                .Where(x => x.UserId == UserId)
+                .OrderBy(x => x.CreatedAt)
+                .ToListAsync(ct))
+                .Select(x => new
+                {
+                    id = x.Id, razaoSocial = x.LegalName, nomeFantasia = x.TradeName, tipoDocumento = x.DocumentType,
+                    documento = x.Document, categoria = x.Category,
+                    pix = x.PixKeyType is null ? null : new { tipo = x.PixKeyType.ToString(), chave = x.PixKey },
+                    contaBancaria = x.PayeeBankCode is null ? null : new { banco = x.PayeeBankCode, agencia = x.PayeeBranch, conta = x.PayeeAccount, tipo = x.PayeeAccountType.ToString() },
+                    criadoEm = x.CreatedAt, atualizadoEm = x.UpdatedAt,
+                }),
         };
 
         Response.Headers.Append("Cache-Control", "no-store");
@@ -198,9 +232,10 @@ public class AccountController(
     /// (uma sessão esquecida aberta não deveria bastar pra apagar tudo).
     ///
     /// O que acontece, nesta ordem:
-    /// 1. pede à Polp a exclusão de cada conexão bancária (o que falhar fica numa fila sem dado
-    ///    pessoal — só o id técnico da integração — e é refeito depois);
-    /// 2. apaga do banco de dados, numa transação, tudo que pertence ao usuário;
+    /// 1. pede à Polp a revogação de cada consentimento do usuário, em qualquer status;
+    /// 2. numa transação: enfileira a revogação de todo consentimento que a Polp não confirmou (fila
+    ///    sem dado pessoal, só o id técnico, refeita de hora em hora até a Polp confirmar) e apaga
+    ///    do banco de dados tudo que pertence ao usuário;
     /// 3. derruba as sessões abertas e apaga o cookie.
     /// Cópias de segurança (backups) da hospedagem não são alteradas aqui: o dado sai delas
     /// conforme o ciclo de retenção do provedor (ver Política de Privacidade).
@@ -223,21 +258,29 @@ public class AccountController(
             return BadRequest(new { message = "Senha incorreta." });
         }
 
-        var providerPending = await disconnectService.RequestProviderDeletionForAccountAsync(UserId, ct);
+        // Depois da senha conferida, a exclusão vai até o fim mesmo se o navegador fechar a conexão:
+        // parar no meio deixaria consentimentos revogados com a conta ainda existindo.
+        var work = CancellationToken.None;
+        var revocation = await disconnectService.RequestProviderDeletionForAccountAsync(UserId, work);
+        int providerPending;
 
-        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        await using (var tx = await db.Database.BeginTransactionAsync(work))
         {
-            await disconnectService.MarkAccountResourcesRemovedAsync(UserId, ct);
+            providerPending = revocation.SupplementalPending
+                + await disconnectService.QueueUnconfirmedProviderDeletionsAsync(UserId, revocation.Confirmed, work);
+            await disconnectService.MarkAccountResourcesRemovedAsync(UserId, work);
             // Reserva e metas também têm cascade de Users, mas saem explicitamente: são dados que o
             // usuário digitou, e a exclusão deles não pode depender só da FK existir no banco.
-            await db.PlanningAllocations.Where(a => a.UserId == UserId).ExecuteDeleteAsync(ct);
-            await db.SavingsGoals.Where(g => g.UserId == UserId).ExecuteDeleteAsync(ct);
-            await db.InvestmentRateProfiles.Where(p => p.UserId == UserId).ExecuteDeleteAsync(ct);
-            await db.EmergencyReserves.Where(r => r.UserId == UserId).ExecuteDeleteAsync(ct);
+            await db.PlanningAllocations.Where(a => a.UserId == UserId).ExecuteDeleteAsync(work);
+            await db.SavingsGoals.Where(g => g.UserId == UserId).ExecuteDeleteAsync(work);
+            await db.Employees.Where(e => e.UserId == UserId).ExecuteDeleteAsync(work);
+            await db.Suppliers.Where(x => x.UserId == UserId).ExecuteDeleteAsync(work);
+            await db.InvestmentRateProfiles.Where(p => p.UserId == UserId).ExecuteDeleteAsync(work);
+            await db.EmergencyReserves.Where(r => r.UserId == UserId).ExecuteDeleteAsync(work);
             // O resto (contas, transações, categorias, cartões, decisões de recorrência,
             // integrações e registros de aceite) sai pelo cascade de Users no próprio Postgres.
-            await db.Users.Where(u => u.Id == UserId).ExecuteDeleteAsync(ct);
-            await tx.CommitAsync(ct);
+            await db.Users.Where(u => u.Id == UserId).ExecuteDeleteAsync(work);
+            await tx.CommitAsync(work);
         }
 
         sessionValidator.Invalidate(UserId);

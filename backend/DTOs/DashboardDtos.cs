@@ -29,24 +29,11 @@ public record CategoryDto(Guid Id, string Name, string? Color)
 }
 
 // ── TRANSACTION ───────────────────────────────────────
-public record CreateTransactionDto(
-    [Required(ErrorMessage = "Nome é obrigatório."), MaxLength(150)] string Name,
-    [MaxLength(500)] string? Description,
-    string Type,         // "Income" | "Expense"
-    string Status,       // "Pending" | "Paid" | "Overdue"
-    [Range(0.01, double.MaxValue, ErrorMessage = "Valor deve ser maior que zero.")] decimal Amount,
-    DateTime DueDate,
-    Guid? BankAccountId,
-    Guid? CategoryId,
-    bool IsFixed = false
-);
-
 public record SetTransactionFixedDto(bool IsFixed);
 
-// Edição rápida de nome/categoria (ex.: a Polp categorizou errado, "Multa" virou "Multas de
-// trânsito" sem ter carro) sem precisar montar o CreateTransactionDto inteiro. A lista de
-// transações não expõe BankAccountId/CategoryId como Guid (só os nomes), então não dá pra
-// reconstruir esse DTO no cliente a partir do que a tela já tem.
+// Os únicos campos que o usuário personaliza num lançamento importado (ex.: a Polp categorizou
+// errado, "Multa" virou "Multas de trânsito" sem ter carro). Valor, data, tipo, conta e ids vêm só
+// do banco.
 public record SetTransactionDetailsDto(
     [Required(ErrorMessage = "Nome é obrigatório."), MaxLength(150)] string Name,
     Guid? CategoryId
@@ -61,7 +48,10 @@ public record TransactionAggregatesDto(
     int Count,
     List<AggregateMonthDto> Months,
     List<AggregateCategoryDto> Categories,
-    List<AggregateEstablishmentDto> Establishments);
+    List<AggregateEstablishmentDto> Establishments,
+    List<AggregateDayDto> Days);
+
+public record AggregateDayDto(DateOnly Date, decimal Income, decimal Expense);
 
 public record TransactionReportDto(
     IEnumerable<TransactionDto> Items,

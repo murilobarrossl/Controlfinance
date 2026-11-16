@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Button from "../../../components/ui/Button/Button.jsx";
 import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
+import DateInput from "../../../components/ui/DateInput/DateInput.jsx";
 import { InstitutionLogo, InvestmentIcon } from "./InvestmentMarks.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import { CloseIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
@@ -12,7 +13,7 @@ import { summarize } from "./planningSummary.js";
 
 const EMPTY_GOAL_FORM = { name: "", targetAmount: "", deadline: "" };
 
-// O <input type="date"> grava "AAAA-MM-DD". new Date() lê isso como meia-noite UTC, o que no
+// O prazo é guardado como "AAAA-MM-DD". new Date() lê isso como meia-noite UTC, o que no
 // fuso do Brasil vira o dia anterior: formata direto da string pra o prazo não "voltar" um dia.
 function formatIsoDate(iso) {
   const [year, month, day] = iso.split("-");
@@ -249,7 +250,7 @@ export function GoalsCard({ planning, items, entries }) {
         </label>
         <label className="investimentos__field">
           <span className="investimentos__field-label">Prazo (opcional)</span>
-          <input type="date" value={goalForm.deadline} onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })} />
+          <DateInput value={goalForm.deadline} onChange={(deadline) => setGoalForm({ ...goalForm, deadline })} />
         </label>
         <Button as="button" type="submit" variant="primary" size="md" disabled={create.saving}>
           {create.saving ? "Salvando…" : "Criar meta"}

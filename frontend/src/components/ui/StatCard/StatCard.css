@@ -29,12 +29,12 @@
 
 .stat-card__icon--income {
   color: var(--color-income);
-  background-color: color-mix(in srgb, var(--color-income) 16%, transparent);
+  background-color: var(--color-positive-bg);
 }
 
 .stat-card__icon--expense {
-  color: var(--color-accent);
-  background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-expense);
+  background-color: var(--color-negative-bg);
 }
 
 .stat-card__label {
@@ -64,7 +64,7 @@
 }
 
 .stat-card__value--expense {
-  color: var(--color-accent);
+  color: var(--color-expense);
 }
 
 .stat-card__trend {
@@ -85,12 +85,17 @@
 
 .stat-card__trend--positive {
   color: var(--color-income);
-  background-color: color-mix(in srgb, var(--color-income) 16%, transparent);
+  background-color: var(--color-positive-bg);
 }
 
 .stat-card__trend--negative {
-  color: var(--color-accent-soft);
-  background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-negative);
+  background-color: var(--color-negative-bg);
+}
+
+.stat-card__trend--neutral {
+  color: var(--color-neutral);
+  background-color: var(--color-neutral-bg);
 }
 
 .stat-card__secondary {

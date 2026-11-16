@@ -34,18 +34,18 @@ export function dateLabel(value) {
   return Number.isNaN(date.getTime()) ? "Não informado" : date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 export const MODALITIES = {
-  reserved: { key: "reserved", groupLabel: "Caixinhas e porquinhos", label: "Saldo reservado em conta", color: "var(--color-income)" },
-  CDB: { key: "CDB", groupLabel: "CDB", label: "CDB", color: "var(--color-income)" },
-  RDB: { key: "RDB", groupLabel: "RDB", label: "RDB", color: "var(--color-income)" },
-  LCI: { key: "LCI", groupLabel: "LCI", label: "LCI", color: "var(--color-income)" },
-  LCA: { key: "LCA", groupLabel: "LCA", label: "LCA", color: "var(--color-income)" },
-  DEBENTURES: { key: "DEBENTURES", groupLabel: "Debêntures", label: "Debênture", color: "var(--color-income)" },
-  CRI: { key: "CRI", groupLabel: "CRI", label: "CRI", color: "var(--color-income)" },
-  CRA: { key: "CRA", groupLabel: "CRA", label: "CRA", color: "var(--color-income)" },
-  "treasure-titles": { key: "treasure-titles", groupLabel: "Tesouro Direto", label: "Tesouro Direto", color: "var(--color-income)" },
-  funds: { key: "funds", groupLabel: "Fundos de investimento", label: "Fundo", color: "var(--color-income)" },
-  "variable-incomes": { key: "variable-incomes", groupLabel: "Renda variável", label: "Renda variável", color: "var(--color-income)" },
-  other: { key: "other", groupLabel: "Outros investimentos", label: "Investimento", color: "var(--color-income)" },
+  reserved: { key: "reserved", groupLabel: "Caixinhas e porquinhos", label: "Saldo reservado em conta", color: "var(--color-neutral)" },
+  CDB: { key: "CDB", groupLabel: "CDB", label: "CDB", color: "var(--color-neutral)" },
+  RDB: { key: "RDB", groupLabel: "RDB", label: "RDB", color: "var(--color-neutral)" },
+  LCI: { key: "LCI", groupLabel: "LCI", label: "LCI", color: "var(--color-neutral)" },
+  LCA: { key: "LCA", groupLabel: "LCA", label: "LCA", color: "var(--color-neutral)" },
+  DEBENTURES: { key: "DEBENTURES", groupLabel: "Debêntures", label: "Debênture", color: "var(--color-neutral)" },
+  CRI: { key: "CRI", groupLabel: "CRI", label: "CRI", color: "var(--color-neutral)" },
+  CRA: { key: "CRA", groupLabel: "CRA", label: "CRA", color: "var(--color-neutral)" },
+  "treasure-titles": { key: "treasure-titles", groupLabel: "Tesouro Direto", label: "Tesouro Direto", color: "var(--color-neutral)" },
+  funds: { key: "funds", groupLabel: "Fundos de investimento", label: "Fundo", color: "var(--color-neutral)" },
+  "variable-incomes": { key: "variable-incomes", groupLabel: "Renda variável", label: "Renda variável", color: "var(--color-neutral)" },
+  other: { key: "other", groupLabel: "Outros investimentos", label: "Investimento", color: "var(--color-neutral)" },
 };
 export const STATE_TEXT = {
   checking: "Confirmando os dados com o banco.",

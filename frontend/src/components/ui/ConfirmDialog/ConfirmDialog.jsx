@@ -11,6 +11,7 @@ export default function ConfirmDialog({
   title,
   message,
   confirmLabel = "Confirmar",
+  confirmVariant = "primary",
   cancelLabel = "Cancelar",
   onConfirm,
   onClose,
@@ -41,7 +42,7 @@ export default function ConfirmDialog({
           <Button as="button" type="button" variant="outline" size="sm" onClick={onClose}>
             {cancelLabel}
           </Button>
-          <Button as="button" type="button" variant="primary" size="sm" onClick={onConfirm}>
+          <Button as="button" type="button" variant={confirmVariant} size="sm" onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>

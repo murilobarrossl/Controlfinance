@@ -1,343 +1,423 @@
 .connect-bank {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1.75rem;
   min-height: 100vh;
-  padding: 2rem;
+  padding: 2rem 2.5rem;
   background-color: var(--color-bg-alt);
   font-family: "Prompt", sans-serif;
 }
 
-.connect-bank__card {
-  position: relative;
-  width: 100%;
-  max-width: 560px;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-panel);
-  padding: 2.5rem;
-  display: flex;
-  flex-direction: column;
-  text-align: center;
-}
-
-.connect-bank__logo {
-  height: 32px;
-  width: 32px;
-  align-self: flex-start;
-  margin-bottom: 1.5rem;
-}
-
-.connect-bank__title {
-  font-weight: 600;
-  color: var(--color-text-primary);
-  font-size: 1.5rem;
-  margin: 0 0 2rem;
-  text-align: left;
-}
-
-.connect-bank__button {
-  width: 100%;
-}
-
-.connect-bank__button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
+.connect-bank__content,
 .connect-bank__security {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
   width: 100%;
-  max-width: 560px;
+  max-width: 72rem;
+  margin-inline: auto;
 }
 
-.connect-bank__security li {
+.connect-bank__header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem;
-  color: var(--color-text-tertiary);
-  font-size: 0.83rem;
-  line-height: 1.4;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.connect-bank__security svg {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-  color: var(--color-income);
-}
-
-.connect-bank__error {
-  color: var(--color-accent);
-  font-size: 0.85rem;
-  margin: -1rem 0 1.25rem;
-  text-align: left;
-}
-
-.connect-bank__notice {
-  color: var(--color-text-secondary);
-  font-size: 0.85rem;
-  line-height: 1.5;
-  background-color: var(--color-surface-hover);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  padding: 0.75rem 1rem;
-  margin: -1rem 0 1.25rem;
-  text-align: left;
-}
-
-.connect-bank__empty {
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  margin: 0.5rem 0 0;
-}
-
-.connect-bank__tabs {
-  display: flex;
-  gap: 0.4rem;
-  margin: 0 0 1.25rem;
-  padding: 4px;
-  background-color: var(--color-bg-alt);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-.connect-bank__tab {
-  flex: 1;
-  border: none;
-  background-color: transparent;
-  color: var(--color-text-secondary);
-  border-radius: var(--radius-md);
-  padding: 0.65rem 0.9rem;
-  font-size: 0.92rem;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.connect-bank__tab:hover {
-  color: var(--color-text-primary);
-}
-
-.connect-bank__tab:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.connect-bank__tab--active {
-  background-color: var(--color-surface-hover);
-  color: var(--color-text-primary);
-}
-
-.connect-bank__search {
-  width: 100%;
-  margin: 0 0 1rem;
-  background-color: var(--color-bg-alt);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  padding: 0.8rem 1rem;
-  color: var(--color-text-primary);
-  font-family: inherit;
-  font-size: 0.95rem;
-}
-
-.connect-bank__search::placeholder {
-  color: var(--color-text-tertiary);
-}
-
-.connect-bank__search:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.connect-bank__connector-panel {
-  background-color: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 0.75rem;
-}
-
-.connect-bank__connector-panel .connect-bank__empty {
-  margin: 0;
-  padding: 1.25rem 0.5rem;
-}
-
-.connect-bank__connector-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  max-height: 420px;
-  overflow-y: auto;
-}
-
-.connect-bank__connector {
+.connect-bank__brand {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  width: 100%;
-  border: 1px solid var(--color-border-strong);
-  background-color: transparent;
   color: var(--color-text-primary);
-  border-radius: var(--radius-md);
-  padding: 0.9rem 1.15rem;
   font-size: 1rem;
-  font-family: inherit;
-  cursor: pointer;
-  text-align: left;
-  transition: background-color 0.15s ease;
+  font-weight: 500;
 }
 
-.connect-bank__connector:hover {
-  background-color: var(--color-surface-hover);
+.connect-bank__logo {
+  width: 2rem;
+  height: 2rem;
 }
 
-.connect-bank__connector:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.connect-bank__connector:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.connect-bank__connector-stripe {
-  width: 4px;
-  height: 32px;
-  border-radius: var(--radius-pill);
-  flex-shrink: 0;
-}
-
-.connect-bank__connector-name {
-  flex: 1;
-}
-
-.connect-bank__connector-status {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
+.connect-bank__return,
+.connect-bank__back {
   color: var(--color-text-secondary);
-  font-size: 0.85rem;
-  flex-shrink: 0;
+  font-size: 0.8125rem;
+  text-underline-offset: 0.25em;
 }
 
-.connect-bank__spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--color-border-strong);
-  border-top-color: var(--color-accent);
-  border-radius: 50%;
-  flex-shrink: 0;
-  animation: connect-bank-spin 0.6s linear infinite;
+.connect-bank__heading {
+  padding-block: 2.5rem;
 }
 
-@keyframes connect-bank-spin {
-  to {
-    transform: rotate(360deg);
-  }
+.connect-bank__title {
+  margin: 0 0 0.75rem;
+  color: var(--color-text-primary);
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
 }
 
-@media (max-width: 480px) {
-  .connect-bank {
-    padding: 1.25rem;
-    gap: 1.25rem;
-  }
-
-  .connect-bank__card {
-    padding: 1.75rem 1.5rem;
-  }
+.connect-bank__description,
+.connect-bank__field-help {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
 }
 
-/* Aviso pré-conexão: o que é acessado, para quê, quem participa, o que fica guardado e como
-   desconectar, antes de qualquer dado sair daqui. */
 .connect-bank__consent {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 4rem;
+}
+
+.connect-bank__information,
+.connect-bank__identification {
+  min-width: 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.connect-bank__identification {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  text-align: left;
+  gap: 1.25rem;
+  position: sticky;
+  top: 2rem;
 }
 
 .connect-bank__consent-title {
   margin: 0;
   color: var(--color-text-primary);
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.connect-bank__field-help {
+  margin-top: -0.625rem;
+  font-size: 0.8125rem;
 }
 
 .connect-bank__facts {
-  margin: 0;
   display: grid;
-  gap: 0.35rem 0;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0;
 }
 
 .connect-bank__facts dt {
+  margin-top: 1rem;
   color: var(--color-text-primary);
-  font-size: 0.82rem;
-  font-weight: 600;
-  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.connect-bank__facts dt:first-child {
+  margin-top: 0;
 }
 
 .connect-bank__facts dd {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 0.82rem;
-  line-height: 1.5;
+  font-size: 0.8125rem;
+  line-height: 1.65;
 }
 
 .connect-bank__field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.5rem;
 }
 
 .connect-bank__field-label {
-  color: var(--color-text-secondary);
-  font-size: 0.75rem;
-  font-weight: 500;
+  color: var(--color-text-primary);
+  font-size: 0.8125rem;
 }
 
-.connect-bank__field input {
-  background-color: var(--color-border-strong);
+.connect-bank__field input,
+.connect-bank__search {
+  width: 100%;
+  min-height: 2.875rem;
+  padding: 0.75rem 0.875rem;
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  padding: 0.7rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--color-text-primary);
-  font-family: inherit;
-  font-size: 0.9rem;
+  font: inherit;
+  font-size: 0.875rem;
+  caret-color: var(--color-accent);
+}
+
+.connect-bank__field input::placeholder,
+.connect-bank__search::placeholder {
+  color: var(--color-text-secondary);
 }
 
 .connect-bank__checkbox {
   display: flex;
   align-items: flex-start;
-  gap: 0.6rem;
+  gap: 0.75rem;
   color: var(--color-text-secondary);
-  font-size: 0.82rem;
-  line-height: 1.5;
+  font-size: 0.8125rem;
+  line-height: 1.6;
   cursor: pointer;
 }
 
 .connect-bank__checkbox input {
-  margin-top: 0.2rem;
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.25rem;
   flex-shrink: 0;
+  accent-color: var(--color-accent);
 }
 
-.connect-bank__checkbox a,
-.connect-bank__skip {
+.connect-bank__checkbox a {
+  color: var(--color-text-primary);
+  text-underline-offset: 0.2em;
+}
+
+.connect-bank__button {
+  width: 100%;
+}
+
+.connect-bank__error,
+.connect-bank__notice {
+  margin: 0 0 1.5rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.connect-bank__error {
+  color: var(--color-error);
+}
+
+.connect-bank__notice {
+  color: var(--color-text-primary);
+  padding-block: 1rem;
+  border-block: 1px solid var(--color-border);
+}
+
+.connect-bank__selection {
+  width: 100%;
+  max-width: 35rem;
+  margin-inline: auto;
+  padding: 2rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+}
+
+.connect-bank__back {
+  min-height: 2.75rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.connect-bank__tabs {
+  display: flex;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.connect-bank__tab {
+  flex: 1;
+  min-height: 2.75rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.connect-bank__tab--active {
+  border-bottom-color: var(--color-accent);
   color: var(--color-text-primary);
 }
 
-.connect-bank__skip {
-  align-self: center;
-  font-size: 0.82rem;
+.connect-bank__search {
+  margin-bottom: 1.5rem;
+}
+
+.connect-bank__connector-list {
+  list-style: none;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 24rem;
+  overflow-y: auto;
+  padding: 0.25rem;
+}
+
+.connect-bank__connector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 4.5rem;
+  padding: 0.875rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 0.9375rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.connect-bank__connector:hover:not(:disabled),
+.connect-bank__tab:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.connect-bank__connector-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.connect-bank__connector-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.connect-bank__empty {
+  margin: 0;
+  padding-block: 1rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.connect-bank__spinner {
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 2px solid var(--color-border-strong);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: connect-bank-spin 0.8s linear infinite;
+}
+
+@keyframes connect-bank-spin {
+  to { transform: rotate(360deg); }
+}
+
+.connect-bank__button:disabled,
+.connect-bank__connector:disabled,
+.connect-bank__back:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.connect-bank a:focus-visible,
+.connect-bank button:focus-visible,
+.connect-bank input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.connect-bank__security {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  list-style: none;
+  margin-block: 3rem 0;
+  padding: 1.5rem 0 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.connect-bank__security li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  max-width: 80ch;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.connect-bank__security svg {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.125rem;
+  flex-shrink: 0;
+}
+
+.connect-bank__connector--selected {
+  border-color: var(--color-accent);
+  background-color: var(--color-surface-hover);
+}
+
+.connect-bank__connect-action {
+  margin-top: 1.25rem;
+}
+
+.connect-bank__selected {
+  margin: 0 0 0.75rem;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 800px) {
+  .connect-bank {
+    padding: 1.5rem;
+  }
+
+  .connect-bank__consent {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2rem;
+  }
+
+  .connect-bank__identification {
+    position: static;
+  }
+}
+
+@media (max-width: 480px) {
+  .connect-bank {
+    padding: 1.25rem;
+  }
+
+  .connect-bank__selection {
+    padding: 1.25rem;
+  }
+
+  .connect-bank__heading {
+    padding-block: 2rem;
+  }
+
+  .connect-bank__title {
+    font-size: 1.5rem;
+  }
+
+  .connect-bank__connector-status {
+    flex-basis: 100%;
+    padding-left: 3.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connect-bank__connector {
+    transition: none;
+  }
+
+  .connect-bank__spinner {
+    animation: none;
+  }
 }

@@ -1,27 +1,63 @@
+@import "./styles/dividers.css";
+
 :root {
   --color-bg: #0d0d0d;
   --color-bg-alt: #121212;
   --color-surface: #1a1a1a;
   --color-surface-alt: #1f1f1f;
   --color-surface-hover: #242424;
-  --color-border: #2a2a2a;
-  --color-border-strong: #3a3a3a;
+  --color-border: #303030;
+  --color-border-strong: #424242;
   --color-accent: #ed4a31;
   --color-accent-strong: #cf3d27;
   --color-text-primary: #ffffff;
-  --color-text-secondary: #b8b8b8;
-  --color-text-tertiary: #8b8b8b;
-  --color-income: #4ecdc4;
+  --color-text-secondary: #c6c6c6;
+  --color-text-tertiary: #9b9b9b;
+  /* Marca e interação: nunca usar estes tokens para representar uma perda. */
+  --color-accent-soft: #f4806e;
+
+  /* Semântica compartilhada por CPF, CNPJ, texto, indicadores e gráficos. */
+  --color-positive: #82c6a4;
+  --color-negative: #e58a8a;
+  --color-warning: #d6b16d;
+  --color-neutral: #a4a9b2;
+  --color-income: var(--color-positive);
+  --color-expense: var(--color-negative);
+  --color-success: var(--color-positive);
+  --color-error: var(--color-negative);
+  --color-positive-bg: color-mix(in srgb, var(--color-positive) 16%, transparent);
+  --color-negative-bg: color-mix(in srgb, var(--color-negative) 12%, transparent);
+  --color-warning-bg: color-mix(in srgb, var(--color-warning) 16%, transparent);
+  --color-neutral-bg: color-mix(in srgb, var(--color-neutral) 16%, transparent);
+  --color-danger-strong: #a83e49;
+
+  /* Distribuição de despesas: tons vermelhos alternados por luminosidade.
+     Etiquetas sem direção financeira usam cinzas; "Outros" permanece neutro. */
+  --color-chart-expense-1: var(--color-expense);
+  --color-chart-expense-2: #f0b9bf;
+  --color-chart-expense-3: #b95c68;
+  --color-chart-expense-4: #e59ba5;
+  --color-chart-expense-5: #d2a6b0;
+  --color-chart-expense-6: #a97482;
+  /* Branco conduz a distribuição de categorias; cinzas separam as demais fatias.
+     Esta escala identifica categorias, sem atribuir resultado financeiro. */
+  --color-chart-category-neutral-1: var(--color-text-primary);
+  --color-chart-category-neutral-2: #8a8a8a;
+  --color-chart-category-neutral-3: #d8d8d8;
+  --color-chart-category-neutral-4: #bdbdbd;
+  --color-category-1: var(--color-text-primary);
+  --color-category-2: #a2a2a2;
+  --color-category-3: #d5d5d5;
+  --color-category-4: #808080;
+  --color-category-5: #e6e6e6;
+  --color-category-6: #b3b3b3;
+  --color-category-7: #c4c4c4;
+  --color-category-8: #919191;
   --color-on-image: #ffffff;
   --color-on-image-muted: rgba(255, 255, 255, 0.82);
   --color-on-image-divider: rgba(255, 255, 255, 0.16);
-  /* Apoio ao laranja-avermelhado e ao verde-água da marca: o mesmo conjunto de matizes dos
-     gráficos (ver FALLBACK_COLORS em components/charts/chartTheme.js, que precisa de hex porque
-     o Recharts não resolve var() em fill). Cada "-soft" é a versão clara, para texto sobre o
-     fundo escuro. */
-  --color-accent-soft: #f4806e;
-  --color-amber: #C9923E;
-  --color-amber-soft: #e0b46f;
+  --color-amber: var(--color-warning);
+  --color-amber-soft: var(--color-warning);
   --color-blue: #5B86B5;
   --color-blue-soft: #93b0d3;
   --radius-pill: 999px;
@@ -104,6 +140,14 @@ main:focus {
 html, body {
   width: 100%;
   background-color: var(--color-bg-alt);
+  color: var(--color-text-primary);
+  color-scheme: dark;
+}
+
+/* Controles nativos não herdam a cor do texto por padrão. Os componentes
+   continuam podendo definir sua própria cor semântica. */
+button, input, select, textarea {
+  color: inherit;
 }
 
 @font-face {

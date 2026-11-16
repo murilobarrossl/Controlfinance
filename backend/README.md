@@ -12,15 +12,19 @@
 ## Pré-requisitos
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [PostgreSQL](https://www.postgresql.org/download/) rodando localmente (porta 5432)
+- [PostgreSQL](https://www.postgresql.org/download/) acessível localmente ou em um serviço como Supabase
 - [EF Core CLI](https://learn.microsoft.com/ef/core/cli/dotnet): `dotnet tool install --global dotnet-ef`
 
 ---
 
 ## Configuração
 
-1. **Banco:** crie um banco PostgreSQL vazio e informe a conexão em `appsettings.Local.json`
+1. **Banco:** informe a conexão PostgreSQL em `appsettings.Local.json`
    (gitignorado) ou na variável `ConnectionStrings__DefaultConnection`.
+   Se já usa um banco existente, mantenha esse banco e suas credenciais. A ordem de prioridade,
+   da menor para a maior, é `appsettings.json`, `appsettings.{Environment}.json`,
+   `appsettings.Local.json`, variáveis de ambiente e argumentos da linha de comando.
+   Arquivos `.env` não são carregados automaticamente pela API. O projeto não configura User Secrets.
 
 2. **Segredos:** defina `JwtSettings:SecretKey` (mínimo 32 caracteres) e `Encryption:Key` em
    `appsettings.Local.json` ou em variáveis de ambiente, nunca no `appsettings.json` versionado.
@@ -54,6 +58,29 @@
    ```bash
    dotnet ef migrations add NomeDaMigration
    ```
+
+## Verificar a conexão sem modificar o banco
+
+Na pasta `backend`, execute:
+
+```bash
+ASPNETCORE_ENVIRONMENT=Development dotnet run -- --check-database
+```
+
+Esse comando usa a mesma configuração e o mesmo EF Core/Npgsql da API, abre a conexão,
+executa `SELECT 1` e consulta o TLS da própria sessão em `pg_stat_ssl`. Encerra com código `0`
+no sucesso ou `1` na falha, sem iniciar servidor, jobs, migrations ou backfills.
+O teste não exige que o banco esteja com as migrations atualizadas e não consulta dados financeiros.
+
+Falhas de abertura de conexão durante o uso da API também produzem um diagnóstico com a cadeia
+de tipos das exceções, `SQLSTATE` do PostgreSQL, códigos de socket e indicação de cancelamento.
+Mensagens arbitrárias das exceções não são registradas por esse diagnóstico, pois podem conter
+segredos. O evento `Microsoft.EntityFrameworkCore.Database.Connection[20004]` sozinho não
+identifica a causa: correlacione-o com esse diagnóstico. Uma conexão bem-sucedida agora não
+determina a causa de uma falha anterior.
+
+O perfil local `http` escuta somente em `http://localhost:5080`; o redirecionamento HTTPS e o
+HSTS ficam habilitados fora de Development. O TLS da conexão PostgreSQL é independente do HTTP da API.
 
 ---
 

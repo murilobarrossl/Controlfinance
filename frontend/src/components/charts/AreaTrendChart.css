@@ -27,3 +27,11 @@
   color: var(--color-text-secondary);
   font-size: 0.72rem;
 }
+
+.area-trend-chart__badge-value--income {
+  color: var(--color-positive);
+}
+
+.area-trend-chart__badge-value--expense {
+  color: var(--color-negative);
+}

@@ -19,28 +19,28 @@ export function isCreditCardAccount(account) {
 // Modalidades de dinheiro guardado. A ordem importa: caixinha/porquinho/Tesouro Selic vêm pelo nome
 // (o banco costuma mandar o mesmo tipo genérico pra elas), poupança e investimento pelo tipo da Polp.
 export const INVESTMENT_MODALITIES = {
-  caixinha: { key: "caixinha", label: "Caixinha", groupLabel: "Caixinhas", color: "#4ECDC4" },
+  caixinha: { key: "caixinha", label: "Caixinha", groupLabel: "Caixinhas", color: "var(--color-neutral)" },
   porquinho: {
     key: "porquinho",
     label: "Porquinho / Cofrinho",
     groupLabel: "Porquinhos e cofrinhos",
-    color: "#B04A5E",
-    textColor: "#C57988",
+    color: "var(--color-neutral)",
+    textColor: "var(--color-neutral)",
   },
-  poupanca: { key: "poupanca", label: "Poupança", groupLabel: "Poupança", color: "#C9923E" },
+  poupanca: { key: "poupanca", label: "Poupança", groupLabel: "Poupança", color: "var(--color-neutral)" },
   tesouroSelic: {
     key: "tesouroSelic",
     label: "Tesouro Selic",
     groupLabel: "Tesouro Selic",
-    color: "#5B8DB8",
-    textColor: "#7FA6C9",
+    color: "var(--color-neutral)",
+    textColor: "var(--color-neutral)",
   },
   investimento: {
     key: "investimento",
     label: "Investimento",
     groupLabel: "Outros investimentos",
-    color: "#8573A8",
-    textColor: "#9A8BB7",
+    color: "var(--color-neutral)",
+    textColor: "var(--color-neutral)",
   },
 };
 

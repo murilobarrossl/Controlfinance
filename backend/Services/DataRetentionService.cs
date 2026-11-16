@@ -73,6 +73,7 @@ public class DataRetentionService(IServiceScopeFactory scopeFactory, IJobLock jo
                         // market date, and never delete the separate current position here.
                         await db.InvestmentPositionObservations.Where(x => x.ObservedAt < cutoff.Value).ExecuteDeleteAsync(stoppingToken);
                         await db.ReservedBalanceObservations.Where(x => x.ObservedAt < cutoff.Value).ExecuteDeleteAsync(stoppingToken);
+                        await db.BankBalanceObservations.Where(x => x.ObservedAt < cutoff.Value).ExecuteDeleteAsync(stoppingToken);
                     }
 
                     var accessCutoff = now.AddDays(-DataRetentionPolicy.AccessLogRetentionDays(config));

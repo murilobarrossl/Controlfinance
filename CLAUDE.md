@@ -96,7 +96,8 @@ Auth is **cookie-based**, not bearer-token-in-JS, despite still using JWTs inter
 - Because `Transaction.Name` is encrypted, report search and sort-by-name run in memory
   (`TransactionsController.GetReport`), capped like sort-by-amount.
 - Data minimization rules (see `RELATORIO_ADEQUACAO_PRIVACIDADE_CONTROL_FINANCE.md`): no Polp
-  response bodies in logs or exception messages, no names/amounts in e-mails (Resend is a US
+  response bodies in logs or exception messages (only exception: a 422 from Polp is logged as a
+  `PolpValidationSummary` with error code, field names and messages with every digit masked), no names/amounts in e-mails (Resend is a US
   provider), only last 4 digits of account numbers, no phone number, auth URL not persisted.
 - `PrivacyBackfill` runs on every startup (idempotent, batched) to convert pre-existing rows.
 - Key ring (`EncryptionService`): optional versioned data keys (`Encryption:Keys:{id}` +
@@ -119,6 +120,11 @@ Auth is **cookie-based**, not bearer-token-in-JS, despite still using JWTs inter
 ### Domain model (`backend/Models`, `backend/Data/AppDbContext.cs`)
 
 `User` → `BankAccount`, `Category`, `Transaction` (each cascade-deletes with the user). `Transaction` optionally links to a `BankAccount` and/or `Category` (`SetNull` on delete).
+One login = one holder: the CPF **or** CNPJ given at registration (`User.DocumentType`); there is no
+profile/sub-account dimension, so PF/PJ data isolation is plain `UserId` isolation. Bank connection only
+accepts that same document (hash check) and refuses an institution whose Polp `type` doesn't serve it
+(`DocumentTypes.InstitutionAccepts`). PF/PJ differences in the UI branch on `frontend/src/utils/holder.js`.
+`BankAccount.Ownership` (Personal/Business/Mixed) is only a user-editable tag, not an isolation boundary.
 `PolpIntegration` tracks an open-finance link
 per user/institution. `ConsentRecord` is the append-only log of accepted Terms/Privacy versions and
 bank-connection notices (versions in `LegalDocuments.cs` and `frontend/src/legal/versions.js`,
@@ -148,7 +154,10 @@ authenticated API. There is no "sync now"; the only on-demand call
 is `POST /api/polp/accounts/{id}/balance-sync`. Regulatory monthly limits per CPF/institution apply:
 reconnecting the same CPF burns them, hence `avoidDuplicates`.
 
-Upsert is by Polp transaction id (`Transaction.Description`, per `BankAccountId`); the id is stable
+Transactions are never created or freely edited by the user: `TransactionsController` has no POST and
+no `PUT {id}` (guarded by a test). Users only personalize `Name`/`CategoryId` (`PUT {id}/details`, which
+the sync respects) and `IsFixed`; `DELETE {id}` only removes legacy manual rows (no Polp id in
+`Description`). Upsert is by Polp transaction id (`Transaction.Description`, per `BankAccountId`); the id is stable
 when a card purchase moves from open to billed. `counterparty` and `category_ref` arrive later (a new
 webhook) and only fill name/category that were never edited. `category_ref` maps to app categories by
 top-level group (`PolpCategoryMap`). `execution_status` `PARTIAL_SUCCESS` never blocks the user. Card
@@ -161,9 +170,40 @@ Policy and the Privacidade e dados screen (bump `PRIVACY_VERSION` in both places
 Disconnecting (`DELETE /api/polp/integrations/{id}`, `PolpDisconnectService`) deletes local data
 of that connection immediately, marks it `DISCONNECT_PENDING` (ignored by every sync path) and revokes the
 consent (`DELETE /consents/{id}`); failures are retried hourly by `PendingDisconnectRetryService`.
-Account deletion (`POST /api/account/deletion`) queues failed provider deletions in
-`PendingProviderDeletion` (technical id only). The legacy v1 API is announced by Polp as discontinued on
+Account deletion (`POST /api/account/deletion`) asks Polp to revoke every consent of the user (any
+status); inside the deletion transaction it locks the user row and queues every consent Polp did not
+confirm in `PendingProviderDeletion` (technical id only, retried hourly, never dropped). A consent
+created by a `Connect` racing the deletion is queued too (`QueueOrphanConsentAsync`). The legacy v1 API is announced by Polp as discontinued on
 2026-11-28; migration `PolpV2Consents` deleted all v1 data (test connections only).
+
+### Employees (Folha de pagamento, CNPJ only)
+
+`EmployeesController` (`api/employees`) is guarded by `[BusinessHolderOnly]` (`Controllers/Filters`), which
+reads `User.DocumentType` from the DB on every request (403 for non-CNPJ); every query also filters by
+`UserId`. Employee data is administrative input typed by the company (allowed manual entry: it never
+creates transactions or payments). Name, CPF, gross salary, Pix key, branch and account are encrypted
+columns; uniqueness uses per-company HMACs (`EmployeeKeys.CpfLookupInput`/`PixLookupInput` include the
+company id, so the same CPF never correlates across companies or with a login's `DocumentHash`). The API
+only returns masks for CPF, Pix key and account. Quick registration (`POST`) and `PUT {id}` take only the five
+core fields (name, CPF, role, gross salary, admission; empty CPF on edit keeps it); department and employment
+type go through `PUT {id}/classification` (`EmploymentType` is nullable: never presumed CLT); payment data
+through `PUT`/`DELETE {id}/pix` and `{id}/bank-account`. Terminating keeps the record (`/termination`,
+`/reactivation`); `DELETE {id}` permanently removes an employee only when already terminated (409 otherwise). Name search/sort run in memory after the status/department filter
+(names are encrypted), capped at `MaxEmployeesPerCompany`. `GrossSalary` is the informed gross salary,
+never presented as total cost: INSS, FGTS, encargos, 13º, férias and payment matching are not built yet.
+
+### Suppliers (Fornecedores, CNPJ only)
+
+`SuppliersController` (`api/suppliers`) mirrors employees: `[BusinessHolderOnly]`, `UserId` isolation,
+encrypted legal/trade name, document and payment data, per-company HMAC (`SupplierKeys`) against duplicate
+CPF/CNPJ or Pix key, no active/inactive status (`DELETE {id}` removes permanently), 25 per page. Payment rules shared
+by both live in `PayeeKeys` (normalization, masks) and `PayeePayment` (Pix/bank parsing and masked views);
+the frontend shares `PaymentFields`, `PaymentDialogs`, `RecordDetailParts`, `useRegistryData` and the
+`registry-*`/`record-detail-*` styles. "Pagamentos reconhecidos" is a placeholder: payments are not matched
+to suppliers yet and must never be matched by name or amount alone.
+Form fields in business modals use `components/ui/FormDialog/FormField.jsx` (`TextField`, `MoneyField`,
+`DateField`): every text input gets a concrete example as placeholder from `utils/fieldExamples.js`
+(`example="role"` or a literal); labels always stay. Pix examples follow the selected key type.
 
 ### Other backend services
 
@@ -186,6 +226,17 @@ Account deletion (`POST /api/account/deletion`) queues failed provider deletions
 - `api/client.js`'s `apiFetch` is the single fetch wrapper: sends cookies (`credentials:
   "include"`), attaches the CSRF header on unsafe methods, and redirects to `/loginemail` on a 401
   from any non-auth endpoint (session expired/revoked). All `api/*.js` modules build on this.
+- CPF and CNPJ share one dashboard layout. `layouts/DashboardLayout/navigation.js` picks the tabs by
+  holder type (`utils/holder.js`, `documentType` from `/auth/me`; unknown type = CPF experience). CNPJ gets
+  the mobile drawer docked as a collapsible desktop sidebar (`.dashboard-layout--business`). Routes of
+  one environment are 404 for the other: `BusinessOnlyRoute` / `PersonalOnlyRoute` (`routes/HolderRoute.jsx`;
+  Categorias and Investimentos are CPF-only, so shared pages must not link there for CNPJ);
+  `pages/dashboard/empresa/*` holds the business pages (`BusinessModule` is the shared scaffold; until a
+  module is built it shows "Em preparação" and "Ainda não disponível.", never a fake "no records" state).
+  Shared pages branch on the holder internally (Receitas e despesas is one page for both: CPF always
+  sees the month; CNPJ picks Dia | Mês | Ano, defined in `utils/periods.js` as ranges for the same
+  aggregates endpoint; the current year is compared with the same span of the previous year). The
+  transaction list stays in Relatórios. `GET /transactions/report` still accepts `excludeTransfers`. Business endpoints added later must check `DocumentType` server-side too.
 - `pages/dashboard/*` are the authenticated app screens (income/expenses, reports, categories,
   investments, cards); `pages/home/sections/*` compose the public marketing landing page.
 - Savings goals and the emergency reserve live on the server (`PlanningController`,

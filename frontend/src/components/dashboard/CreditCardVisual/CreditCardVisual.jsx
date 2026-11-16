@@ -39,13 +39,13 @@ export default function CreditCardVisual({
         <div className="credit-card-visual__key">
           <div className="credit-card-visual__stat">
             <span className="credit-card-visual__stat-label">Fatura atual</span>
-            <span className="credit-card-visual__stat-value">
+            <span className={`credit-card-visual__stat-value${pastDue ? " credit-card-visual__stat-value--expense" : ""}`}>
               {card.currentInvoice != null ? formatCurrency(card.currentInvoice) : "—"}
             </span>
           </div>
           <div className="credit-card-visual__stat">
             <span className="credit-card-visual__stat-label">Próximo vencimento</span>
-            <span className="credit-card-visual__stat-value">
+            <span className={`credit-card-visual__stat-value${pastDue ? " credit-card-visual__stat-value--expense" : ""}`}>
               {!card.invoiceDueDate ? "—" : pastDue ? formatDueDay(card.invoiceDueDate) : formatDate(card.invoiceDueDate)}
             </span>
           </div>
@@ -63,7 +63,7 @@ export default function CreditCardVisual({
             </div>
             <div className="credit-card-visual__limit-labels">
               <span>
-                Limite usado: <strong>{formatCurrency(card.usedLimit)}</strong> de {formatCurrency(card.creditLimit)}
+                Limite usado: <strong className={overLimit ? "credit-card-visual__used--over" : undefined}>{formatCurrency(card.usedLimit)}</strong> de {formatCurrency(card.creditLimit)}
               </span>
               {usagePercent != null && <span>{formatPercentage(usagePercent)}</span>}
             </div>

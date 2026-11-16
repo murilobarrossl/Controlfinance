@@ -159,11 +159,12 @@ export default function AccountSwitcher({ groups, activeScope, onSelect, onDisco
       )}
 
       <ConfirmDialog
+        confirmVariant="danger"
         open={pendingRemoval !== null}
         title={pendingRemoval?.kind === "connection" ? `Desconectar ${pendingRemoval?.label}?` : `Remover ${pendingRemoval?.label}?`}
         message={
           pendingRemoval?.kind === "connection"
-            ? "Todas as contas e cartões desta conexão saem do Control Finance, e apagamos na hora o saldo, o extrato, os investimentos e as caixinhas que vieram desse banco. Também pedimos à Polp que exclua a conexão. Sua conta no Control Finance continua existindo. Para conectar de novo depois, é preciso autorizar outra vez no banco."
+            ? "Todas as contas e cartões desta conexão saem do Control Finance, e apagamos na hora o saldo, o extrato, os investimentos e as caixinhas que vieram desse banco. Também solicitamos ao serviço de integração bancária a exclusão da conexão. Sua conta no Control Finance continua existindo. Para conectar de novo depois, é preciso autorizar outra vez no banco."
             : "A conta e os lançamentos dela serão apagados de forma definitiva."
         }
         confirmLabel={pendingRemoval?.kind === "connection" ? "Desconectar e apagar dados" : "Remover"}
