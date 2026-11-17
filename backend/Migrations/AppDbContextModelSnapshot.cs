@@ -1086,6 +1086,8 @@ namespace ControlFinance.API.Migrations
                         .IsUnique()
                         .HasFilter("\"Status\" IN ('Pending', 'Processing')");
 
+                    b.HasIndex("Event", "ResourceId");
+
                     b.HasIndex("Status", "NextAttemptAt");
 
                     b.HasIndex("Status", "Priority", "NextAttemptAt");

@@ -42,7 +42,7 @@ public class PolpWebhookProcessor(
                 if (local is not null && consentMetadata is not null)
                     await inbox.EnqueueAsync(new(PolpInternalEvents.ConsentMetadata, "consents", local.PolpIntegrationId.ToString(), null), ct);
                 if (local is not null && investmentImports is not null)
-                    await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", local.Id.ToString(), null), ct);
+                    await EnqueueDiscoveryAsync(local, ct);
                 break;
             }
 
@@ -52,7 +52,7 @@ public class PolpWebhookProcessor(
                 var local = await IntegrationAsync(evt, ct);
                 if (local is not null) await sync.SyncAccountsAndCardsAsync(local, window, ct);
                 if (local is not null && investmentImports is not null)
-                    await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", local.Id.ToString(), null), ct);
+                    await EnqueueDiscoveryAsync(local, ct);
                 break;
             }
 
@@ -71,11 +71,11 @@ public class PolpWebhookProcessor(
                 if (local is not null && consentMetadata is not null)
                     await inbox.EnqueueAsync(new(PolpInternalEvents.ConsentMetadata, "consents", local.PolpIntegrationId.ToString(), null), ct);
                 if (local is not null && investmentImports is not null)
-                    await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", local.Id.ToString(), null), ct);
+                    await EnqueueDiscoveryAsync(local, ct);
                 if (local is not null) await sync.BackfillAsync(local, ct);
                 // Discover newly imported accounts even when an earlier catalog scan completed.
                 if (local is not null && investmentImports is not null)
-                    await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", local.Id.ToString(), null), ct);
+                    await EnqueueDiscoveryAsync(local, ct);
                 break;
             }
 
@@ -131,6 +131,12 @@ public class PolpWebhookProcessor(
 
             // Empréstimos, financiamentos e eventos desconhecidos: fora do escopo.
         }
+    }
+
+    private async Task EnqueueDiscoveryAsync(PolpIntegration local, CancellationToken ct)
+    {
+        if (await InvestmentHolder.AllowsAsync(db, local.UserId, ct))
+            await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", local.Id.ToString(), null), ct);
     }
 
     private static Guid ResourceId(PolpInboxEvent evt) =>

@@ -87,13 +87,15 @@ public class PolpReconciliationService(
                 {
                     p.Id, p.PolpIntegrationId, p.SyncedLocally,
                     NeedsTransactionDetails = p.SyncedLocally && p.TransactionDetailsVersion < PolpSyncService.TransactionDetailsVersion,
+                    AllowsInvestments = db.Users.Any(u => u.Id == p.UserId && u.DocumentType != DocumentTypes.Cnpj),
                     // Upgrade/startup recovery must not wait for this connection's daily bucket.
-                    NeedsInvestmentRecovery = !db.InvestmentSyncStates.Any(s => s.UserId == p.UserId
+                    NeedsInvestmentRecovery = db.Users.Any(u => u.Id == p.UserId && u.DocumentType != DocumentTypes.Cnpj)
+                        && (!db.InvestmentSyncStates.Any(s => s.UserId == p.UserId
                         && s.IntegrationId == p.Id && s.Kind == "discovery")
                         || db.InvestmentSyncStates.Any(s => s.UserId == p.UserId && s.IntegrationId == p.Id
                             && ((s.Kind == "discovery" && s.Status != "Complete" && s.StartedAt < recoveryBefore)
                                 || ((s.Status == "Error" || s.Status == "Pending" || s.Status == "Reading" || s.Status == "Running")
-                                    && s.Kind != "discovery" && (s.LastAttemptAt ?? s.StartedAt) < recoveryBefore)))
+                                    && s.Kind != "discovery" && (s.LastAttemptAt ?? s.StartedAt) < recoveryBefore))))
                 }).Take(200).ToListAsync(ct);
                 if (integrations.Count == 0) break;
                 foreach (var integration in integrations)
@@ -111,8 +113,9 @@ public class PolpReconciliationService(
                     }
                     await inbox.EnqueueAsync(new PolpInboxEvent(
                         PolpInternalEvents.ConsentMetadata, "consents", integration.PolpIntegrationId.ToString(), null, PolpInboxPriority.Low), ct);
-                    await inbox.EnqueueAsync(new PolpInboxEvent(
-                        PolpInternalEvents.InvestmentDiscovery, "integrations", integration.Id.ToString(), null, PolpInboxPriority.Low), ct);
+                    if (integration.AllowsInvestments)
+                        await inbox.EnqueueAsync(new PolpInboxEvent(
+                            PolpInternalEvents.InvestmentDiscovery, "integrations", integration.Id.ToString(), null, PolpInboxPriority.Low), ct);
                 }
                 after = integrations[^1].Id;
             }

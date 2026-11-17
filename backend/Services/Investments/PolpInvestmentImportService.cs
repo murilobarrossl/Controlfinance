@@ -31,6 +31,25 @@ public class PolpInvestmentImportService(AppDbContext db, IPolpService polp, IIn
         if (discoverySource is null) return;
         var discoveryRun = await ClaimDiscoveryAsync(discoverySource, ct);
         if (discoveryRun is null) return;
+        try
+        {
+            await RunDiscoveryAsync(parent, source, discoverySource, discoveryRun.Value, ct);
+        }
+        catch
+        {
+            // Sem isto o marcador ficava Running por 5 min e a nova tentativa (inclusive a que a
+            // inbox devolve logo no desligamento) caía em "Descoberta em processamento" sem motivo.
+            db.ChangeTracker.Clear();
+            await db.InvestmentSyncStates.Where(s => s.IntegrationId == discoverySource.IntegrationId && s.RunId == discoveryRun.Value
+                && s.Kind == "discovery" && s.Status == "Running").ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, "Error"), CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task RunDiscoveryAsync(PolpIntegration parent, InvestmentSource? source, InvestmentSource discoverySource,
+        Guid discoveryRun, CancellationToken ct)
+    {
+        var integrationId = parent.Id;
         if (source is not null)
         {
             await RequestAsync(source, "sync-schedules", "schedules", "", null, false, ct);
@@ -67,7 +86,7 @@ public class PolpInvestmentImportService(AppDbContext db, IPolpService polp, IIn
                 && x.IsActive && x.HasReservedBalance == true && x.PolpAccountId != null).Select(x => x.PolpAccountId!.Value).ToListAsync(ct);
             foreach (var id in accounts) await RequestAsync(accountSource, "reserved-balances", "reserved", id.ToString(), null, false, ct);
         }
-        await db.InvestmentSyncStates.Where(s => s.IntegrationId == discoverySource.IntegrationId && s.RunId == discoveryRun.Value
+        await db.InvestmentSyncStates.Where(s => s.IntegrationId == discoverySource.IntegrationId && s.RunId == discoveryRun
             && s.Kind == "discovery").ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, "Complete"), ct);
     }
 
@@ -132,6 +151,7 @@ public class PolpInvestmentImportService(AppDbContext db, IPolpService polp, IIn
                 !Guid.TryParse(PolpInvestmentContracts.Identifier(detail, "consent_id"), out var consentId))
                 throw new PolpPermanentException("Identidade de investimento divergente.");
             var source = await SourceForConsentAsync(consentId, ct);
+            if (source is null && await BelongsToNonInvestmentHolderAsync(consentId, ct)) return;
             if (source is not null) await RequestAsync(source, family, "list", "", null, true, ct);
             throw new PolpResourceNotReadyException("Aguardando importação da identidade do investimento.");
         }
@@ -159,9 +179,17 @@ public class PolpInvestmentImportService(AppDbContext db, IPolpService polp, IIn
         return resolved?.ConsentId == consentId ? resolved : null;
     }
 
+    private async Task<bool> BelongsToNonInvestmentHolderAsync(Guid consentId, CancellationToken ct)
+    {
+        var owner = await db.PolpIntegrations.AsNoTracking().Where(p => p.PolpIntegrationId == consentId
+                || db.PolpInvestmentAuthorizations.Any(a => a.PolpConsentId == consentId && a.IntegrationId == p.Id))
+            .Select(p => (Guid?)p.UserId).FirstOrDefaultAsync(ct);
+        return owner is { } userId && !await InvestmentHolder.AllowsAsync(db, userId, ct);
+    }
+
     private async Task<InvestmentSource?> SourceAsync(PolpIntegration parent, bool reserved, CancellationToken ct)
     {
-        if (parent.Status != "AUTHORISED") return null;
+        if (parent.Status != "AUTHORISED" || !await InvestmentHolder.AllowsAsync(db, parent.UserId, ct)) return null;
         if (reserved || PolpConsentMetadataService.HasInvestmentsJson(parent.ConsentProductsJson))
             return new(parent.UserId, parent.Id, parent.InstitutionId, parent.PolpIntegrationId, null, null, reserved);
         var auth = await db.PolpInvestmentAuthorizations.AsNoTracking().SingleOrDefaultAsync(a => a.IntegrationId == parent.Id && a.IsSupplemental, ct);
@@ -236,6 +264,7 @@ public class PolpInvestmentImportService(AppDbContext db, IPolpService polp, IIn
         var scope = await db.InvestmentSyncStates.AsNoTracking().SingleOrDefaultAsync(s => s.Id == scopeId, ct);
         if (scope is null || scope.Status is "Complete" or "Blocked") return;
         if ((expectedRun.HasValue && scope.RunId != expectedRun) || (expectedPage.HasValue && scope.PageNumber != expectedPage)) return;
+        if (!await InvestmentHolder.AllowsAsync(db, scope.UserId, ct)) { await BlockAsync(scope, "holder_not_supported", ct); return; }
         var source = await SourceFromScopeAsync(scope, ct);
         if (source is null) { await BlockAsync(scope, "authorization_changed", ct); return; }
         // Several notifications may address the same stream. Claim a short persistent read
@@ -311,9 +340,6 @@ public class PolpInvestmentImportService(AppDbContext db, IPolpService polp, IIn
                 {
                     current.LastSuccessAt = current.StartedAt;
                     if (current.WindowQuery is null && current.Availability != "partially_available") current.LastFullSuccessAt = current.StartedAt;
-                    if (scope.Kind == "schedules")
-                        await db.InvestmentSyncSchedules.Where(s => s.UserId == source.UserId && s.IntegrationId == source.IntegrationId
-                            && s.SourceConsentId == source.ConsentId && s.ObservedRunId != scope.RunId).ExecuteDeleteAsync(ct);
                     if (current.ReplayRequested)
                     {
                         current.RunId = Guid.NewGuid(); current.Cursor = null; current.WindowQuery = null;
@@ -323,6 +349,11 @@ public class PolpInvestmentImportService(AppDbContext db, IPolpService polp, IIn
                     }
                 }
                 await db.SaveChangesAsync(ct);
+                // Depois do SaveChanges: antes dele os cronogramas já existentes ainda têm o
+                // ObservedRunId antigo no banco, seriam apagados e o UPDATE daria concorrência.
+                if (scope.Kind == "schedules" && page.NextCursor is null)
+                    await db.InvestmentSyncSchedules.Where(s => s.UserId == source.UserId && s.IntegrationId == source.IntegrationId
+                        && s.SourceConsentId == source.ConsentId && s.ObservedRunId != scope.RunId).ExecuteDeleteAsync(ct);
                 // Disconnect marks the parent before acquiring this lock. A late marking rolls
                 // back the entire page, including snapshots and movement upserts.
                 var parentQuery = db.PolpIntegrations.Where(p => p.Id == source.IntegrationId && p.UserId == source.UserId && p.Status == "AUTHORISED");

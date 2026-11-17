@@ -377,6 +377,9 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasIndex(w => w.DedupKey).IsUnique().HasFilter("\"Status\" IN ('Pending', 'Processing')");
             e.HasIndex(w => new { w.Status, w.NextAttemptAt });
             e.HasIndex(w => new { w.Status, w.Priority, w.NextAttemptAt });
+            // InvestmentsController.Connections filtra por Event + ResourceId a cada carga da tela
+            // de bancos; sem este índice lia a inbox inteira (retenção de 30 dias).
+            e.HasIndex(w => new { w.Event, w.ResourceId });
         });
 
         modelBuilder.Entity<RemovedPolpResource>(e =>

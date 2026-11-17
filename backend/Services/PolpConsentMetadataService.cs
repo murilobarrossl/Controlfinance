@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using ControlFinance.API.Data;
 using ControlFinance.API.Models;
+using ControlFinance.API.Services.Investments;
 using Microsoft.EntityFrameworkCore;
 
 namespace ControlFinance.API.Services;
@@ -199,7 +200,8 @@ public class PolpConsentMetadataService(AppDbContext db, IPolpService polp,
             return true;
         }, ct);
         db.ChangeTracker.Clear();
-        if (applied && inbox is not null && remote.Status == "AUTHORISED" && HasInvestments(remote.Products))
+        if (applied && inbox is not null && remote.Status == "AUTHORISED" && HasInvestments(remote.Products)
+            && await InvestmentHolder.AllowsIntegrationAsync(db, command.ParentId, ct))
             await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", command.ParentId.ToString(), null, PolpInboxPriority.Low), ct);
     }
 

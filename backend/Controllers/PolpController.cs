@@ -2,6 +2,7 @@ using System.Net;
 using ControlFinance.API.Data;
 using ControlFinance.API.Models;
 using ControlFinance.API.Services;
+using ControlFinance.API.Services.Investments;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -408,7 +409,8 @@ public class PolpController(
             else if (local.Status == "AUTHORISED")
             {
                 await inbox.EnqueueAsync(new(PolpInternalEvents.ConsentMetadata, "consents", local.PolpIntegrationId.ToString("D"), null), ct);
-                await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", local.Id.ToString("D"), null), ct);
+                if (await InvestmentHolder.AllowsAsync(db, local.UserId, ct))
+                    await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", local.Id.ToString("D"), null), ct);
             }
         }
 
@@ -626,7 +628,8 @@ public class PolpController(
         await inbox.EnqueueAsync(new(PolpInternalEvents.Backfill, "consents", consentId.ToString("D"), null), ct);
         // Independent inbox items: an account/card failure must not prevent investment discovery.
         await inbox.EnqueueAsync(new(PolpInternalEvents.ConsentMetadata, "consents", consentId.ToString("D"), null), ct);
-        await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", integrationId.ToString("D"), null), ct);
+        if (await InvestmentHolder.AllowsIntegrationAsync(db, integrationId, ct))
+            await inbox.EnqueueAsync(new(PolpInternalEvents.InvestmentDiscovery, "integrations", integrationId.ToString("D"), null), ct);
     }
 
     private static string ResolveTextColor(string? hexColor)
