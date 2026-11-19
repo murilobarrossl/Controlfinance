@@ -52,6 +52,10 @@ There is no test runner configured (no Jest/Vitest).
   `Polp:WebhookToken`/`Polp:WebhookSigningSecret`. Outside Development, `ConfigSecrets.Validate`
   (`Program.cs`) refuses to start if any of these is missing, a placeholder, shorter than 32 chars
   or reused between keys. Polp counts as enabled only when ClientId/ClientSecret are not placeholders.
+- Outside Development: `Cors:AllowedOrigins` must list exact https origins (no localhost/wildcard; dev origins live in
+  `appsettings.Development.json`, arrays merge by index), `Polp:WebhookRequireSignature=false` is refused, and
+  `ForwardedHeaders:KnownProxies`/`KnownNetworks` (or the explicit `TrustAllProxies`) must name the real proxy;
+  `AllowedHosts: *` only logs a warning.
 - Frontend reads `VITE_API_URL` (see `frontend/.env.example`); defaults to
   `http://localhost:5080/api` if unset.
 - Requires a local PostgreSQL instance (port 5432 by default).
@@ -72,7 +76,8 @@ Auth is **cookie-based**, not bearer-token-in-JS, despite still using JWTs inter
 - `OnTokenValidated` checks, per request: JTI revocation (`ITokenRevocationService`, makes logout
   real) and `SessionValidator` (user exists, is active, and the token's `tv` claim equals
   `User.TokenVersion`, which is what makes "logout from all devices" and account deletion end
-  other sessions). Both use a 30s memory cache.
+  other sessions). Both use a 10s per-instance memory cache for reads (writes and export always query the DB),
+  so on other instances a logged-out session can still read for up to 10 s.
 - CSRF (`CsrfProtection`): every unsafe request authenticated by the cookie must send
   `X-CSRF-Token` equal to the `csrf` claim inside the JWT. The frontend gets that value from the
   body of `/auth/login`, `/auth/register` and `/auth/me` and keeps it in memory only
@@ -188,7 +193,10 @@ get it only by reconnecting (recreate). `PolpLoanImportService` mirrors `GET /co
 `LoanContracts` (minimized encrypted JSON) on backfill, reconcile and `loans` webhooks (a contract missing from the list
 is removed only after `GET /loans/{id}` answers 404; empty or partial lists never delete); `GET /api/loans` is
 read-only and contracts never enter totals. Loan proceeds in the statement (`LOAN_DISBURSEMENTS*`) are
-`PolpMovementKind.LoanDisbursement`, out of totals. Migration `LoanContracts` is schema-only (an earlier
+`PolpMovementKind.LoanDisbursement`: for CPF the credit ones count as income (`TransferDetection.CountedInTotals`,
+used by aggregates, details and the dashboard summary); for CNPJ they stay out of totals. Proceeds and loan payments
+(Polp `LOAN_*` except card bills, plus the legacy auto names "Empréstimos"/"Empréstimos recebidos") are reported in
+the category "Empréstimo" (`TransferDetection.CategoryBucket`); the Relatórios totals still leave proceeds out. Migration `LoanContracts` is schema-only (an earlier
 local version wiped every bank connection and was applied only to the dev database); migrations must never
 delete bank data or queue consent revocations.
 Financings are out of scope. Any new imported data must also be described in the Privacy
@@ -234,7 +242,7 @@ type go through `PUT {id}/classification` (`EmploymentType` is nullable: never p
 through `{id}/payment-methods`. Terminating keeps the record (`/termination`,
 `/reactivation`); `DELETE {id}` permanently removes an employee only when already terminated (409 otherwise). Name search/sort run in memory after the status/department filter
 (names are encrypted), capped at `MaxEmployeesPerCompany`. `GrossSalary` is the informed gross salary,
-never presented as total cost: INSS, FGTS, encargos, 13º, férias and payment matching are not built yet.
+never presented as total cost: INSS, FGTS and encargos are not calculated (13º/férias exist only as typed costs).
 
 ### Suppliers (Fornecedores, CNPJ only)
 
@@ -250,7 +258,7 @@ contacts and payment methods only. Employee payment status (list check, `payment
 transactions (`PolpMovementKind.None`). Polp v2 sends no Pix key or end-to-end id, only `partie_*` (recipient
 bank, branch, number, check digit, person type, CPF/CNPJ), so matching uses exact bank identifiers only, never names:
 `Transaction.CounterpartyCpfHash` (per-company HMAC = `EmployeeKeys.CpfLookupInput`, computed by the sync from
-`partie_cnpj_cpf` for CNPJ logins only; plain CPF never stored) equal to the employee's CPF or to one of their CPF-type
+`partie_cnpj_cpf` for CNPJ logins and debits only, cleared on incoming rows; plain CPF never stored) equal to the employee's CPF or to one of their CPF-type
 Pix keys (a CPF key is the holder's CPF); a present CPF decides alone. Without any document and not `PESSOA_JURIDICA`,
 `CounterpartyAccountHash` equal to a registered TED account. Each payment method also has the CPF/CNPJ of who
 receives (`HolderDocumentType`/`HolderDocument`, encrypted, required for TED and e-mail/phone/random Pix keys, taken
@@ -281,16 +289,12 @@ Custos adicionais e encargos (`PayrollController`, `api/payroll`, `[BusinessHold
 every amount is typed by the company. One table, `PayrollObligations`: `EmployeeCost` = free-named employee cost
 (`Description` encrypted, `Amount` nullable = not informed, `POST/PUT/DELETE employees/{id}/costs`, max 50 per
 employee); every employee gets "13º salário" and "Férias" once, without amount (`EmployeeCostDefaults.Seed`: on
-creation, or on the first `GET employees/{id}` under the user-row lock for older employees; `Employee.CostsSeeded`
+creation (`GET employees/{id}` is read-only and never seeds); `Employee.CostsSeeded`
 makes sure a deleted cost never comes back). Migration `EmployeeCosts` discarded the old 13º/férias rows (and their
 links and events) without conversion. Costs are only title + value (modal "Adicionar custo"/edit) and have no bank
-links (migration `RemoveEmployeeCostLinks`). "Total cadastrado" sums only informed amounts. Charges (Inss/Fgts/Irrf/OtherCharge, `EmployeeId` null, paid consolidated, one
-Inss/Fgts/Irrf per competence) keep the "Encargos da folha" page. Bank payments are never assigned automatically:
-only for charges, the user attributes part of a real outgoing (`PayrollObligationPayments.Amount`, sum per transaction
-never above its amount, user-row lock), candidates only from `IdentifiedTaxPayments` to a verified authority
-(INSS/Other: RFB or INSS; IRRF: RFB; FGTS: none). Status `Identified` only when the bank amount covers the typed
-amount. The employee's monthly "pago no mês" is not affected by any of this. Every change appends
-`PayrollObligationEvents` (no FK, name and amounts encrypted). All three tables are in the export.
+links (migration `RemoveEmployeeCostLinks`). "Total cadastrado" sums only informed amounts. Payroll charges (Inss/Fgts/Irrf/OtherCharge), the "Encargos da folha" page and `PayrollObligationPayments`
+were removed (migration `RemovePayrollCharges`); do not recreate them. Every cost change appends
+`PayrollObligationEvents` (no FK, name and amounts encrypted). Both tables are in the export.
 Form fields in business modals use `components/ui/FormDialog/FormField.jsx` (`TextField`, `MoneyField`,
 `DateField`): every text input gets a concrete example as placeholder from `utils/fieldExamples.js`
 (`example="role"` or a literal); labels always stay. Pix examples follow the selected key type.
@@ -326,6 +330,9 @@ no DARF/DAS/GPS revenue code, so the specific tax is never shown, only the autho
 
 ### Other backend services
 
+- `UserOperationRateLimit`: per-user ASP.NET rate limits on bank connect (10/h), data export (5/h) and full Pix key
+  reveal (60/10 min), with their own 429 response. Employee/supplier writes run under the user-row lock (`LockedAsync`),
+  so limits are atomic; only a real unique violation (`DatabaseFailure.IsUniqueViolation`) is a 409.
 - `RateLimitService`: singleton, in-memory sliding-window rate limiting on both identifier
   (email/CPF) and IP for auth endpoints, to stop both credential stuffing and distributed attempts
   against one account.
@@ -385,7 +392,9 @@ compare whole against whole). The
 - Investimentos: one block per product type, each item opens its own page (`InvestmentDetail.jsx`). The app is a
   mirror of the bank: it never calculates applied amount, yield, profitability, average price or appreciation (Polp v2
   sends none of them for any product), only shows bank fields (balances, quantity, unit prices, taxes, contract terms,
-  movements, position history). Any older text below about projections refers to the manual simulators. Polp sends no rate for investments, so projections only use a real rule: poupança's legal
+  movements, position history). The old projection code (`InvestmentProjection`, `InvestmentYieldChart`,
+  `investmentRates`, `useReferenceRates`) was removed; `GET /api/market/reference-rates` still exists in the backend
+  with no frontend consumer. The financing simulator has no prefilled rate. Older text below about projections is historical. Polp sends no rate for investments, so projections only use a real rule: poupança's legal
   rule (Selic meta), Tesouro Selic's indexer (Selic efetiva) or the rate the user typed
   (`InvestmentRateProfile`, per `BankAccount`). Official rates come from the Banco Central SGS
   (`ReferenceRatesService`, `GET /api/market/reference-rates`, series 432/1178/4389); if unavailable,
@@ -409,6 +418,12 @@ compare whole against whole). The
   and the decision is recorded here; the existing ones (`RemoveSupplierPaymentStatus`, `EmployeeCosts`,
   `RemoveEmployeeCostLinks`, `AutomaticEmergencyReserve`, `RemovePayrollCharges`) were such decisions, applied
   only to the dev database.
+- Migration IDs up to `20261120050000_InactivityDeletionClaim` include hand-written future dates and are all applied in
+  the dev database (two old IDs, `20261101022723_AddPerformanceIndexes` and `20261109190000_AddTransactionInstallmentInfo`,
+  remain only in its history after renames; EF ignores them). A new migration must sort after that ID: if `dotnet ef
+  migrations add` produces an earlier timestamp, rename the new, unapplied migration (`MigrationOrderTests` enforces it).
+  Only the last migration needs a `.Designer.cs` (for `migrations remove`); older ones without it are discovered by their
+  `[Migration]`/`[DbContext]` attributes.
 - When adding a new encrypted column, add it via a value converter in `AppDbContext.OnModelCreating`
   (column name suffixed `Encrypted`) and generate a migration; don't encrypt/decrypt manually in
   controllers/services.

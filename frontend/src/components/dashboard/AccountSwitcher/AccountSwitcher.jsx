@@ -53,10 +53,10 @@ function DefaultAccountDialog({ accounts, onChange, onClose }) {
     }
     setSaving(true);
     setError(null);
-    const saved = await onChange(selected);
+    const { saved, error: failure } = await onChange(selected);
     setSaving(false);
     if (saved) onClose();
-    else setError("Não foi possível alterar a conta padrão. Tente novamente.");
+    else setError(failure || "Não foi possível alterar a conta padrão. Tente novamente.");
   }
 
   return (

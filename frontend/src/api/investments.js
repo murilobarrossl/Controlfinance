@@ -18,3 +18,10 @@ export const investmentMovements = (id, cursor, signal) => page(`/investments/${
 export const isThrottled = (error) => error?.status === 429 || error?.status === 503;
 // O botão "Atualizar dados" pede licença ao servidor antes de reler (intervalo de 30s por usuário).
 export const requestInvestmentsRefresh = () => apiFetch("/investments/refresh-requests", { method: "POST" });
+
+export const getInvestmentDashboard = (integrationId, { signal }) =>
+  apiFetch(`/investments/dashboard${integrationId ? "?" + new URLSearchParams({ integrationId }) : ""}`, { signal });
+
+export const linkedResources = (investments, reserves, signal) => apiFetch("/investments/linked-resources", {
+  method: "POST", body: JSON.stringify({ investments, reserves }), signal,
+});

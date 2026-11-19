@@ -18,6 +18,11 @@ public class SessionValidator(AppDbContext db, IMemoryCache cache, IServiceScope
 
     private static readonly SharedDbLoad<Guid, SessionState?> Loads = new();
 
+    // Incrementada por Invalidate. Uma leitura direta (bypassCache) que começou antes de um "sair de todos os
+    // aparelhos" terminaria depois dele e gravaria no cache o estado antigo, aceito por leituras por até 10 s;
+    // com a geração ela só grava se nada foi invalidado no meio.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, long> Generations = new();
+
     private static string Key(Guid userId) => $"session-state:{userId}";
 
     public async Task<bool> IsValidAsync(Guid userId, int tokenVersion, bool bypassCache = false, CancellationToken ct = default)
@@ -25,8 +30,10 @@ public class SessionValidator(AppDbContext db, IMemoryCache cache, IServiceScope
         SessionState? state;
         if (bypassCache)
         {
+            var generation = Generations.GetValueOrDefault(userId);
             state = await LoadAsync(userId, ct);
-            cache.Set(Key(userId), state, CacheTtl);
+            if (Generations.GetValueOrDefault(userId) == generation)
+                cache.Set(Key(userId), state, CacheTtl);
         }
         else if (!cache.TryGetValue(Key(userId), out state))
         {
@@ -42,6 +49,7 @@ public class SessionValidator(AppDbContext db, IMemoryCache cache, IServiceScope
 
     public void Invalidate(Guid userId)
     {
+        Generations.AddOrUpdate(userId, 1, (_, current) => current + 1);
         Loads.Forget(userId);
         cache.Remove(Key(userId));
     }

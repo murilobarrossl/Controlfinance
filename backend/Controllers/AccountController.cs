@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using System.Text.Json;
 using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
@@ -38,6 +39,7 @@ public class AccountController(
     /// <summary>Cópia legível de todos os dados que o Control Finance guarda sobre o usuário.</summary>
     /// GET /api/account/export
     [HttpGet("export")]
+    [EnableRateLimiting(UserOperationRateLimit.Export)]
     public async Task<IActionResult> Export(CancellationToken ct)
     {
         var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == UserId, ct);
@@ -98,7 +100,18 @@ public class AccountController(
                 diaVencimento = a.DueDay,
                 faturaAtual = a.CurrentInvoiceAmount,
                 vencimentoFatura = a.InvoiceDueDate,
+                contaPadrao = a.IsDefault,
+                titularidade = a.Ownership.ToString(),
             }),
+            // Nome guardado só como HMAC (RecurrenceKey): código técnico sem sentido para o titular, fica de fora.
+            decisoesDeRecorrencia = await db.RecurrenceDecisions.AsNoTracking()
+                .Where(r => r.UserId == UserId).OrderBy(r => r.CreatedAt)
+                .Select(r => new
+                {
+                    contaId = r.BankAccountId, situacao = r.Status.ToString(), frequenciaAssumida = r.AssumedFrequency.ToString(),
+                    lembrete = r.ReminderRequested, criadoEm = r.CreatedAt, atualizadoEm = r.UpdatedAt,
+                })
+                .ToListAsync(ct),
             historicoSaldosDisponiveis = await db.BankBalanceObservations.AsNoTracking()
                 .Where(x => x.UserId == UserId).OrderBy(x => x.ObservedAt)
                 .Select(x => new { contaId = x.BankAccountId, dataInformadaPeloBanco = x.ObservedAt, saldoDisponivel = x.Balance })
@@ -232,6 +245,7 @@ public class AccountController(
                 }),
             fechamentosDeCaixa = (await db.CashClosings
                 .AsNoTracking()
+                .Include(c => c.Items)
                 .Where(c => c.UserId == UserId)
                 .OrderBy(c => c.Day).ThenBy(c => c.ClosedAt)
                 .ToListAsync(ct))
@@ -240,6 +254,10 @@ public class AccountController(
                     dia = c.Day, contaId = c.ScopeAccountId == Guid.Empty ? (Guid?)null : c.ScopeAccountId,
                     saldoInicial = c.OpeningBalance, entradas = c.Income, saidas = c.Expense, saldoFinal = c.ClosingBalance,
                     movimentacoes = c.TransactionCount, fechadoEm = c.ClosedAt, reabertoEm = c.ReopenedAt,
+                    itens = c.Items.OrderBy(i => i.TransactionId).Select(i => new
+                    {
+                        transacaoId = i.TransactionId, tipo = i.Type.ToString(), classificacao = i.MovementKind.ToString(), valor = i.Amount,
+                    }),
                 }),
             historicoDeMarcacoesDePagamento = (await db.PayeePaymentMarkEvents
                 .AsNoTracking()

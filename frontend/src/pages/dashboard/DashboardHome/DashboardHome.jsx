@@ -26,9 +26,10 @@ import {
   getMonthsWindow,
   buildMonthlyTrend,
   monthRange,
-  previousMonthSamePeriodRange,
 } from "../../../utils/monthlyTrend.js";
+import { compareMonth } from "../../../utils/periods.js";
 import { computeTrend } from "../../../utils/trend.js";
+import DashboardSummaries from "./DashboardSummaries.jsx";
 import CardOverview from "./CardOverview.jsx";
 import DashboardSection from "../../../components/dashboard/DashboardPanel/DashboardPanel.jsx";
 import DashboardMetric from "../../../components/dashboard/DashboardMetric/DashboardMetric.jsx";
@@ -119,16 +120,21 @@ export default function DashboardHome({ heading } = {}) {
   const navigate = useNavigate();
   const { connectors, accountsStatus, effectiveScope, scopeKey, scopeQuery, dataRefreshKey } = useAccount();
   const [categories, setCategories] = useState([]);
-  const [allCards, setAllCards] = useState([]);
+  const [cardResult, setCardResult] = useState(null);
+  const cardsKey = JSON.stringify([user?.id, dataRefreshKey]);
   const [shownCardId, setShownCardId] = useState(null);
 
   useEffect(() => {
     const controller = new AbortController();
     getCreditCardsSummary({ signal: controller.signal })
-      .then(setAllCards)
-      .catch(() => setAllCards([]));
+      .then((cards) => {
+        if (!controller.signal.aborted) setCardResult({ key: cardsKey, cards });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCardResult({ key: cardsKey, cards: null });
+      });
     return () => controller.abort();
-  }, [dataRefreshKey]);
+  }, [cardsKey]);
 
   const [result, setResult] = useState(null);
   const requestKey = `${scopeKey}|${dataRefreshKey}`;
@@ -152,10 +158,12 @@ export default function DashboardHome({ heading } = {}) {
 
     const months = getMonthsWindow(TREND_MONTHS);
     const trendRange = monthRange(months[0], months[months.length - 1]);
-    const previousRange = previousMonthSamePeriodRange();
+    // Mesma regra de Receitas e despesas: mês atual até hoje × mesmo período do mês anterior.
+    const comparison = compareMonth(months[months.length - 1]);
     const aggregates = Promise.all([
       getTransactionAggregates({ ...scopeQuery, ...trendRange }, { signal }),
-      getTransactionAggregates({ ...scopeQuery, ...previousRange }, { signal }),
+      getTransactionAggregates({ ...scopeQuery, ...comparison.range }, { signal }),
+      getTransactionAggregates({ ...scopeQuery, ...comparison.currentRange }, { signal }),
     ]);
     aggregates.catch(() => {});
 
@@ -168,12 +176,13 @@ export default function DashboardHome({ heading } = {}) {
           summary: summaryData,
           trend: aggregatesData?.[0] ?? null,
           previous: aggregatesData?.[1] ?? null,
+          currentToDate: aggregatesData?.[2] ?? null,
           error: "",
         });
       })
       .catch((err) => {
         if (signal.aborted || isAbortError(err)) return;
-        setResult({ key, summary: null, trend: null, previous: null, error: err.message || "Não foi possível carregar o dashboard." });
+        setResult({ key, summary: null, trend: null, previous: null, currentToDate: null, error: err.message || "Não foi possível carregar o dashboard." });
       });
 
     return () => controller.abort();
@@ -182,6 +191,7 @@ export default function DashboardHome({ heading } = {}) {
   const summary = result?.summary ?? null;
   const trend = result?.trend ?? null;
   const previous = result?.previous ?? null;
+  const currentToDate = result?.currentToDate ?? null;
   const error =
     accountsStatus === "error"
       ? "Não foi possível carregar as contas."
@@ -219,7 +229,17 @@ export default function DashboardHome({ heading } = {}) {
   }
 
   const { account, totalIncome, totalExpense, categoryExpenses } = summary;
-  const activeCard = allCards.find((c) => c.id === shownCardId) ?? summary.activeCard;
+  // O Dashboard usa o escopo da conta do cabeçalho. Conta sem conexão
+  // (por exemplo, manual) não representa a opção de todos os bancos.
+  const allCards = cardResult?.key === cardsKey
+    ? cardResult.cards ?? (summary.activeCard ? [summary.activeCard] : [])
+    : [];
+  const availableCards = scopeQuery.bankAccountId
+    ? allCards.filter((card) => effectiveScope?.connectionId && card.connectionId === effectiveScope.connectionId)
+    : allCards;
+  const activeCard = availableCards.find((card) => card.id === shownCardId)
+    ?? availableCards.find((card) => card.id === summary.activeCard?.id)
+    ?? availableCards[0];
   const monthlyBalance = roundMoney(totalIncome - totalExpense);
   const percentageSpent = totalIncome > 0 ? (totalExpense / totalIncome) * 100 : null;
   const savingsRate =
@@ -234,10 +254,10 @@ export default function DashboardHome({ heading } = {}) {
     navigate(`/dashboard/categorias?${params}`);
   };
 
-  const incomeTrend = computeTrend(currentMonthTrend?.Receitas, previousMonthSamePeriod?.Receitas, {
+  const incomeTrend = computeTrend(currentToDate?.totalIncome, previousMonthSamePeriod?.Receitas, {
     label: "vs mesmo período",
   });
-  const expenseTrend = computeTrend(currentMonthTrend?.Despesas, previousMonthSamePeriod?.Despesas, {
+  const expenseTrend = computeTrend(currentToDate?.totalExpense, previousMonthSamePeriod?.Despesas, {
     invertTone: true,
     label: "vs mesmo período",
   });
@@ -252,7 +272,7 @@ export default function DashboardHome({ heading } = {}) {
       : null;
 
   const connectorsMap = connectorsByName(connectors);
-  const cardOptions = groupCards(allCards)
+  const cardOptions = groupCards(availableCards)
     .groups.flatMap((group) => group.cards)
     .map((card) => cardPickerOption(card, cardBrand(card, connectorsMap)));
 
@@ -358,7 +378,7 @@ export default function DashboardHome({ heading } = {}) {
           className="dashboard-home__card-block"
           title="Seu cartão"
           action={
-            allCards.length > 1 ? (
+            availableCards.length > 1 ? (
               <CardPicker
                 id="dashboard-trocar-cartao"
                 options={cardOptions}
@@ -367,11 +387,7 @@ export default function DashboardHome({ heading } = {}) {
                 triggerLabel="Trocar"
                 ariaLabel="Trocar o cartão mostrado aqui"
               />
-            ) : (
-              <Link to="/dashboard/cartoes" className="dashboard-home__card-switch">
-                Trocar
-              </Link>
-            )
+            ) : null
           }
         >
           <CardOverview
@@ -382,6 +398,8 @@ export default function DashboardHome({ heading } = {}) {
           />
         </DashboardSection>
       )}
+
+      <DashboardSummaries key={user?.id} personal={!isBusinessHolder(user)} />
 
       <ConfirmDialog
         open={cardConfirmOpen}

@@ -4,13 +4,6 @@
   gap: 1.5rem;
 }
 
-.relatorios__period-filter {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem;
-}
-
 .relatorios__scope {
   display: flex;
   flex-direction: column;
@@ -24,9 +17,6 @@
   max-width: 52rem;
 }
 
-/* Pílula única reaproveitada pelos três filtros da página (período, tipo, status): dá pra tela
-   uma identidade própria de "chips clicáveis", em vez dos <select> que a aba Categorias também
-   usa pro seletor de ordenação. */
 .relatorios__chip {
   border: 1px solid var(--color-border-strong);
   background-color: transparent;
@@ -40,39 +30,6 @@
   transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.relatorios__segmented {
-  display: inline-flex;
-  padding: 0.2rem;
-  gap: 0.2rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-pill);
-}
-
-.relatorios__segment {
-  border: none;
-  background-color: transparent;
-  color: var(--color-text-secondary);
-  border-radius: var(--radius-pill);
-  padding: 0.45rem 1rem;
-  font-family: inherit;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.relatorios__segment:hover {
-  color: var(--color-text-primary);
-}
-
-.relatorios__segment--active,
-.relatorios__segment--active:hover {
-  background-color: var(--color-surface-hover);
-  color: var(--color-text-primary);
-}
-
-.relatorios__segment:focus-visible,
 .relatorios__chip:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
@@ -787,7 +744,6 @@
 }
 
 @media (pointer: coarse) {
-  .relatorios__segment,
   .relatorios__chip,
   .relatorios__search,
   .relatorios__sort select {

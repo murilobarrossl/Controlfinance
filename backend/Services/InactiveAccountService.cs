@@ -64,12 +64,14 @@ public class InactiveAccountService(IServiceScopeFactory scopeFactory, IJobLock 
         int sent = 0, failed = 0;
         var due = new List<Guid>();
 
-        // Avisos não mudam quem entra no filtro, então a paginação por posição é estável durante a rodada.
-        for (var skip = 0; ; skip += BatchSize)
+        Candidate? after = null;
+        while (true)
         {
-            var batch = await db.Users.AsNoTracking()
-                .Where(u => u.IsActive && u.LastActivityAt <= threshold)
-                .OrderBy(u => u.LastActivityAt).ThenBy(u => u.Id).Skip(skip).Take(BatchSize)
+            var query = db.Users.AsNoTracking().Where(u => u.IsActive && u.LastActivityAt <= threshold);
+            if (after != null)
+                query = query.Where(u => u.LastActivityAt > after.LastActivityAt
+                    || (u.LastActivityAt == after.LastActivityAt && u.Id.CompareTo(after.Id) > 0));
+            var batch = await query.OrderBy(u => u.LastActivityAt).ThenBy(u => u.Id).Take(BatchSize)
                 .Select(u => new Candidate(u.Id, u.Email, u.TimeZone, u.LastActivityAt, u.InactivityNoticeStage, u.InactivityNoticeEpoch, u.InactivityDeletionAt))
                 .ToListAsync(ct);
             if (batch.Count == 0) break;
@@ -106,6 +108,7 @@ public class InactiveAccountService(IServiceScopeFactory scopeFactory, IJobLock 
                         .SetProperty(x => x.InactivityDeletionAt, announced), ct);
             }
             if (batch.Count < BatchSize) break;
+            after = batch[^1];
         }
         return (sent, failed, due);
     }

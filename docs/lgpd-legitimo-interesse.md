@@ -90,7 +90,8 @@ nome, descrição e classificação da Polp nunca entram na comparação.
 
 **Fase 3, balanceamento e salvaguardas.**
 - **Pontos de atenção:**
-  - o código é calculado para todo destinatário pessoa física, não só para funcionários;
+  - o código é calculado para todo destinatário pessoa física de uma saída, não só para funcionários (desde
+    19/11/2026 nunca para entradas, isto é, para quem paga a empresa);
   - o CPF tem poucas combinações possíveis: com a chave, é possível testar CPFs, então isto é pseudonimização, não
     anonimização;
   - o tratamento pode ser em grande escala (milhares de empresas).

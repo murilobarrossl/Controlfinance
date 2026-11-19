@@ -10,10 +10,18 @@ let csrfToken = null;
 // abort outstanding reads so a request cannot be reused by the next signed-in user.
 const pendingReads = new Map();
 
+// Mesmo token = mesma sessão (ex.: /auth/me relido): nada é cancelado. Sessão diferente cancela as leituras
+// em voo com um erro de sessão, não um AbortError: as páginas ignoram AbortError (é o cancelamento delas
+// próprias) e ficariam presas no carregamento.
 export function setCsrfToken(token) {
-  for (const entry of pendingReads.values()) entry.controller.abort();
-  pendingReads.clear();
-  csrfToken = token || null;
+  const next = token || null;
+  if (next !== csrfToken) {
+    const reason = new Error("A sessão mudou. Atualize a página.");
+    reason.kind = "session";
+    for (const entry of pendingReads.values()) entry.controller.abort(reason);
+    pendingReads.clear();
+  }
+  csrfToken = next;
 }
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -46,7 +54,7 @@ async function performRequest(endpoint, options = {}) {
       },
     });
   } catch (err) {
-    if (isAbortError(err)) throw err;
+    if (isAbortError(err) || err?.kind === "session") throw err;
     const error = new Error(ERROR_MESSAGES.network);
     error.status = 0;
     error.kind = "network";

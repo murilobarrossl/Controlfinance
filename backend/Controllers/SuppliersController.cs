@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Globalization;
 using ControlFinance.API.Controllers.Filters;
 using ControlFinance.API.Data;
@@ -47,7 +49,7 @@ public class SuppliersController(AppDbContext db, IEncryptionService encryption)
             .ThenBy(s => s.Id)
             .ToList();
 
-        return Ok(new SupplierListDto(ordered.Skip((page - 1) * pageSize).Take(pageSize).ToList(), ordered.Count, page, pageSize));
+        return Ok(new SupplierListDto(ordered.Skip(PageOffset(page, pageSize)).Take(pageSize).ToList(), ordered.Count, page, pageSize));
     }
 
     [HttpGet("summary")]
@@ -69,7 +71,10 @@ public class SuppliersController(AppDbContext db, IEncryptionService encryption)
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] SupplierUpsertDto dto, CancellationToken ct)
+    public Task<IActionResult> Create([FromBody] SupplierUpsertDto dto, CancellationToken ct) =>
+        LockedAsync(() => CreateLockedAsync(dto, ct), ct);
+
+    private async Task<IActionResult> CreateLockedAsync(SupplierUpsertDto dto, CancellationToken ct)
     {
         if (await db.Suppliers.CountAsync(s => s.UserId == UserId, ct) >= MaxSuppliersPerCompany)
             return BadRequest(new { message = $"Limite de {MaxSuppliersPerCompany} fornecedores por empresa atingido." });
@@ -124,7 +129,9 @@ public class SuppliersController(AppDbContext db, IEncryptionService encryption)
     {
         if (!await PaymentMethodExistsAsync(id, methodId, ct)) return NotFound();
         return await ChangeAsync(id, supplier =>
-            ApplyPaymentMethodAsync(supplier, supplier.PaymentMethods.Single(m => m.Id == methodId), dto, ct), ct);
+            supplier.PaymentMethods.FirstOrDefault(m => m.Id == methodId) is { } method
+                ? ApplyPaymentMethodAsync(supplier, method, dto, ct)
+                : Task.FromResult<string?>(MethodGone), ct);
     }
 
     [HttpDelete("{id:guid}/payment-methods/{methodId:guid}")]
@@ -133,7 +140,8 @@ public class SuppliersController(AppDbContext db, IEncryptionService encryption)
         if (!await PaymentMethodExistsAsync(id, methodId, ct)) return NotFound();
         return await ChangeAsync(id, supplier =>
         {
-            var method = supplier.PaymentMethods.Single(m => m.Id == methodId);
+            if (supplier.PaymentMethods.FirstOrDefault(m => m.Id == methodId) is not { } method)
+                return Task.FromResult<string?>(MethodGone);
             supplier.PaymentMethods.Remove(method);
             db.SupplierPaymentMethods.Remove(method);
             return Task.FromResult<string?>(null);
@@ -142,6 +150,7 @@ public class SuppliersController(AppDbContext db, IEncryptionService encryption)
 
     // A chave completa sai só por esta rota, usada pelo detalhe do fornecedor.
     [HttpGet("{id:guid}/payment-methods/{methodId:guid}/pix-key")]
+    [EnableRateLimiting(UserOperationRateLimit.PixKey)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> RevealPixKey(Guid id, Guid methodId, CancellationToken ct)
     {
@@ -182,7 +191,25 @@ public class SuppliersController(AppDbContext db, IEncryptionService encryption)
         return null;
     }
 
-    private async Task<IActionResult> ChangeAsync(Guid id, Func<Supplier, Task<string?>> change, CancellationToken ct)
+
+    // Escritas da empresa sob a trava da linha do usuário (mesma de PayrollController): contagem de limite e
+    // inserção ficam atômicas, e duas abas não passam juntas pelo teto nem leem um método já removido.
+    private async Task<IActionResult> LockedAsync(Func<Task<IActionResult>> work, CancellationToken ct)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await DefaultBankAccounts.LockUserAsync(db, UserId, ct);
+        var result = await work();
+        if (result is IStatusCodeActionResult { StatusCode: >= 200 and < 300 }) await tx.CommitAsync(ct);
+        return result;
+    }
+
+    // Removido por outra requisição entre a checagem e a trava.
+    private const string MethodGone = "Este método de pagamento não existe mais. Atualize a página.";
+
+    private Task<IActionResult> ChangeAsync(Guid id, Func<Supplier, Task<string?>> change, CancellationToken ct) =>
+        LockedAsync(() => ChangeLockedAsync(id, change, ct), ct);
+
+    private async Task<IActionResult> ChangeLockedAsync(Guid id, Func<Supplier, Task<string?>> change, CancellationToken ct)
     {
         var supplier = await db.Suppliers.Include(s => s.PaymentMethods)
             .FirstOrDefaultAsync(s => s.Id == id && s.UserId == UserId, ct);
@@ -238,7 +265,7 @@ public class SuppliersController(AppDbContext db, IEncryptionService encryption)
             await db.SaveChangesAsync(ct);
             return null;
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (DatabaseFailure.IsUniqueViolation(ex))
         {
             db.ChangeTracker.Clear();
             return "Já existe um fornecedor com este CPF/CNPJ ou com esta chave Pix.";

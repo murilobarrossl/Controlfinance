@@ -42,6 +42,10 @@ public static class ConfigSecrets
             RequireStrong(config, "Polp:WebhookToken", errors);
             if (IsWebhookSignatureRequired(config))
                 RequireStrong(config, "Polp:WebhookSigningSecret", errors);
+            // Desligar a assinatura só serve para testar localmente: fora de Development o token da URL
+            // sozinho deixaria qualquer um que o conheça enfileirar avisos.
+            else if (!isDevelopment)
+                errors.Add("Polp:WebhookRequireSignature=false só é aceito em Development");
 
             var previous = config["Polp:WebhookTokenPrevious"];
             if (!string.IsNullOrWhiteSpace(previous) && !IsStrongSecret(previous))
@@ -57,6 +61,21 @@ public static class ConfigSecrets
         }
 
         return errors;
+    }
+
+    // Origens com credenciais liberadas (cookie de sessão): só https, origem exata, sem curinga nem localhost.
+    public static List<string> ValidateCorsOrigins(IReadOnlyCollection<string> origins)
+    {
+        var errors = new List<string>();
+        if (origins.Count == 0) errors.Add("Cors:AllowedOrigins vazio: informe a origem do frontend");
+        foreach (var origin in origins)
+        {
+            var valid = Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+                && uri.Scheme == Uri.UriSchemeHttps && !uri.IsLoopback && !origin.Contains('*')
+                && uri.AbsolutePath == "/" && origin.TrimEnd('/') == uri.GetLeftPart(UriPartial.Authority);
+            if (!valid) errors.Add("Cors:AllowedOrigins aceita só origens https exatas, sem curinga nem localhost");
+        }
+        return errors.Distinct().ToList();
     }
 
     private static void RequireStrong(IConfiguration config, string key, List<string> errors)

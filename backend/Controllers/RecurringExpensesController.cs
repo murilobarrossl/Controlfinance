@@ -28,15 +28,7 @@ public class RecurringExpensesController(AppDbContext db, IEncryptionService enc
         var today = DateOnly.FromDateTime(await UserTodayAsync(db, ct));
         if (year is < 2000 or > 2100 || month is < 1 or > 12 || new DateOnly(year, month, 1) > today)
             return BadRequest(new { message = "Selecione um mês válido, até o mês atual." });
-        var (groups, accounts) = await LoadAsync(today, ct);
-        if (bankAccountId is { } scoped)
-        {
-            // O seletor só oferece contas; os cartões daquela conexão entram junto, senão nunca apareceriam.
-            var consent = accounts.FirstOrDefault(a => a.Id == scoped)?.ConsentId;
-            accounts = accounts.Where(a => a.Id == scoped || consent != null && a.ConsentId == consent && a.IsCard).ToList();
-        }
-        var scope = accounts.Select(a => a.Id).ToHashSet();
-        var scopedGroups = groups.Where(g => scope.Contains(g.Expense.BankAccountId)).ToList();
+        var (scopedGroups, accounts) = await LoadScopeAsync(today, bankAccountId, ct);
         var charged = scopedGroups.SelectMany(g => g.Charges).DistinctBy(t => t.Id)
             .Where(t => t.Date.Year == year && t.Date.Month == month).ToList();
         var counted = new HashSet<Guid>();
@@ -60,6 +52,31 @@ public class RecurringExpensesController(AppDbContext db, IEncryptionService enc
 
         return Ok(new RecurringExpenseOverviewDto(year, month, charged.Sum(t => t.Amount), serviceCount,
             withoutDetection, items, filtered.Count, current, PageSize));
+    }
+
+    [HttpGet("upcoming")]
+    public async Task<IActionResult> Upcoming([FromQuery] Guid? bankAccountId, CancellationToken ct)
+    {
+        var today = DateOnly.FromDateTime(await UserTodayAsync(db, ct));
+        var (groups, _) = await LoadScopeAsync(today, bankAccountId, ct);
+        return Ok(groups.Select(g => g.Expense).Where(e => e.NextEstimatedDate >= today)
+            .OrderBy(e => e.NextEstimatedDate).ThenBy(e => e.Id).Take(5)
+            .Select(e => new { e.Id, e.Name, e.NextEstimatedDate, e.LastAmount, e.Activity }));
+    }
+
+    private async Task<(List<RecurringExpenseGroup>, List<RecurringAccount>)> LoadScopeAsync(
+        DateOnly today, Guid? bankAccountId, CancellationToken ct)
+    {
+        var (groups, accounts) = await LoadAsync(today, ct);
+        if (bankAccountId is { } scoped)
+        {
+            // O seletor só oferece contas; os cartões daquela conexão entram junto, senão nunca apareceriam.
+            var consent = accounts.FirstOrDefault(a => a.Id == scoped)?.ConsentId;
+            accounts = accounts.Where(a => a.Id == scoped || consent != null && a.ConsentId == consent && a.IsCard).ToList();
+        }
+        var scope = accounts.Select(a => a.Id).ToHashSet();
+        var scopedGroups = groups.Where(g => scope.Contains(g.Expense.BankAccountId)).ToList();
+        return (scopedGroups, accounts);
     }
 
     [HttpGet("{id}")]

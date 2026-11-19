@@ -611,9 +611,22 @@ public class PolpSyncService(
             t.CounterpartyCnpjFromBank = true;
             t.CounterpartyCpfHash = null;
         }
+        // Os códigos de CPF e conta só servem para identificar pagamentos a funcionários, que são saídas: em
+        // entradas eles seriam dado de quem pagou a empresa sem finalidade nenhuma (e uma releitura limpa os antigos).
+        else if (t.Type != TransactionType.Expense)
+        {
+            t.CounterpartyCpfHash = null;
+            t.CounterpartyAccountHash = null;
+            return;
+        }
         else if (digits.Length == 11 && hashCpf && DocumentValidator.IsValidCpf(digits))
             t.CounterpartyCpfHash = encryption!.ComputeLookupHash(EmployeeKeys.CpfLookupInput(userId, digits));
 
+        if (t.Type != TransactionType.Expense)
+        {
+            t.CounterpartyAccountHash = null;
+            return;
+        }
         // Conta completa só como hash: identifica pagamento a funcionário sem documento na linha (ver SupplierPaymentMatcher).
         if (hashCpf && PayeeKeys.AccountLookupInput(userId, rt.CounterpartyBankCode, rt.CounterpartyBranch,
                 rt.CounterpartyNumber is null || rt.CounterpartyCheckDigit is null ? null : rt.CounterpartyNumber + rt.CounterpartyCheckDigit) is { } account)

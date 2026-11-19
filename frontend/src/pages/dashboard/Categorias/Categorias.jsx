@@ -6,7 +6,8 @@ import { isAbortError } from "../../../api/client.js";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import NoBankAccount from "../../../components/dashboard/NoBankAccount/NoBankAccount.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
-import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
+import MonthNavigator from "../../../components/ui/MonthNavigator/MonthNavigator.jsx";
+import useMonthPeriod, { periodParams } from "../../../hooks/useMonthPeriod.js";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import CategoryDonutChart from "../../../components/charts/CategoryDonutChart.jsx";
 import { CategoryList, EstablishmentList } from "./CategoryRows.jsx";
@@ -14,7 +15,6 @@ import { loadPlanning } from "../../../api/planning.js";
 import { calculateCutImpact } from "../../../utils/cutImpact.js";
 import { formatCurrency, formatPercentage } from "../../../utils/financeMath.js";
 import { donutSliceColors, resolveCategoryColor } from "../../../utils/categoryColors.js";
-import { formatMonthLong, toIsoDate } from "../../../utils/monthLabel.js";
 import "./Categorias.css";
 import usePageTitle from "../../../hooks/usePageTitle.js";
 
@@ -43,29 +43,6 @@ const CATEGORY_SORT_OPTIONS = [
   { value: "count-desc", label: "Mais ativas" },
 ];
 
-const PERIOD_MODES = [
-  { value: "month", label: "Por mês" },
-  { value: "year", label: "Por ano" },
-  { value: "all", label: "Todo o período" },
-];
-
-// Intervalo [from, to) e rótulo do período escolhido. offset = quantos meses/anos pra trás a partir
-// do atual (0 = o atual). "Todo o período" não tem navegação: pega do começo de 2000 até o fim do
-// ano atual, o que cobre qualquer histórico real (o backend aceita intervalos de até 50 anos).
-function resolvePeriod({ mode, offset }) {
-  const now = new Date();
-  if (mode === "month") {
-    const start = new Date(Date.UTC(now.getFullYear(), now.getMonth() - offset, 1));
-    const end = new Date(Date.UTC(now.getFullYear(), now.getMonth() - offset + 1, 1));
-    return { key: `month:${offset}`, from: toIsoDate(start), to: toIsoDate(end), label: formatMonthLong(start) };
-  }
-  if (mode === "year") {
-    const year = now.getFullYear() - offset;
-    return { key: `year:${offset}`, from: `${year}-01-01`, to: `${year + 1}-01-01`, label: String(year) };
-  }
-  return { key: "all", from: "2000-01-01", to: `${now.getFullYear() + 1}-01-01`, label: "Todo o período" };
-}
-
 function cutImpactSentence(categoryName, categoryAmount, cutRate, impact) {
   return `Você gastou ${formatCurrency(categoryAmount)} em ${categoryName} neste período. Cortar ${formatPercentage(
     cutRate * 100
@@ -91,19 +68,18 @@ function topExpenseCategoryName(categories) {
 
 export default function Categorias() {
   usePageTitle("Categorias");
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [categoryFromLink] = useState(() => searchParams.get("categoria"));
   const { scopeKey, scopeQuery, dataRefreshKey, accountsStatus } = useAccount();
   const [result, setResult] = useState(null);
   const [aggregateResult, setAggregateResult] = useState(null);
-  // Período mostrado: um mês, um ano ou tudo. offset 0 = o atual, 1 = o anterior, e assim por diante.
-  const [period, setPeriod] = useState(() => ({ mode: searchParams.get("periodo") === "mes" ? "month" : "year", offset: 0 }));
-  const range = useMemo(() => resolvePeriod(period), [period]);
+  const period = useMonthPeriod(searchParams.get("mes"), searchParams.get("periodo"));
+  const { range } = period;
   const requestKey = `${scopeKey}|${dataRefreshKey}`;
-  const aggregateKey = `${requestKey}|${range.key}`;
+  const aggregateKey = `${requestKey}|${range.from}|${range.to}`;
   const loading = accountsStatus !== "ready" || result?.key !== requestKey || aggregateResult?.key !== aggregateKey;
   const categories = result?.categories ?? EMPTY_LIST;
-  const aggregates = aggregateResult?.aggregates ?? null;
+  const aggregates = aggregateResult?.key === aggregateKey ? aggregateResult.aggregates : null;
   const error =
     accountsStatus === "error"
       ? "Não foi possível carregar as contas."
@@ -124,7 +100,7 @@ export default function Categorias() {
   const [planning, setPlanning] = useState(null);
   const drilldownRef = useRef(null);
   const skipNextScrollRef = useRef(false);
-  // A pré-seleção de categoria (via link ou maior gasto do ano) só deve acontecer uma vez, na
+  // A pré-seleção de categoria (via link ou maior gasto do mês) só deve acontecer uma vez, na
   // primeira carga. Trocar de conta depois não pode reabrir/trocar a categoria que o usuário já
   // escolheu.
   const hasAppliedInitialSelectionRef = useRef(false);
@@ -158,7 +134,7 @@ export default function Categorias() {
 
     const controller = new AbortController();
     const { signal } = controller;
-    const key = `${scopeKey}|${dataRefreshKey}|${range.key}`;
+    const key = `${scopeKey}|${dataRefreshKey}|${range.from}|${range.to}`;
 
     getTransactionAggregates(
       {
@@ -182,7 +158,7 @@ export default function Categorias() {
           return;
         }
 
-        // Pré-seleciona a categoria com maior gasto do ano atual, pra seção de transações já
+        // Pré-seleciona a categoria com maior gasto do mês atual, pra seção de transações já
         // vir aberta sem precisar de clique. Só nessa carga inicial: dali em diante o usuário
         // controla a seleção normalmente, inclusive desmarcando.
         const topName = topExpenseCategoryName(data.categories ?? []);
@@ -237,12 +213,12 @@ export default function Categorias() {
     const sorted = [...breakdown];
     switch (categorySort) {
       case "value-asc":
-        return sorted.sort((a, b) => a.value - b.value);
+        return sorted.sort((a, b) => a.value - b.value || a.name.localeCompare(b.name, "pt-BR"));
       case "count-desc":
-        return sorted.sort((a, b) => b.count - a.count);
+        return sorted.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt-BR"));
       case "value-desc":
       default:
-        return sorted.sort((a, b) => b.value - a.value);
+        return sorted.sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, "pt-BR"));
     }
   }, [breakdown, categorySort]);
 
@@ -322,37 +298,18 @@ export default function Categorias() {
   }
 
 
-  const periodPhrase =
-    period.mode === "all" ? "em todo o período" : `em ${period.mode === "month" ? range.label.toLowerCase() : range.label}`;
+  function changePeriod(key, mode) {
+    const next = periodParams(searchParams, key, mode);
+    setSearchParams(next, { replace: true });
+    setCategoryPage(1);
+    setExpandedEstablishments(new Set());
+  }
 
+  const periodPhrase = `em ${period.label.toLowerCase()}`;
   const heading = (
     <header className="categorias__header">
       <SectionHeading title="Categorias" level={1} />
-
-      <div className="categorias__period">
-        <div className="categorias__period-modes" role="radiogroup" aria-label="Período">
-          {PERIOD_MODES.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={period.mode === option.value}
-              className={`categorias__segment ${period.mode === option.value ? "categorias__segment--active" : ""}`}
-              onClick={() => setPeriod({ mode: option.value, offset: 0 })}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        {period.mode !== "all" && (
-          <RangePicker
-            label={range.label}
-            onPrev={() => setPeriod((prev) => ({ ...prev, offset: prev.offset + 1 }))}
-            onNext={() => setPeriod((prev) => ({ ...prev, offset: Math.max(0, prev.offset - 1) }))}
-            nextDisabled={period.offset === 0}
-          />
-        )}
-      </div>
+      <MonthNavigator period={period} onChange={changePeriod} />
     </header>
   );
 

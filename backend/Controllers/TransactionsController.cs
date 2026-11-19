@@ -21,13 +21,10 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         var today = await UserTodayAsync(db);
         var query = FilteredQuery(bankAccountId, status, type, today);
 
-        // Cap de segurança: Categorias/ReceitasDespesas hoje esperam a lista completa pra
-        // agregar no cliente, então isso não pagina de verdade, só limita o pior caso (uma
-        // conta com muitos anos de histórico sincronizado da Polp). O Relatórios tem paginação
-        // de verdade no endpoint /report abaixo.
+        // Limite da listagem legada. Relatórios e extratos paginados usam /report.
         const int MaxResults = 2000;
 
-        var result = await ProjectToDto(query.OrderByDescending(t => t.DueDate).Take(MaxResults)).ToListAsync();
+        var result = await ProjectToDto(query.OrderByDescending(t => t.DueDate).ThenBy(t => t.Id).Take(MaxResults)).ToListAsync();
 
         result = WithComputedFields(result, today);
 
@@ -68,13 +65,13 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
     // as últimas linhas de um cartão a cada abertura, então lê apenas essas, pelo índice
     // (UserId, BankAccountId, DueDate).
     [HttpGet("recent")]
-    public async Task<IActionResult> GetRecent([FromQuery] Guid bankAccountId, [FromQuery] int limit = 5, CancellationToken ct = default)
+    public async Task<IActionResult> GetRecent([FromQuery] Guid? bankAccountId, [FromQuery] int limit = 5, CancellationToken ct = default)
     {
         limit = Math.Clamp(limit, 1, 10);
         var today = await UserTodayAsync(db, ct);
         var query = FilteredQuery(bankAccountId, null, null, today);
 
-        var items = await ProjectToDto(ApplySort(query, "dueDate", desc: true).Take(limit)).ToListAsync(ct);
+        var items = await ProjectToDto(ApplySort(query, "dueDate", desc: true, today: today).Take(limit)).ToListAsync(ct);
 
         return Ok(WithComputedFields(items, today));
     }
@@ -113,13 +110,16 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         [FromQuery] string sortDir = "desc",
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25,
-        [FromQuery] bool excludeTransfers = false)
+        [FromQuery] bool excludeTransfers = false,
+        [FromQuery] string summary = "full", CancellationToken ct = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
+        if (summary is not ("full" or "totals" or "items")) return BadRequest();
+        var offset = PageOffset(page, pageSize);
         var desc = !string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
 
-        var today = await UserTodayAsync(db);
+        var today = await UserTodayAsync(db, ct);
         var query = FilteredQuery(bankAccountId, status, type, today);
 
         // Receitas e despesas (CNPJ) lista o mês sem as transferências entre contas próprias, a mesma
@@ -132,14 +132,14 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         // o model binder de DateTime da ASP.NET não garante Kind=Utc a partir de string, e essa
         // ambiguidade já causou bug de fronteira de mês em outro lugar do dashboard. Montar o
         // intervalo aqui, igual o DashboardController faz, evita a mesma armadilha.
-        if (year.HasValue && month.HasValue)
+        if (year.HasValue)
         {
             if (year is < 1 or > 9998 || month is < 1 or > 12)
                 return BadRequest(new { message = "Ano ou mês inválido." });
 
-            var startOfMonth = new DateTime(year.Value, month.Value, 1, 0, 0, 0, DateTimeKind.Utc);
-            var endOfMonth = startOfMonth.AddMonths(1);
-            query = query.Where(t => t.DueDate >= startOfMonth && t.DueDate < endOfMonth);
+            var start = new DateTime(year.Value, month ?? 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            var end = month.HasValue ? start.AddMonths(1) : start.AddYears(1);
+            query = query.Where(t => t.DueDate >= start && t.DueDate < end);
         }
 
         // Amount é criptografado (guardado como texto): "ORDER BY"/"SUM" direto na coluna
@@ -149,48 +149,95 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         // filtro, ordena, conta e soma em memória, e só então corta a página pedida.
 
         List<TransactionDto> items;
-        decimal totalIncome;
-        decimal totalExpense;
+        decimal totalIncome = 0;
+        decimal totalExpense = 0;
 
         int totalCount;
 
-        // Nome (Name) também é cifrado agora: busca por descrição e ordenação por nome caem no
-        // mesmo caminho em memória da ordenação por valor.
-        var needsInMemory = string.Equals(sortBy, "amount", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(sortBy, "name", StringComparison.OrdinalIgnoreCase)
-            || !string.IsNullOrWhiteSpace(search);
+        // Ordenações cifradas precisam do conjunto completo. Para busca em outra ordem,
+        // o banco ordena e a aplicação descarta cada nome que não passa no filtro.
+        var sortAmount = string.Equals(sortBy, "amount", StringComparison.OrdinalIgnoreCase);
+        var sortEncrypted = sortAmount || string.Equals(sortBy, "name", StringComparison.OrdinalIgnoreCase);
 
-        var wantsDayTotals = string.Equals(sortBy, "dueDate", StringComparison.OrdinalIgnoreCase);
-        List<ReportDayTotalDto> dayTotals;
+        var wantsDayTotals = summary == "full" && string.Equals(sortBy, "dueDate", StringComparison.OrdinalIgnoreCase);
+        List<ReportDayTotalDto> dayTotals = [];
 
-        if (needsInMemory)
+        if (sortEncrypted)
         {
-            var all = await ProjectToDto(query.OrderByDescending(t => t.DueDate)).ToListAsync();
+            var all = await ProjectToDto(query).ToListAsync(ct);
             if (!string.IsNullOrWhiteSpace(search))
                 all = all.Where(t => MatchesSearch(t.Name, search)).ToList();
             totalCount = all.Count;
-            all = WithComputedFields(all, today);
-            items = SortInMemory(all, sortBy, desc).Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            items = WithComputedFields(SortEncrypted(all, sortAmount, desc).Skip(offset).Take(pageSize).ToList(), today);
 
-            // O filtro inteiro já está decifrado em memória: somar daqui evita ler e decifrar
-            // todas as linhas de novo no banco só pra chegar no mesmo total.
-            var rows = all.Select(t => new SumRow(t.DueDate, Enum.Parse<TransactionType>(t.Type), t.Amount, t.IsTransfer)).ToList();
-            (totalIncome, totalExpense) = SumTotals(rows);
-            dayTotals = wantsDayTotals ? SumDayTotals(rows, items) : [];
+            if (summary != "items")
+            {
+                var sums = new ReportSums([]);
+                foreach (var t in all) sums.Add(t.DueDate, t.Type == nameof(TransactionType.Income), t.Amount, t.IsTransfer);
+                (totalIncome, totalExpense, dayTotals) = sums.Result();
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(search))
+        {
+            totalCount = 0;
+            items = new List<TransactionDto>(pageSize);
+            var sums = new ReportSums([]);
+            var currentDay = DateTime.MinValue;
+            decimal dayIncome = 0, dayExpense = 0;
+            var dayOnPage = false;
+            var rows = ProjectToDto(ApplySort(query, sortBy, desc, today)).AsAsyncEnumerable();
+            await foreach (var row in rows.WithCancellation(ct))
+            {
+                if (!MatchesSearch(row.Name, search)) continue;
+                var onPage = totalCount >= offset && items.Count < pageSize;
+                if (onPage) items.Add(row);
+                totalCount++;
+                if (summary == "items") continue;
+                var isIncome = row.Type == nameof(TransactionType.Income);
+                sums.Add(row.DueDate, isIncome, row.Amount, row.IsTransfer);
+                if (!wantsDayTotals) continue;
+                if (row.DueDate.Date != currentDay)
+                {
+                    if (dayOnPage) dayTotals.Add(new(currentDay, dayIncome, dayExpense));
+                    currentDay = DateTime.SpecifyKind(row.DueDate.Date, DateTimeKind.Utc);
+                    dayIncome = dayExpense = 0;
+                    dayOnPage = false;
+                }
+                dayOnPage |= onPage;
+                if (row.IsTransfer) continue;
+                if (isIncome) dayIncome += row.Amount;
+                else dayExpense += row.Amount;
+            }
+            if (dayOnPage) dayTotals.Add(new(currentDay, dayIncome, dayExpense));
+            dayTotals.Sort((a, b) => a.Date.CompareTo(b.Date));
+            items = WithComputedFields(items, today);
+            (totalIncome, totalExpense, _) = sums.Result();
         }
         else
         {
-            totalCount = await query.CountAsync();
-            var ordered = ApplySort(query, sortBy, desc);
-            items = await ProjectToDto(ordered.Skip((page - 1) * pageSize).Take(pageSize)).ToListAsync();
-            items = WithComputedFields(items, today);
-
-            (totalIncome, totalExpense) = await SumTotalsAsync(SumRowsAsync(query));
-            dayTotals = wantsDayTotals && items.Count > 0
-                ? SumDayTotals(await CollectAsync(SumRowsAsync(DayRange(query, items))), items)
-                : [];
+            await using var snapshot = db.Database.IsNpgsql()
+                ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct) : null;
+            var ordered = ApplySort(query, sortBy, desc, today);
+            items = WithComputedFields(await ProjectToDto(ordered.Skip(offset).Take(pageSize)).ToListAsync(ct), today);
+            if (summary == "items")
+                totalCount = await query.CountAsync(ct);
+            else
+            {
+                var sums = new ReportSums(wantsDayTotals ? items : []);
+                totalCount = 0;
+                var rows = query.Select(t => new { t.DueDate, t.Type, t.Amount, t.PolpMovementKind }).AsAsyncEnumerable();
+                await foreach (var t in rows.WithCancellation(ct))
+                {
+                    totalCount++;
+                    sums.Add(t.DueDate, t.Type == TransactionType.Income, t.Amount, TransferDetection.IsSelfTransfer(t.PolpMovementKind));
+                }
+                (totalIncome, totalExpense, dayTotals) = sums.Result();
+            }
+            if (snapshot != null) await snapshot.CommitAsync(ct);
         }
 
+        if (summary == "items") return Ok(new { items, totalCount });
+        if (summary == "totals") return Ok(new { items, totalCount, totalIncome, totalExpense });
         return Ok(new TransactionReportDto(items, totalCount, totalIncome, totalExpense, dayTotals));
     }
 
@@ -216,8 +263,9 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             return BadRequest(new { message = rangeError });
 
         var today = await UserTodayAsync(db, ct);
+        var countsLoans = await CountsLoanDisbursementAsync(ct);
         var rows = FilteredQuery(bankAccountId, null, null, today)
-            .WithoutSelfTransfers()
+            .CountedInTotals(countsLoans)
             .Where(t => t.DueDate >= start && t.DueDate < end)
             .OrderByDescending(t => t.DueDate)
             .ThenBy(t => t.Id)
@@ -234,9 +282,9 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         await foreach (var t in rows.WithCancellation(ct))
         {
-            if (TransferDetection.IsSelfTransfer(t.PolpMovementKind)) continue;
+            if (!TransferDetection.CountsInTotals(t.PolpMovementKind, t.Type, countsLoans)) continue;
 
-            var categoryName = string.IsNullOrEmpty(t.CategoryName) ? null : t.CategoryName;
+            var categoryName = TransferDetection.CategoryBucket(t.PolpMovementKind, string.IsNullOrEmpty(t.CategoryName) ? null : t.CategoryName);
             var monthKey = (t.DueDate.Year, t.DueDate.Month);
             months.TryGetValue(monthKey, out var m);
             var isIncome = t.Type == TransactionType.Income;
@@ -288,99 +336,35 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         return Ok(new TransactionAggregatesDto(totalIncome, totalExpense, count, monthList, categoryList, establishmentList, dayList));
     }
 
-    private sealed record SumRow(DateTime DueDate, TransactionType Type, decimal Amount, bool IsTransfer);
-
-    // Só as colunas que a soma usa: sem o nome (cifrado), que este caminho não filtra, cada
-    // página do relatório decifraria o nome de todas as linhas do filtro só pra descartar.
-    private static async IAsyncEnumerable<SumRow> SumRowsAsync(IQueryable<Transaction> query)
+    private sealed class ReportSums(IEnumerable<TransactionDto> pageDays)
     {
-        var rows = query
-            .Select(t => new { t.DueDate, t.Type, t.Amount, t.PolpMovementKind })
-            .AsAsyncEnumerable();
-        await foreach (var t in rows)
-            yield return new SumRow(t.DueDate, t.Type, t.Amount, TransferDetection.IsSelfTransfer(t.PolpMovementKind));
-    }
+        private readonly Dictionary<DateTime, (decimal Income, decimal Expense)> days = pageDays
+            .Select(t => t.DueDate.Date).Distinct().ToDictionary(d => d, _ => (0m, 0m));
+        private decimal income;
+        private decimal expense;
 
-    private static async Task<List<SumRow>> CollectAsync(IAsyncEnumerable<SumRow> rows)
-    {
-        var list = new List<SumRow>();
-        await foreach (var row in rows) list.Add(row);
-        return list;
-    }
-
-    private static async Task<(decimal Income, decimal Expense)> SumTotalsAsync(IAsyncEnumerable<SumRow> rows)
-    {
-        decimal income = 0, expense = 0;
-        await foreach (var t in rows)
+        public void Add(DateTime date, bool isIncome, decimal amount, bool isTransfer)
         {
-            if (t.IsTransfer) continue;
-            if (t.Type == TransactionType.Income) income += t.Amount;
-            else if (t.Type == TransactionType.Expense) expense += t.Amount;
+            if (isTransfer) return;
+            if (isIncome) income += amount;
+            else expense += amount;
+            if (days.TryGetValue(date.Date, out var day))
+                days[date.Date] = isIncome ? (day.Income + amount, day.Expense) : (day.Income, day.Expense + amount);
         }
-        return (income, expense);
-    }
 
-    private static IQueryable<Transaction> DayRange(IQueryable<Transaction> query, List<TransactionDto> items)
-    {
-        var start = DateTime.SpecifyKind(items.Min(i => i.DueDate).Date, DateTimeKind.Utc);
-        var end = DateTime.SpecifyKind(items.Max(i => i.DueDate).Date.AddDays(1), DateTimeKind.Utc);
-        return query.Where(t => t.DueDate >= start && t.DueDate < end);
-    }
-
-    private static (decimal Income, decimal Expense) SumTotals(IEnumerable<SumRow> rows)
-    {
-        decimal income = 0, expense = 0;
-        foreach (var t in rows)
-        {
-            if (t.IsTransfer) continue;
-            if (t.Type == TransactionType.Income) income += t.Amount;
-            else if (t.Type == TransactionType.Expense) expense += t.Amount;
-        }
-        return (income, expense);
-    }
-
-    // Subtotal de cada dia presente na página, somado sobre o filtro inteiro: um dia que continua
-    // na página seguinte não pode aparecer com a soma só das linhas desta página.
-    private static List<ReportDayTotalDto> SumDayTotals(IEnumerable<SumRow> rows, List<TransactionDto> items)
-    {
-        if (items.Count == 0) return [];
-
-        var days = items.Select(i => i.DueDate.Date).ToHashSet();
-        return rows
-            .Where(r => days.Contains(r.DueDate.Date))
-            .GroupBy(r => r.DueDate.Date)
-            .Select(g =>
-            {
-                var (income, expense) = SumTotals(g);
-                return (Day: g.Key, Income: income, Expense: expense);
-            })
-            .Concat(days.Select(d => (Day: d, Income: 0m, Expense: 0m)))
-            .GroupBy(x => x.Day)
-            .Select(g => new ReportDayTotalDto(
-                DateTime.SpecifyKind(g.Key, DateTimeKind.Utc), g.Sum(x => x.Income), g.Sum(x => x.Expense)))
-            .OrderBy(d => d.Date)
-            .ToList();
+        public (decimal, decimal, List<ReportDayTotalDto>) Result() =>
+            (income, expense, days.OrderBy(d => d.Key).Select(d =>
+                new ReportDayTotalDto(DateTime.SpecifyKind(d.Key, DateTimeKind.Utc), d.Value.Income, d.Value.Expense)).ToList());
     }
 
     private static bool MatchesSearch(string name, string search) => TextSearch.Matches(name, search);
 
-    private static IEnumerable<TransactionDto> SortInMemory(List<TransactionDto> items, string sortBy, bool desc)
+    private static IEnumerable<TransactionDto> SortEncrypted(List<TransactionDto> items, bool amount, bool desc)
     {
-        Func<TransactionDto, object?> key = sortBy switch
-        {
-            "amount" => t => t.Amount,
-            "name" => t => t.Name,
-            "categoryName" => t => t.CategoryName ?? "",
-            "bankAccountName" => t => t.BankAccountName ?? "",
-            "type" => t => t.Type,
-            "status" => t => t.Status,
-            _ => t => t.DueDate,
-        };
-        var comparer = Comparer<object?>.Create((a, b) => a is string sa && b is string sb
-            ? string.Compare(sa, sb, System.Globalization.CultureInfo.GetCultureInfo("pt-BR"), System.Globalization.CompareOptions.IgnoreCase)
-            : Comparer<object?>.Default.Compare(a, b));
-        var ordered = desc ? items.OrderByDescending(key, comparer) : items.OrderBy(key, comparer);
-        return ordered.ThenBy(t => t.Id);
+        if (amount)
+            return (desc ? items.OrderByDescending(t => t.Amount) : items.OrderBy(t => t.Amount)).ThenBy(t => t.Id);
+        var comparer = StringComparer.Create(CultureInfo.GetCultureInfo("pt-BR"), ignoreCase: true);
+        return (desc ? items.OrderByDescending(t => t.Name, comparer) : items.OrderBy(t => t.Name, comparer)).ThenBy(t => t.Id);
     }
 
     [HttpGet("details")]
@@ -391,31 +375,73 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         [FromQuery] string? type,
         [FromQuery] string? category,
         [FromQuery] string? establishment,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromQuery] string? cursor = null,
+        [FromQuery] bool paged = false)
     {
+        const int size = 25;
         var (start, end, rangeError) = ParseRange(from, to);
-        if (rangeError is not null)
-            return BadRequest(new { message = rangeError });
+        if (rangeError is not null) return BadRequest(new { message = rangeError });
 
         var today = await UserTodayAsync(db, ct);
-        var rows = ProjectToDto(FilteredQuery(bankAccountId, null, type, today)
-                .Where(t => t.DueDate >= start && t.DueDate < end)
-                .OrderByDescending(t => t.DueDate)
-                .ThenBy(t => t.Id)
-                .AsNoTracking())
-            .AsAsyncEnumerable();
+        var countsLoans = await CountsLoanDisbursementAsync(ct);
+        var query = FilteredQuery(bankAccountId, null, type, today).AsNoTracking().CountedInTotals(countsLoans)
+            .Where(t => t.DueDate >= start && t.DueDate < end);
+        // O model binder converte texto vazio em null. Uma chave vazia de estabelecimento é válida
+        // (por exemplo, uma descrição composta apenas pelo sufixo de parcelamento).
+        if (establishment == null && Request.Query.TryGetValue("establishment", out var rawName))
+            establishment = rawName.ToString();
+        if (category == null && Request.Query.TryGetValue("category", out var rawCategory))
+            category = rawCategory.ToString();
+        if (category != null)
+            query = query.Where(t => (t.PolpMovementKind == PolpMovementKind.LoanDisbursement
+                || (t.Category != null && TransferDetection.LegacyLoanCategoryNames.Contains(t.Category.Name))
+                ? TransferDetection.LoanCategoryName
+                : t.Category == null || t.Category.Name == "" ? "Sem categoria" : t.Category.Name) == category);
 
-        var items = new List<TransactionDto>();
-        await foreach (var t in rows.WithCancellation(ct))
+        if (cursor != null)
         {
-            if (t.IsTransfer) continue;
-            if (category is not null && (string.IsNullOrEmpty(t.CategoryName) ? "Sem categoria" : t.CategoryName) != category) continue;
-            if (establishment is not null && EstablishmentKey(t.Name) != establishment) continue;
-            items.Add(t);
+            var parts = cursor.Split('.', 2);
+            if (parts.Length != 2 || !long.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var ticks)
+                || ticks > DateTime.MaxValue.Ticks || !Guid.TryParseExact(parts[1], "N", out var id))
+                return BadRequest(new { message = "Cursor inválido." });
+            var date = new DateTime(ticks, DateTimeKind.Utc);
+            query = query.Where(t => t.DueDate < date || (t.DueDate == date && t.Id.CompareTo(id) > 0));
         }
 
-        return Ok(WithComputedFields(items, today));
+        // A seleção por nome e a projeção final precisam observar a mesma categoria, data e descrição.
+        await using var snapshot = establishment != null && db.Database.IsNpgsql()
+            ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct) : null;
+        if (establishment != null)
+        {
+            var matches = new List<Guid>(size + 1);
+            var names = query.OrderByDescending(t => t.DueDate).ThenBy(t => t.Id)
+                .Select(t => new { t.Id, t.Name }).AsAsyncEnumerable();
+            await foreach (var row in names.WithCancellation(ct))
+            {
+                if (EstablishmentKey(row.Name) != establishment) continue;
+                matches.Add(row.Id);
+                if (matches.Count > size) break;
+            }
+            query = query.Where(t => matches.Contains(t.Id));
+        }
+
+        var rows = await ProjectToDto(query.OrderByDescending(t => t.DueDate).ThenBy(t => t.Id).Take(size + 1))
+            .ToListAsync(ct);
+        if (snapshot != null) await snapshot.CommitAsync(ct);
+        var items = WithComputedFields(rows.Take(size).Select(t => t with
+        {
+            CategoryName = TransferDetection.CategoryBucket(t.IsTransfer ? PolpMovementKind.LoanDisbursement : PolpMovementKind.None, t.CategoryName),
+            IsTransfer = false
+        }).ToList(), today);
+        var nextCursor = rows.Count > size ? FormattableString.Invariant($"{items[^1].DueDate.Ticks}.{items[^1].Id:N}") : null;
+        if (paged) return Ok(new { items, nextCursor });
+        if (nextCursor != null) Response.Headers["X-Next-Cursor"] = nextCursor;
+        return Ok(items);
     }
+
+    private Task<bool> CountsLoanDisbursementAsync(CancellationToken ct) =>
+        db.Users.AnyAsync(u => u.Id == UserId && u.DocumentType != DocumentTypes.Cnpj, ct);
 
     private static (DateTime Start, DateTime End, string? Error) ParseRange(string? from, string? to)
     {
@@ -447,7 +473,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
     // se repetem entre transações, e sem um desempate estável o Postgres não garante a mesma ordem
     // entre duas execuções do Skip/Take. A mesma linha podia aparecer em duas páginas do Relatórios
     // (ou sumir de todas) só por causa disso.
-    private static IQueryable<Transaction> ApplySort(IQueryable<Transaction> query, string sortBy, bool desc) => sortBy switch
+    private static IQueryable<Transaction> ApplySort(IQueryable<Transaction> query, string sortBy, bool desc, DateTime today) => sortBy switch
     {
         "categoryName" => desc
             ? query.OrderByDescending(t => t.Category != null ? t.Category.Name : "").ThenBy(t => t.Id)
@@ -459,8 +485,8 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
             ? query.OrderByDescending(t => t.Type).ThenBy(t => t.Id)
             : query.OrderBy(t => t.Type).ThenBy(t => t.Id),
         "status" => desc
-            ? query.OrderByDescending(t => t.Status).ThenBy(t => t.Id)
-            : query.OrderBy(t => t.Status).ThenBy(t => t.Id),
+            ? query.OrderByDescending(t => t.Status == TransactionStatus.Pending && t.DueDate < today ? TransactionStatus.Overdue : t.Status).ThenBy(t => t.Id)
+            : query.OrderBy(t => t.Status == TransactionStatus.Pending && t.DueDate < today ? TransactionStatus.Overdue : t.Status).ThenBy(t => t.Id),
         _ => desc
             ? query.OrderByDescending(t => t.DueDate).ThenBy(t => t.Id)
             : query.OrderBy(t => t.DueDate).ThenBy(t => t.Id),

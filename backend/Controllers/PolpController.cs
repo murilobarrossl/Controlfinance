@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using System.Net;
 using ControlFinance.API.Data;
 using ControlFinance.API.Models;
@@ -88,6 +89,7 @@ public class PolpController(
     }
 
     [HttpPost("integrations")]
+    [EnableRateLimiting(UserOperationRateLimit.Connect)]
     public async Task<IActionResult> Connect([FromBody] PolpConnectDto dto, CancellationToken ct)
     {
         if (!Guid.TryParse(dto.ConnectorId, out var institutionId))

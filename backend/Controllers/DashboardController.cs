@@ -27,13 +27,14 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
         var startOfMonth = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var endOfMonth = startOfMonth.AddMonths(1);
 
+        var countsLoans = await db.Users.AnyAsync(u => u.Id == UserId && u.DocumentType != DocumentTypes.Cnpj, ct);
         var monthlyTransactions = await db.Transactions
             .AsNoTracking()
             .Where(t => t.UserId == UserId
                      && t.BankAccountId == account.Id
                      && t.DueDate >= startOfMonth
                      && t.DueDate < endOfMonth)
-            .WithoutSelfTransfers()
+            .CountedInTotals(countsLoans)
             .Select(t => new { t.Type, t.Amount, t.CategoryId, CategoryName = t.Category != null ? t.Category.Name : null })
             .ToListAsync(ct);
 
@@ -70,10 +71,10 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
         var expensesByCategory = nonTransferMonthly
             .Where(t => t.Type == TransactionType.Expense && t.CategoryId.HasValue)
-            .GroupBy(t => t.CategoryId)
+            .GroupBy(t => TransferDetection.CategoryBucket(PolpMovementKind.None, t.CategoryName))
             .Select(g => new
             {
-                Name = g.First().CategoryName,
+                Name = g.Key,
                 Amount = g.Sum(t => t.Amount)
             })
             .ToList();

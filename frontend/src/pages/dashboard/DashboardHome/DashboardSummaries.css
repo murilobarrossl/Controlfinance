@@ -1,0 +1,31 @@
+.dh-mini__link, .dh-mini__row { color: inherit; }
+.dh-mini__link { font-size: 0.8125rem; text-underline-offset: 0.2em; }
+.dh-mini__list { margin: 0; padding: 0; list-style: none; }
+.dh-mini__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.7rem 0;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+.dh-mini__list > li + li { border-top: 1px solid var(--color-border); }
+.dh-mini__row strong { font-weight: 500; overflow-wrap: anywhere; }
+.dh-mini__row small {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+.dh-mini__amount { font-variant-numeric: tabular-nums; }
+.dh-mini__amount { text-align: end; }
+.dh-mini__investments { container-type: inline-size; }
+.dh-mini__investment { grid-template-columns: minmax(0, 1fr) fit-content(50%); }
+.dh-mini__investment .dh-mini__amount span { display: block; overflow-wrap: anywhere; }
+@container (max-width: 18rem) {
+  .dh-mini__investment { grid-template-columns: minmax(0, 1fr); gap: 0.25rem; }
+  .dh-mini__investment .dh-mini__amount { text-align: start; }
+}
+a.dh-mini__row { padding-inline: 0.5rem; }
+a.dh-mini__row:hover { background: var(--color-surface-hover); }
+.dh-mini__row:focus-visible, .dh-mini__link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }

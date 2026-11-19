@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router";
+import { BrowserRouter, Navigate, Routes, Route, useLocation, useOutlet } from "react-router";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import { BusinessOnlyRoute, HolderSwitch, PersonalOnlyRoute } from "./routes/HolderRoute.jsx";
@@ -40,6 +40,17 @@ function PolpConnectionWatcher() {
   return null;
 }
 
+// O painel de origem continua montado ao abrir um lançamento, inclusive sua página e filtros.
+function TransactionDrilldown({ children }) {
+  const detail = useOutlet();
+  const { state } = useLocation();
+  if (detail && !state?.fromList) return detail;
+  return <>
+    <div style={{ display: detail ? "none" : "contents" }}>{children}</div>
+    {detail}
+  </>;
+}
+
 function AppRoutes() {
   const { pathname, search } = useLocation();
   return (
@@ -71,13 +82,18 @@ function AppRoutes() {
           >
             <Route index element={<HolderSwitch personal={<DashboardHome />} business={<DashboardEmpresa />} />} />
             <Route path="cartoes" element={<Cartoes />} />
+            <Route path="cartoes/lancamentos/:transactionId" element={<TransactionDetail fromCard />} />
             <Route
               path="receitas-despesas"
-              element={<HolderSwitch personal={<ReceitasDespesas />} business={<Navigate to="/dashboard/fluxo-de-caixa" replace />} />}
-            />
+              element={<HolderSwitch personal={<TransactionDrilldown><ReceitasDespesas /></TransactionDrilldown>} business={<Navigate to="/dashboard/fluxo-de-caixa" replace />} />}
+            >
+              <Route path="lancamentos/:transactionId" element={<TransactionDetail fromList />} />
+            </Route>
             <Route path="relatorios" element={<Relatorios />} />
             <Route path="relatorios/:transactionId" element={<TransactionDetail />} />
-            <Route path="categorias" element={<PersonalOnlyRoute><Categorias /></PersonalOnlyRoute>} />
+            <Route path="categorias" element={<PersonalOnlyRoute><TransactionDrilldown><Categorias /></TransactionDrilldown></PersonalOnlyRoute>}>
+              <Route path="lancamentos/:transactionId" element={<TransactionDetail fromList />} />
+            </Route>
             <Route path="investimentos" element={<PersonalOnlyRoute><Investimentos /></PersonalOnlyRoute>} />
             <Route path="investimentos/:investmentId" element={<PersonalOnlyRoute><InvestmentDetail /></PersonalOnlyRoute>} />
             <Route path="investimentos/caixinhas/:reserveId" element={<PersonalOnlyRoute><InvestmentDetail /></PersonalOnlyRoute>} />
@@ -89,7 +105,9 @@ function AppRoutes() {
             <Route path="fornecedores" element={<BusinessOnlyRoute><Fornecedores /></BusinessOnlyRoute>} />
             <Route path="fornecedores/:supplierId" element={<BusinessOnlyRoute><SupplierDetail /></BusinessOnlyRoute>} />
             <Route path="impostos" element={<BusinessOnlyRoute><Impostos /></BusinessOnlyRoute>} />
-            <Route path="fluxo-de-caixa" element={<BusinessOnlyRoute><ReceitasDespesas /></BusinessOnlyRoute>} />
+            <Route path="fluxo-de-caixa" element={<BusinessOnlyRoute><TransactionDrilldown><ReceitasDespesas /></TransactionDrilldown></BusinessOnlyRoute>}>
+              <Route path="lancamentos/:transactionId" element={<TransactionDetail fromList />} />
+            </Route>
             <Route path="fluxo-de-caixa/mes/:month" element={<BusinessOnlyRoute><CashMonth /></BusinessOnlyRoute>} />
             <Route path="*" element={<ErrorPage code={404} embedded />} />
           </Route>

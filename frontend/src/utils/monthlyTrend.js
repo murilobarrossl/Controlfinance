@@ -10,7 +10,8 @@ export function getMonthsWindow(count, offset = 0) {
 }
 
 export function monthRange(firstMonth, lastMonth = firstMonth) {
-  const end = new Date(Date.UTC(lastMonth.getUTCFullYear(), lastMonth.getUTCMonth() + 1, 1));
+  const end = new Date(lastMonth);
+  end.setUTCMonth(end.getUTCMonth() + 1, 1);
   return { from: toIsoDate(firstMonth), to: toIsoDate(end) };
 }
 

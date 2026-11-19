@@ -28,6 +28,9 @@ public abstract class ApiControllerBase : ControllerBase
     protected Task<DateTime> UserTodayAsync(AppDbContext db, CancellationToken ct = default) =>
         UserClock.TodayForUserAsync(db, UserId, Clock, ct);
 
-    private TimeProvider Clock =>
+    protected static int PageOffset(int page, int pageSize) =>
+        (int)Math.Min(((long)page - 1) * pageSize, int.MaxValue);
+
+    protected TimeProvider Clock =>
         HttpContext?.RequestServices?.GetService<TimeProvider>() ?? TimeProvider.System;
 }

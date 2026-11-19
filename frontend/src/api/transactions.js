@@ -15,7 +15,7 @@ const transactionsPath = (filters) => {
 
 export const getTransactions = async (filters = {}, { signal } = {}) => apiFetch(transactionsPath(filters), { signal });
 
-const buildReportQuery = ({ status, type, search, bankAccountId, year, month, sortBy, sortDir, page, pageSize, excludeTransfers } = {}) => {
+const buildReportQuery = ({ status, type, search, bankAccountId, year, month, sortBy, sortDir, page, pageSize, excludeTransfers, summary } = {}) => {
   const params = new URLSearchParams();
   if (status) params.set("status", status);
   if (type) params.set("type", type);
@@ -27,6 +27,7 @@ const buildReportQuery = ({ status, type, search, bankAccountId, year, month, so
   if (sortDir) params.set("sortDir", sortDir);
   if (page) params.set("page", page);
   if (pageSize) params.set("pageSize", pageSize);
+  if (summary) params.set("summary", summary);
   if (excludeTransfers) params.set("excludeTransfers", "true");
   return params.toString();
 };
@@ -52,14 +53,16 @@ export const getTransactionAggregates = async ({ bankAccountId, from, to }, { si
 };
 
 export const getTransactionDetails = async (
-  { bankAccountId, from, to, type, category, establishment },
+  { bankAccountId, from, to, type, category, establishment, cursor },
   { signal } = {}
 ) => {
   const params = new URLSearchParams({ from, to });
   if (bankAccountId) params.set("bankAccountId", bankAccountId);
   if (type) params.set("type", type);
   if (category) params.set("category", category);
-  if (establishment) params.set("establishment", establishment);
+  params.set("paged", "true");
+  if (cursor) params.set("cursor", cursor);
+  if (establishment != null) params.set("establishment", establishment);
   return apiFetch(`/transactions/details?${params.toString()}`, { signal });
 };
 

@@ -264,7 +264,12 @@ function DetailSkeleton() {
   );
 }
 
-export default function TransactionDetail() {
+export default function TransactionDetail({ fromCard = false, fromList = false }) {
+  useEffect(() => {
+    if (!fromList) return;
+    const listTitle = document.title;
+    return () => { document.title = listTitle; };
+  }, [fromList]);
   usePageTitle("Detalhes da transação");
   const { transactionId } = useParams();
   const navigate = useNavigate();
@@ -306,8 +311,13 @@ export default function TransactionDetail() {
   }, [transactionId, detailsStatus]);
 
   function goBack() {
-    if (location.state?.fromReport) navigate(-1);
-    else navigate("/dashboard/relatorios");
+    if (fromList) {
+      if (location.state?.fromList) navigate(-1);
+      else navigate("../..", { relative: "path", replace: true });
+      return;
+    }
+    if (fromCard ? location.state?.fromCardStatement : (location.state?.fromReport || location.state?.fromDashboard)) navigate(-1);
+    else navigate(fromCard ? "/dashboard/cartoes" : "/dashboard/relatorios");
   }
 
   const loading = state.id !== transactionId;
@@ -318,7 +328,7 @@ export default function TransactionDetail() {
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M15 18l-6-6 6-6" />
       </svg>
-      Relatórios
+      {fromList ? "Lançamentos" : fromCard ? (location.state?.fromCardCategories ? "Categorias do cartão" : "Extrato do cartão") : location.state?.fromDashboard ? "Dashboard inteligente" : "Relatórios"}
     </button>
   );
 
@@ -340,7 +350,9 @@ export default function TransactionDetail() {
             <>
               <h1 className="tx-detail__failure-title">Lançamento não encontrado</h1>
               <p>Ele pode ter sido apagado, ou a conta dele foi desconectada.</p>
-              <Link to="/dashboard/relatorios" className="tx-detail__action">Ir para Relatórios</Link>
+              <Link to={fromCard ? "/dashboard/cartoes" : "/dashboard/relatorios"} className="tx-detail__action">
+                {fromCard ? "Ir para Cartões" : "Ir para Relatórios"}
+              </Link>
             </>
           ) : (
             <>
@@ -365,6 +377,9 @@ export default function TransactionDetail() {
   const heading = cp?.name ?? displayName;
   const customName = displayName !== heading && t.name !== bank.description ? displayName : null;
   const when = `${future ? "Previsto para " : ""}${formatDate(t.dueDate)}${bank.dateTime && !future ? `, ${formatTime(bank.dateTime)}` : ""}`;
+  // Mesmos nome e classificação da listagem de Relatórios; o título da contraparte
+  // e o tipo de operação bancária não alteram a identificação da marca.
+  const logo = <MerchantLogo name={t.name} isTransfer={isTransfer} />;
 
   return (
     <div className="tx-detail">
@@ -374,7 +389,7 @@ export default function TransactionDetail() {
         <header className="tx-detail__header">
           <div className="tx-detail__identity">
             <h1 id="tx-detail-title" className="tx-detail__title">
-              <MerchantLogo name={heading} isTransfer={isTransfer || TRANSFER_OPERATIONS.has(bank.operationType)} />
+              {!fromCard && logo}
               <span>{heading}</span>
             </h1>
             <p className="tx-detail__subtitle">
@@ -393,11 +408,14 @@ export default function TransactionDetail() {
               </p>
             )}
           </div>
-          <p className={`tx-detail__amount tx-detail__amount--${transactionTone(t.type, t.amount, isTransfer)}`}>
-            <span aria-hidden="true">{income ? "+" : "−"}</span>
-            {formatCurrency(t.amount)}
-            <span className="visually-hidden">{income ? " de entrada" : " de saída"}</span>
-          </p>
+          <div className={`tx-detail__header-end${fromCard ? " tx-detail__header-end--card" : ""}`}>
+            {fromCard && <span className="tx-detail__card-logo">{logo}</span>}
+            <p className={`tx-detail__amount tx-detail__amount--${transactionTone(t.type, t.amount, isTransfer)}`}>
+              <span aria-hidden="true">{income ? "+" : "−"}</span>
+              {formatCurrency(t.amount)}
+              <span className="visually-hidden">{income ? " de entrada" : " de saída"}</span>
+            </p>
+          </div>
         </header>
 
         <div className={`tx-detail__columns${parties ? "" : " tx-detail__columns--single"}`}>

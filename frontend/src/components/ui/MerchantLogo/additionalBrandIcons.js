@@ -3,7 +3,7 @@
 // Mercado Livre: símbolo oficial, http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/5.21.22/mercadolibre/favicon.svg
 // Shein: logotipo oficial do cabeçalho de br.shein.com.
 // Marcas pertencem aos seus titulares.
-export const RECURRING_BRAND_ICONS = {
+export const ADDITIONAL_BRAND_ICONS = {
   googlegemini: {
     title: "Gemini",
     color: "#8E75B2",

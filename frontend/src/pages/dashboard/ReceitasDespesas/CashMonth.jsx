@@ -43,6 +43,8 @@ function MonthMovements({ month, scopeQuery, scopeKey, refreshKey }) {
   const key = `${baseKey}|${currentPage}`;
 
   useEffect(() => {
+    // Sem escopo ainda (contas carregando) a consulta viria de todas as contas e piscaria na tela.
+    if (!scopeKey) return;
     const controller = new AbortController();
     getTransactionsReport(
       {
@@ -52,7 +54,7 @@ function MonthMovements({ month, scopeQuery, scopeKey, refreshKey }) {
         sortBy: "dueDate",
         sortDir: "desc",
         page: currentPage,
-        pageSize: PAGE_SIZE,
+        summary: "items", pageSize: PAGE_SIZE,
         excludeTransfers: true,
       },
       { signal: controller.signal }
@@ -63,7 +65,7 @@ function MonthMovements({ month, scopeQuery, scopeKey, refreshKey }) {
         setResult({ key, data: null, error: err.message || "Não foi possível carregar as movimentações." });
       });
     return () => controller.abort();
-  }, [key, month, scopeQuery, currentPage]);
+  }, [key, month, scopeQuery, scopeKey, currentPage]);
 
   const ready = result?.key === key ? result : null;
   const data = ready?.data;

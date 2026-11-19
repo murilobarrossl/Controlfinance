@@ -1,3 +1,4 @@
+import { Link, useLocation } from "react-router";
 import TransactionDetails from "../../../components/dashboard/TransactionDetails/TransactionDetails.jsx";
 import { ChevronDownIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency, formatDate, formatPercentage } from "../../../utils/financeMath.js";
@@ -52,6 +53,7 @@ export function CategoryList({ data, activeName, onSelect }) {
 // Estabelecimentos da categoria aberta: linhas com divisórias, sem caixa por item, e os lançamentos
 // no mesmo desenho de Receitas e despesas.
 export function EstablishmentList({ data, expandedNames, onToggle, detailsQuery }) {
+  const { search } = useLocation();
   return (
     <ul className="est-list">
       {data.map((item) => {
@@ -95,7 +97,7 @@ export function EstablishmentList({ data, expandedNames, onToggle, detailsQuery 
                     const installment = installmentLabel(t.name);
                     return (
                       <li key={t.id} className="est-tx__item">
-                        <span className="est-tx__date">{formatDate(t.dueDate)}</span>
+                        <Link to={{ pathname: `lancamentos/${t.id}`, search }} state={{ fromList: true }} className="est-tx__date">{formatDate(t.dueDate)}</Link>
                         <span className="est-tx__note">{installment ? `Parcela ${installment}` : ""}</span>
                         <span className="est-tx__amount">−{formatCurrency(Math.abs(t.amount))}</span>
                       </li>

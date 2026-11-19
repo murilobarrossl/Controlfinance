@@ -71,6 +71,7 @@ builder.Services.AddScoped<AccessLogService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 builder.Services.AddSingleton<RateLimitService>();
 builder.Services.AddInvestmentReadRateLimit(builder.Configuration);
+builder.Services.AddUserOperationRateLimits();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IJobLock, PostgresJobLock>();
 builder.Services.AddSingleton<IIntegrationLock, IntegrationLock>();
@@ -200,8 +201,19 @@ builder.Services.AddAuthorization();
 // ──────────────────────────────────────────
 // Origens liberadas vêm de config (Cors:AllowedOrigins). Em produção, adicionar o domínio
 // real do frontend em appsettings.Local.json ou variável de ambiente, sem tocar no código.
+// Fora de Development a lista não tem padrão: localhost ou http com credenciais liberadas não pode valer em
+// produção. As origens de desenvolvimento ficam em appsettings.Development.json; arrays de configuração se
+// mesclam por índice, então manter localhost no appsettings.json sobreviveria a um Cors__AllowedOrigins__0.
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? ["http://localhost:5173", "http://localhost:3000"];
+    ?? (builder.Environment.IsDevelopment() ? ["http://localhost:5173", "http://localhost:3000"] : []);
+if (!builder.Environment.IsDevelopment())
+{
+    var corsErrors = ConfigSecrets.ValidateCorsOrigins(allowedOrigins);
+    if (corsErrors.Count > 0)
+        throw new InvalidOperationException("Configuração de CORS inválida: " + string.Join("; ", corsErrors));
+    if (builder.Configuration["AllowedHosts"] is null or "*")
+        Console.Error.WriteLine("ATENÇÃO: AllowedHosts aceita qualquer host; configure os domínios da API.");
+}
 
 builder.Services.AddCors(options =>
 {
@@ -387,12 +399,36 @@ var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 };
-// Por padrão, o ASP.NET Core só aceita esses headers vindos de loopback; atrás do proxy do
-// DigitalOcean/Cloudflare eles chegam de um IP externo e seriam descartados silenciosamente.
-// Limpar as listas faz confiar em qualquer proxy, seguro aqui porque só o proxy da borda fala
-// diretamente com esta aplicação.
-forwardedHeadersOptions.KnownNetworks.Clear();
-forwardedHeadersOptions.KnownProxies.Clear();
+// Confiar em qualquer origem deixa quem alcança a aplicação sem passar pelo proxy forjar X-Forwarded-For:
+// burla o limite por IP de login, cadastro e exclusão e grava IP falso no registro de acesso. Por isso só
+// os proxies configurados (ForwardedHeaders:KnownProxies = IPs, KnownNetworks = CIDRs) são aceitos; sem
+// nada configurado vale o padrão do ASP.NET (só loopback, que cobre o desenvolvimento local). Confiar em
+// qualquer origem exige escolha explícita (TrustAllProxies) e só é seguro se a origem não for alcançável
+// diretamente, como em plataformas cujo proxy de borda não tem IP fixo.
+var forwardedConfig = app.Configuration.GetSection("ForwardedHeaders");
+var knownProxies = forwardedConfig.GetSection("KnownProxies").Get<string[]>() ?? [];
+var knownNetworks = forwardedConfig.GetSection("KnownNetworks").Get<string[]>() ?? [];
+if (forwardedConfig.GetValue<bool>("TrustAllProxies"))
+{
+    forwardedHeadersOptions.KnownNetworks.Clear();
+    forwardedHeadersOptions.KnownProxies.Clear();
+    app.Logger.LogWarning("ForwardedHeaders:TrustAllProxies ligado: X-Forwarded-For é aceito de qualquer origem; a aplicação não pode ser alcançável sem passar pelo proxy.");
+}
+else
+{
+    foreach (var proxy in knownProxies)
+        forwardedHeadersOptions.KnownProxies.Add(System.Net.IPAddress.Parse(proxy.Trim()));
+    foreach (var network in knownNetworks)
+    {
+        var parts = network.Trim().Split('/');
+        var prefix = System.Net.IPAddress.Parse(parts[0]);
+        var fullLength = prefix.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? 128 : 32;
+        forwardedHeadersOptions.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
+            prefix, parts.Length == 2 ? int.Parse(parts[1]) : fullLength));
+    }
+    if (!app.Environment.IsDevelopment() && knownProxies.Length == 0 && knownNetworks.Length == 0)
+        app.Logger.LogWarning("Nenhum proxy confiável configurado (ForwardedHeaders:KnownProxies/KnownNetworks): atrás de um proxy, o IP do cliente e o HTTPS da borda não serão reconhecidos.");
+}
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
 if (!app.Environment.IsDevelopment())
@@ -416,13 +452,17 @@ app.UseExceptionHandler(errorApp =>
         }
 
         var unavailable = feature?.Error is { } error && DatabaseFailure.IsTransient(error);
+        // Modelo da rota, não o caminho real: a URL do webhook da Polp carrega o token secreto
+        // (/api/polp/webhook/{token}) e não pode ir para o log. Sem rota resolvida, o segmento é mascarado.
+        var route = (feature?.Endpoint as RouteEndpoint)?.RoutePattern.RawText
+            ?? (context.Request.Path.StartsWithSegments("/api/polp/webhook") ? "/api/polp/webhook/***" : context.Request.Path.Value);
         if (feature?.Error is { } ex)
         {
             if (unavailable)
-                logger.LogWarning("PostgreSQL indisponível em {Path}: {Failure}", context.Request.Path,
+                logger.LogWarning("PostgreSQL indisponível em {Path}: {Failure}", route,
                     DatabaseConnectionDiagnostics.Describe(ex));
             else
-                logger.LogError(ex, "Exceção não tratada em {Path}", context.Request.Path);
+                logger.LogError(ex, "Exceção não tratada em {Path}", route);
         }
 
         context.Response.ContentType = "application/json";

@@ -75,12 +75,22 @@
   border-top: 0;
 }
 
+.dashboard-home__grid > .dashboard-panel + .dashboard-panel {
+  align-self: stretch;
+  margin-inline-start: -1.25rem;
+  padding-inline-start: 1.25rem;
+  border-inline-start: 1px solid var(--color-border);
+}
+
 @media (max-width: 900px) {
   .dashboard-home__grid {
     grid-template-columns: 1fr;
   }
 
   .dashboard-home__grid > .dashboard-panel + .dashboard-panel {
+    margin-inline-start: 0;
+    padding-inline-start: 0;
+    border-inline-start: 0;
     padding-top: 1.75rem;
     border-top: 1px solid var(--color-border);
   }
@@ -91,9 +101,16 @@
 }
 
 .dashboard-home__card-block .dashboard-panel__header {
-  align-items: flex-start;
+  align-items: center;
+  justify-content: flex-start;
+  column-gap: 0.75rem;
   min-height: 2.75rem;
   margin-bottom: 1.5rem;
+}
+
+.dashboard-home__card-block .card-picker--link .card-picker__list {
+  left: 0;
+  right: auto;
 }
 
 .dashboard-home__card-block .dashboard-panel__title {
@@ -237,15 +254,11 @@
   font-weight: 500;
 }
 
-.card-overview__note {
-  color: var(--color-text-tertiary);
-  font-size: 0.8125rem;
-  font-variant-numeric: tabular-nums;
-}
-
 .card-overview__rows {
-  display: flex;
-  flex-direction: column;
+  --entry-gap: 0.625rem;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  column-gap: var(--entry-gap);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -253,9 +266,9 @@
 
 .card-overview__row {
   display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr) auto;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 1rem;
   min-height: 4rem;
   padding-block: 0.75rem;
   border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
@@ -269,10 +282,15 @@
 }
 
 .card-overview__info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.2rem var(--entry-gap);
   min-width: 0;
+}
+
+.card-overview__info > .merchant-logo {
+  grid-row: span 2;
+  align-self: center;
 }
 
 .card-overview__name {
@@ -371,9 +389,8 @@
     max-width: none;
   }
 
-  .card-overview__row {
-    grid-template-columns: 3.25rem minmax(0, 1fr) auto;
-    gap: 0.75rem;
+  .card-overview__rows {
+    --entry-gap: 0.4375rem;
   }
 }
 

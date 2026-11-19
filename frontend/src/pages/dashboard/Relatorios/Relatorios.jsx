@@ -8,11 +8,12 @@ import { useAccount } from "../../../context/AccountContext.jsx";
 import NoBankAccount from "../../../components/dashboard/NoBankAccount/NoBankAccount.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
-import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
+import MonthNavigator from "../../../components/ui/MonthNavigator/MonthNavigator.jsx";
+import useMonthPeriod from "../../../hooks/useMonthPeriod.js";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import { CloseIcon, ChevronDownIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency, roundMoney } from "../../../utils/financeMath.js";
-import { formatMonthLong } from "../../../utils/monthLabel.js";
+import { toIsoDate } from "../../../utils/monthLabel.js";
 import { getMonthsWindow } from "../../../utils/monthlyTrend.js";
 import MerchantLogo from "../../../components/ui/MerchantLogo/MerchantLogo.jsx";
 import "./Relatorios.css";
@@ -153,17 +154,21 @@ export default function Relatorios() {
   const [searchInput, setSearchInput] = useState(saved?.search ?? "");
   const [search, setSearch] = useState(saved?.search ?? "");
   const [sort, setSort] = useState(saved?.sort ?? { key: "dueDate", direction: "desc" });
-  const [page, setPage] = useState(saved?.page ?? 1);
-  // "all" mantém o comportamento antigo (histórico completo, sem filtro de data). Sem isso os
-  // cards de "Entradas/Saídas do período" somavam o histórico inteiro mesmo quando o rótulo
-  // dizia "do período". Nada aqui limitava por mês.
-  const [periodMode, setPeriodMode] = useState(saved?.periodMode ?? "all");
-  const [monthOffset, setMonthOffset] = useState(saved?.monthOffset ?? 0);
+  const [monthKey, setMonthKey] = useState(() => {
+    if (saved?.monthKey) return saved.monthKey;
+    if (saved?.periodMode === "month" && Number.isInteger(saved.monthOffset)) {
+      const date = getMonthsWindow(1, saved.monthOffset)[0];
+      if (Number.isFinite(date.getTime())) return toIsoDate(date).slice(0, 7);
+    }
+    return null;
+  });
+  const [mode, setMode] = useState(saved?.mode ?? "mes");
+  const period = useMonthPeriod(monthKey, mode);
+  const [page, setPage] = useState(monthKey === period.key ? saved?.page ?? 1 : 1);
+  const currentMonth = period.date;
   const [reloadKey, setReloadKey] = useState(0);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", suffix: "", categoryId: "", categoryKnown: true, categoryTouched: false });
-
-  const currentMonth = useMemo(() => getMonthsWindow(1, monthOffset)[0], [monthOffset]);
 
   // Sem a lista de categorias o seletor da edição mostraria "Sem categoria" e salvar só o nome
   // apagaria a categoria do lançamento (o PUT grava o categoryId que receber). Por isso a edição
@@ -202,16 +207,17 @@ export default function Relatorios() {
       type: typeFilter === "all" ? undefined : typeFilter,
       search: search || undefined,
       ...scopeQuery,
-      year: periodMode === "month" ? currentMonth.getUTCFullYear() : undefined,
-      month: periodMode === "month" ? currentMonth.getUTCMonth() + 1 : undefined,
+      year: currentMonth.getUTCFullYear(),
+      month: period.annual ? undefined : currentMonth.getUTCMonth() + 1,
+      summary: "full",
       sortBy: sort.key,
       sortDir: sort.direction,
       page,
       pageSize: PAGE_SIZE,
     }),
-    [statusFilter, typeFilter, search, scopeQuery, periodMode, currentMonth, sort, page]
+    [statusFilter, typeFilter, search, scopeQuery, currentMonth, period.annual, sort, page]
   );
-  const baseKey = `${JSON.stringify(filters)}|${dataRefreshKey}`;
+  const baseKey = `${scopeKey}|${JSON.stringify(filters)}|${dataRefreshKey}`;
   const requestKey = `${baseKey}|${reloadKey}`;
   const loading = accountsStatus !== "ready" || result?.key !== requestKey;
 
@@ -300,12 +306,13 @@ export default function Relatorios() {
   function rememberView() {
     navigate(location.pathname, {
       replace: true,
-      state: { relatorios: { typeFilter, statusFilter, search, sort, page, periodMode, monthOffset } },
+      state: { relatorios: { typeFilter, statusFilter, search, sort, page, monthKey: period.key, mode: period.mode } },
     });
   }
 
-  function handlePeriodModeChange(mode) {
-    setPeriodMode(mode);
+  function changePeriod(key, nextMode) {
+    setMode(nextMode);
+    setMonthKey(key);
     setPage(1);
   }
 
@@ -405,8 +412,7 @@ export default function Relatorios() {
   // pra sair de um mês que falhou sem precisar recarregar tudo.
   const reportError = result?.key === requestKey ? result.error : "";
 
-  const monthLabel = formatMonthLong(currentMonth);
-  const periodSuffix = periodMode === "month" ? `em ${monthLabel}` : "(todo o período)";
+  const periodSuffix = `em ${period.label.toLowerCase()}`;
   const hasFilters = Boolean(search) || typeFilter !== "all" || statusFilter !== "all";
   const incomeFiltered = typeFilter === "Expense";
   const expenseFiltered = typeFilter === "Income";
@@ -448,40 +454,7 @@ export default function Relatorios() {
       <SectionHeading title="Relatórios" level={1} />
 
       <div className="relatorios__scope">
-        <div className="relatorios__period-filter">
-          <div className="relatorios__segmented" role="group" aria-label="Período">
-            <button
-              type="button"
-              className={`relatorios__segment ${periodMode === "all" ? "relatorios__segment--active" : ""}`}
-              aria-pressed={periodMode === "all"}
-              onClick={() => handlePeriodModeChange("all")}
-            >
-              Todo o período
-            </button>
-            <button
-              type="button"
-              className={`relatorios__segment ${periodMode === "month" ? "relatorios__segment--active" : ""}`}
-              aria-pressed={periodMode === "month"}
-              onClick={() => handlePeriodModeChange("month")}
-            >
-              Por mês
-            </button>
-          </div>
-          {periodMode === "month" && (
-            <RangePicker
-              label={formatMonthLong(currentMonth)}
-              onPrev={() => {
-                setMonthOffset((prev) => prev + 1);
-                setPage(1);
-              }}
-              onNext={() => {
-                setMonthOffset((prev) => Math.max(0, prev - 1));
-                setPage(1);
-              }}
-              nextDisabled={monthOffset === 0}
-            />
-          )}
-        </div>
+        <MonthNavigator period={period} onChange={changePeriod} />
         {syncNote && <p className="relatorios__period-hint">{syncNote}</p>}
       </div>
 
@@ -806,10 +779,8 @@ export default function Relatorios() {
                             Limpar busca e filtros
                           </button>
                         </>
-                      ) : periodMode === "month" ? (
-                        <p>Nenhum lançamento em {monthLabel}.</p>
                       ) : (
-                        <p>Esta conta ainda não tem lançamentos.</p>
+                        <p>Nenhum lançamento em {period.label.toLowerCase()}.</p>
                       )}
                     </td>
                   </tr>

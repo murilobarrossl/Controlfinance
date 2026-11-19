@@ -5,6 +5,10 @@
   gap: 2.5rem;
 }
 
+.cartoes__section[aria-labelledby="cartoes-lista"] {
+  margin-block-start: 0.75rem;
+}
+
 .cartoes__hint {
   margin: 0;
   max-width: 68ch;
@@ -155,6 +159,27 @@
 
 .cartoes__row--statement {
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.cartoes__statement-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cartoes__statement-link:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.cartoes__statement-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.cartoes__statement-description {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
 }
 
 .cartoes__row-kind {

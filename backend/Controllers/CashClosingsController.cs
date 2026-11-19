@@ -49,7 +49,7 @@ public class CashClosingsController(AppDbContext db, TimeProvider clock) : ApiCo
         if (totals.Income != dto.ExpectedIncome || totals.Expense != dto.ExpectedExpense || totals.Count != dto.ExpectedCount)
             return Conflict(new { message = "As movimentações do dia mudaram. Confira os valores e feche novamente.", stale = true });
 
-        var balances = await BalancesAsync(scope, day, ct);
+        var balances = await BalancesAsync(scope, day, null, ct);
         db.CashClosings.Add(new CashClosing
         {
             UserId = UserId,
@@ -149,10 +149,13 @@ public class CashClosingsController(AppDbContext db, TimeProvider clock) : ApiCo
 
     private async Task<CashDayDto> BuildDayAsync(DateOnly day, Guid scope, CancellationToken ct)
     {
-        var today = DateOnly.FromDateTime(await UserTodayAsync(db, ct));
+        // Fuso e nome do titular numa leitura só: "hoje", saldos e autor do fechamento vêm da mesma linha.
+        var owner = await db.Users.AsNoTracking().Where(u => u.Id == UserId)
+            .Select(u => new { u.TimeZone, u.Name }).FirstAsync(ct);
+        var today = DateOnly.FromDateTime(UserClock.TodayIn(owner.TimeZone, Clock.GetUtcNow()));
         var rows = await CashClosingLedger.LoadRowsAsync(db, UserId, scope, day, day.AddDays(1), ct);
         var totals = CashClosingLedger.Sum(rows);
-        var balances = await BalancesAsync(scope, day, ct);
+        var balances = await BalancesAsync(scope, day, owner.TimeZone, ct);
         var movements = await CashClosingLedger.CashMovementsAsync(db, UserId, scope, day, ct);
 
         var history = await db.CashClosings.AsNoTracking()
@@ -177,9 +180,8 @@ public class CashClosingsController(AppDbContext db, TimeProvider clock) : ApiCo
                 .ToList();
         }
 
-        var actorIds = history.Select(c => c.ClosedByUserId).Distinct().ToList();
-        var actors = await db.Users.AsNoTracking().Where(u => actorIds.Contains(u.Id) && u.Id == UserId)
-            .ToDictionaryAsync(u => u.Id, u => u.Name, ct);
+        // Um login = um titular: o único autor possível é o próprio usuário.
+        var actors = new Dictionary<Guid, string> { [UserId] = owner.Name };
 
         CashClosingDto ToDto(CashClosing c) => new(c.Id, c.Income, c.Expense, c.TransactionCount, c.OpeningBalance,
             c.ClosingBalance, DateTime.SpecifyKind(c.ClosedAt, DateTimeKind.Utc), actors.GetValueOrDefault(c.ClosedByUserId),
@@ -202,9 +204,9 @@ public class CashClosingsController(AppDbContext db, TimeProvider clock) : ApiCo
             active is null ? null : ToDto(active), adjustments, reconciliation);
     }
 
-    private async Task<CashClosingLedger.BalanceView> BalancesAsync(Guid scope, DateOnly day, CancellationToken ct)
+    private async Task<CashClosingLedger.BalanceView> BalancesAsync(Guid scope, DateOnly day, string? knownTimeZoneId, CancellationToken ct)
     {
-        var timeZoneId = await db.Users.Where(u => u.Id == UserId).Select(u => u.TimeZone).FirstAsync(ct);
+        var timeZoneId = knownTimeZoneId ?? await db.Users.Where(u => u.Id == UserId).Select(u => u.TimeZone).FirstAsync(ct);
         var zone = TimeZoneInfo.FindSystemTimeZoneById(UserClock.Normalize(timeZoneId));
         return await CashClosingLedger.BalancesAsync(db, UserId, scope, day, zone, clock.GetUtcNow().UtcDateTime, ct);
     }

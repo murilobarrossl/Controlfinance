@@ -47,11 +47,58 @@ public class PolpCategoryTotalsTests
     }
 
     [Fact]
-    public void Pagamento_de_fatura_e_emprestimo_recebido_tem_categoria_propria_e_parcelas_continuam_Emprestimos()
+    public void Pagamento_de_fatura_tem_categoria_propria_e_parcela_e_emprestimo_recebido_vao_para_Emprestimo()
     {
         Assert.Equal("Pagamento de fatura", PolpCategoryMap.ToCategoryName("LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"));
-        Assert.Equal("Empréstimos", PolpCategoryMap.ToCategoryName("LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT"));
-        Assert.Equal("Empréstimos recebidos", PolpCategoryMap.ToCategoryName("LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT"));
+        Assert.Equal("Empréstimo", PolpCategoryMap.ToCategoryName("LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT"));
+        Assert.Equal("Empréstimo", PolpCategoryMap.ToCategoryName("LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT"));
+    }
+
+    [Fact]
+    public async Task Cpf_ve_emprestimo_recebido_como_receita_e_parcelas_como_despesa_na_categoria_Emprestimo()
+    {
+        using var t = new TestDb();
+        var checking = t.AddAccount("Conta corrente", polpAccountId: Guid.NewGuid());
+        var day = MonthStart().AddDays(4);
+        Synced(t, checking, TransactionType.Income, 3000m, day, "SALARIO", "INCOME_SALARY");
+        Synced(t, checking, TransactionType.Income, 10000m, day, "CREDITO EMPRESTIMO", "LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT");
+        Synced(t, checking, TransactionType.Income, 2500.50m, day.AddDays(1), "CREDITO CONSIGNADO", "LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT");
+        Synced(t, checking, TransactionType.Expense, 450m, day.AddDays(2), "PARCELA EMPRESTIMO", "LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT");
+        var legacy = t.AddCategory("Empréstimos");
+        t.AddTransaction(checking, TransactionType.Expense, 120.25m, day.AddDays(3), "PARCELA ANTIGA", TransactionStatus.Paid, legacy);
+
+        var all = await MonthAggregates(t);
+        Assert.Equal(15500.50m, all.TotalIncome);
+        Assert.Equal(570.25m, all.TotalExpense);
+        Assert.Contains(all.Categories, c => c.CategoryName == "Empréstimo" && c.Type == "Income" && c.Amount == 12500.50m && c.Count == 2);
+        Assert.Contains(all.Categories, c => c.CategoryName == "Empréstimo" && c.Type == "Expense" && c.Amount == 570.25m && c.Count == 2);
+        Assert.DoesNotContain(all.Categories, c => c.CategoryName == "Empréstimos");
+
+        var summary = await Summary(t, checking.Id);
+        Assert.Equal(15500.50m, summary.TotalIncome);
+        Assert.Equal(570.25m, Assert.Single(summary.CategoryExpenses, c => c.CategoryName == "Empréstimo").Amount);
+
+        var details = await MonthDetails(t, "Empréstimo");
+        Assert.Equal(4, details.Count);
+        Assert.All(details, d => Assert.False(d.IsTransfer));
+    }
+
+    [Fact]
+    public async Task Cnpj_continua_sem_emprestimo_recebido_nos_totais()
+    {
+        using var t = new TestDb();
+        t.User.DocumentType = DocumentTypes.Cnpj;
+        t.Db.SaveChanges();
+        var checking = t.AddAccount("Conta corrente", polpAccountId: Guid.NewGuid());
+        var day = MonthStart().AddDays(4);
+        Synced(t, checking, TransactionType.Income, 10000m, day, "CREDITO EMPRESTIMO", "LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT");
+        Synced(t, checking, TransactionType.Expense, 450m, day, "PARCELA EMPRESTIMO", "LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT");
+
+        var all = await MonthAggregates(t);
+        Assert.Equal(0m, all.TotalIncome);
+        Assert.Equal(450m, all.TotalExpense);
+        Assert.Equal(0m, (await Summary(t, checking.Id)).TotalIncome);
+        Assert.Single(await MonthDetails(t, "Empréstimo"));
     }
 
     [Fact]

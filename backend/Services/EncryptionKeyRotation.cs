@@ -52,14 +52,13 @@ public static class EncryptionKeyRotation
             .ToList();
         if (encrypted.Count == 0) return 0;
 
-        // Paginação por posição em ordem estável de Id: a rotação não insere nem apaga linhas,
-        // então o deslocamento não "pula" registros entre lotes.
         var total = 0;
+        Guid? after = null;
         while (true)
         {
-            var batch = await db.Set<T>()
-                .OrderBy(e => EF.Property<Guid>(e, "Id"))
-                .Skip(total)
+            IQueryable<T> query = db.Set<T>();
+            if (after is Guid id) query = query.Where(e => EF.Property<Guid>(e, "Id").CompareTo(id) > 0);
+            var batch = await query.OrderBy(e => EF.Property<Guid>(e, "Id"))
                 .Take(BatchSize)
                 .ToListAsync(ct);
             if (batch.Count == 0) return total;
@@ -75,6 +74,7 @@ public static class EncryptionKeyRotation
             }
 
             await db.SaveChangesAsync(ct);
+            after = db.Entry(batch[^1]).Property<Guid>("Id").CurrentValue;
             db.ChangeTracker.Clear();
             total += batch.Count;
         }

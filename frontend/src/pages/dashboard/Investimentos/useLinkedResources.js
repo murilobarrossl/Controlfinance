@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { investmentDetail, isThrottled } from "../../../api/investments.js";
+import { linkedResources } from "../../../api/investments.js";
 import { normalizeInvestment } from "../../../utils/importedInvestments.js";
 
 const refsOf = (owner) => [
@@ -13,22 +13,33 @@ export default function useLinkedResources(planning, items, connections, refresh
   const refs = useMemo(() => [planning.reserve, ...planning.goals].flatMap(refsOf), [planning.reserve, planning.goals]);
   const loaded = useMemo(() => new Map(items.map((item) => [item.key, item])), [items]);
   const missing = refs.filter((ref) => !loaded.has(ref.key));
-  const missingKey = missing.map((ref) => ref.key).sort().join("|");
+  const missingKey = [...new Set(missing.map((ref) => ref.key))].sort().join("|");
   const [fetched, setFetched] = useState({});
 
   useEffect(() => {
     if (!missingKey) return;
     const controller = new AbortController();
-    for (const ref of missingKey.split("|").map((key) => ({ key, reserved: key.startsWith("reserved:"), id: key.slice(key.indexOf(":") + 1) }))) {
-      investmentDetail(ref.id, controller.signal, ref.reserved)
-        .then((data) => { if (!controller.signal.aborted) setFetched((prev) => ({ ...prev, [ref.key]: { refreshKey, data } })); })
-        .catch((error) => {
+    async function load() {
+      const keys = missingKey.split("|");
+      for (let i = 0; i < keys.length && !controller.signal.aborted; i += 100) {
+        const batch = keys.slice(i, i + 100);
+        const ids = (kind) => batch.filter((key) => key.startsWith(kind + ":")).map((key) => key.split(":")[1]);
+        try {
+          const data = await linkedResources(ids("investment"), ids("reserved"), controller.signal);
+          const rows = new Map([
+            ...data.investments.map((row) => ["investment:" + row.id, row]),
+            ...data.reserves.map((row) => ["reserved:" + row.id, row]),
+          ]);
+          if (!controller.signal.aborted) setFetched((prev) => ({ ...prev, ...Object.fromEntries(
+            batch.map((key) => [key, { refreshKey, data: rows.get(key) ?? null }])) }));
+        } catch {
           if (controller.signal.aborted) return;
-          // Recusa por limite não quer dizer que o investimento sumiu: mantém o que já estava na tela.
-          setFetched((prev) => ({ ...prev, [ref.key]: isThrottled(error) && prev[ref.key]?.data ? { ...prev[ref.key], refreshKey }
-            : { refreshKey, data: null, throttled: isThrottled(error) } }));
-        });
+          setFetched((prev) => ({ ...prev, ...Object.fromEntries(batch.map((key) => [key,
+            { refreshKey, data: null, failed: true }])) }));
+        }
+      }
     }
+    load();
     return () => controller.abort();
   }, [missingKey, refreshKey]);
 
@@ -38,6 +49,6 @@ export default function useLinkedResources(planning, items, connections, refresh
     const entry = fetched[ref.key];
     if (!entry || entry.refreshKey !== refreshKey) return { ...ref, status: "loading" };
     if (entry.data) return { ...ref, status: "ready", item: normalizeInvestment(entry.data, ref.reserved, connections) };
-    return { ...ref, status: entry.throttled ? "error" : "missing" };
+    return { ...ref, status: entry.failed ? "error" : "missing" };
   }), [loaded, fetched, refreshKey, connections]);
 }

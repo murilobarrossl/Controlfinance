@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Globalization;
 using ControlFinance.API.Controllers.Filters;
 using ControlFinance.API.Data;
@@ -77,7 +79,7 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
             .ThenBy(e => e.Id)
             .ToList();
 
-        var items = ordered.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        var items = ordered.Skip(PageOffset(page, pageSize)).Take(pageSize).ToList();
         return Ok(new EmployeeListDto(items, ordered.Count, page, pageSize));
     }
 
@@ -140,7 +142,10 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
     // Cadastro rápido: só os dados principais. Departamento, vínculo e pagamento ficam para o
     // detalhe do funcionário e nunca recebem valor presumido.
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] EmployeeCoreDto dto, CancellationToken ct)
+    public Task<IActionResult> Create([FromBody] EmployeeCoreDto dto, CancellationToken ct) =>
+        LockedAsync(() => CreateLockedAsync(dto, ct), ct);
+
+    private async Task<IActionResult> CreateLockedAsync(EmployeeCoreDto dto, CancellationToken ct)
     {
         if (await db.Employees.CountAsync(e => e.UserId == UserId, ct) >= MaxEmployeesPerCompany)
             return BadRequest(new { message = $"Limite de {MaxEmployeesPerCompany} funcionários por empresa atingido." });
@@ -206,7 +211,9 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
     {
         if (!await PaymentMethodExistsAsync(id, methodId, ct)) return NotFound();
         return await ChangeAsync(id, (employee) =>
-            ApplyPaymentMethodAsync(employee, employee.PaymentMethods.Single(m => m.Id == methodId), dto, ct), ct);
+            employee.PaymentMethods.FirstOrDefault(m => m.Id == methodId) is { } method
+                ? ApplyPaymentMethodAsync(employee, method, dto, ct)
+                : Task.FromResult<string?>(MethodGone), ct);
     }
 
     [HttpDelete("{id:guid}/payment-methods/{methodId:guid}")]
@@ -215,7 +222,8 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
         if (!await PaymentMethodExistsAsync(id, methodId, ct)) return NotFound();
         return await ChangeAsync(id, (employee) =>
         {
-            var method = employee.PaymentMethods.Single(m => m.Id == methodId);
+            if (employee.PaymentMethods.FirstOrDefault(m => m.Id == methodId) is not { } method)
+                return Task.FromResult<string?>(MethodGone);
             employee.PaymentMethods.Remove(method);
             db.EmployeePaymentMethods.Remove(method);
             return Task.FromResult<string?>(null);
@@ -225,6 +233,7 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
     // A chave completa sai só por esta rota, usada pelo detalhe do funcionário; listagem e
     // exportação de outras telas seguem mascaradas.
     [HttpGet("{id:guid}/payment-methods/{methodId:guid}/pix-key")]
+    [EnableRateLimiting(UserOperationRateLimit.PixKey)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> RevealPixKey(Guid id, Guid methodId, CancellationToken ct)
     {
@@ -290,7 +299,22 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
 
     // Carrega o funcionário da empresa, aplica a alteração e salva. A alteração valida tudo antes de
     // tocar na entidade: um erro nunca deixa metade do cadastro alterada.
-    private async Task<IActionResult> ChangeAsync(Guid id, Func<Employee, Task<string?>> change, CancellationToken ct)
+
+    // Escritas da empresa sob a trava da linha do usuário (mesma de PayrollController): contagem de limite e
+    // inserção ficam atômicas, e duas abas não passam juntas pelo teto nem leem um método já removido.
+    private async Task<IActionResult> LockedAsync(Func<Task<IActionResult>> work, CancellationToken ct)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await DefaultBankAccounts.LockUserAsync(db, UserId, ct);
+        var result = await work();
+        if (result is IStatusCodeActionResult { StatusCode: >= 200 and < 300 }) await tx.CommitAsync(ct);
+        return result;
+    }
+
+    private Task<IActionResult> ChangeAsync(Guid id, Func<Employee, Task<string?>> change, CancellationToken ct) =>
+        LockedAsync(() => ChangeLockedAsync(id, change, ct), ct);
+
+    private async Task<IActionResult> ChangeLockedAsync(Guid id, Func<Employee, Task<string?>> change, CancellationToken ct)
     {
         var employee = await db.Employees.Include(e => e.PaymentMethods)
             .FirstOrDefaultAsync(e => e.Id == id && e.UserId == UserId, ct);
@@ -303,6 +327,9 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
         var conflict = await SaveAsync(ct);
         return conflict is not null ? Conflict(new { message = conflict }) : Ok(ToDetail(employee));
     }
+
+    // Removido por outra requisição entre a checagem e a trava.
+    private const string MethodGone = "Este método de pagamento não existe mais. Atualize a página.";
 
     private Task<bool> PaymentMethodExistsAsync(Guid employeeId, Guid methodId, CancellationToken ct) =>
         db.EmployeePaymentMethods.AnyAsync(m => m.Id == methodId && m.EmployeeId == employeeId && m.UserId == UserId, ct);
@@ -386,7 +413,7 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
             await db.SaveChangesAsync(ct);
             return null;
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (DatabaseFailure.IsUniqueViolation(ex))
         {
             db.ChangeTracker.Clear();
             return "Já existe um funcionário com este CPF ou com esta chave Pix.";

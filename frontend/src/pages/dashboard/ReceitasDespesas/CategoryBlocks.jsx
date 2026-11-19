@@ -1,5 +1,5 @@
 import { transactionTone } from "../../../utils/financialTone.js";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import TransactionDetails from "../../../components/dashboard/TransactionDetails/TransactionDetails.jsx";
 import { ChevronDownIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency, formatDate, formatPercentage } from "../../../utils/financeMath.js";
@@ -21,6 +21,7 @@ function formatSigned(value, negative) {
 export default function CategoryBlocks({ data, tone, expandedNames, onToggle, detailsQuery, categoryHref, onCategoryOpen }) {
   const isExpense = tone === "expense";
 
+  const { search } = useLocation();
   return (
     <ul className={`rd-cats rd-cats--${tone}`}>
       {data.map((item) => {
@@ -76,7 +77,7 @@ export default function CategoryBlocks({ data, tone, expandedNames, onToggle, de
                     return (
                       <li key={t.id} className="rd-tx__item">
                         <span className="rd-tx__desc">
-                          <span className="rd-tx__name">{primary}</span>
+                          <Link to={{ pathname: `lancamentos/${t.id}`, search }} state={{ fromList: true }} className="rd-tx__name">{primary}</Link>
                           {secondary && <span className="rd-tx__secondary">{secondary}</span>}
                         </span>
                         <span className="rd-tx__date">{formatDate(t.dueDate)}</span>

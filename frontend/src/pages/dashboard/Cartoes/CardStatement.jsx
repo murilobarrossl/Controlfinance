@@ -1,18 +1,18 @@
 import { financialTone, transactionTone } from "../../../utils/financialTone.js";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { getTransactionsReport } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
 import BankLogo from "../../../components/ui/BankLogo/BankLogo.jsx";
+import CardTransactionRow from "./CardTransactionRow.jsx";
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
-import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import { ChevronDownIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { formatCurrency, formatDate } from "../../../utils/financeMath.js";
 import { formatMonthLong } from "../../../utils/monthLabel.js";
 import { getMonthsWindow } from "../../../utils/monthlyTrend.js";
 
 const PAGE_SIZE = 25;
-const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
 
 // Agrupa por dia (a lista já vem ordenada por data, da mais recente pra mais antiga), pra o extrato
 // ler como o do app do banco: um cabeçalho por data e as compras daquele dia embaixo.
@@ -73,8 +73,11 @@ function StatementPager({ page, totalPages, totalCount, loading, onPage }) {
 }
 
 export default function CardStatement({ card, getBrand }) {
-  const [monthOffset, setMonthOffset] = useState(0);
-  const [page, setPage] = useState(1);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const saved = location.state?.cardStatement;
+  const [monthOffset, setMonthOffset] = useState(() => saved?.cardId === card.id ? saved.monthOffset : 0);
+  const [page, setPage] = useState(() => saved?.cardId === card.id ? saved.page : 1);
   const [result, setResult] = useState(null);
   // Contagem e totais são do mês inteiro, não da página: guardados por filtro para que trocar de
   // página não esconda o rodapé nem a barra de totais enquanto a página nova carrega.
@@ -94,7 +97,7 @@ export default function CardStatement({ card, getBrand }) {
     const { signal } = controller;
 
     getTransactionsReport(
-      { bankAccountId: card.id, year, month: monthNumber, sortBy: "dueDate", sortDir: "desc", page, pageSize: PAGE_SIZE },
+      { bankAccountId: card.id, year, month: monthNumber, sortBy: "dueDate", sortDir: "desc", page, summary: "totals", pageSize: PAGE_SIZE },
       { signal },
     )
       .then((report) => {
@@ -132,6 +135,14 @@ export default function CardStatement({ card, getBrand }) {
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     sectionRef.current?.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
     headingRef.current?.focus({ preventScroll: true });
+  }
+
+  // Como em Relatórios, o histórico guarda o recorte antes de abrir os detalhes.
+  function rememberView() {
+    navigate(location.pathname + location.search, {
+      replace: true,
+      state: { ...location.state, cardId: card.id, cardStatement: { cardId: card.id, monthOffset, page } },
+    });
   }
 
   const brand = getBrand(card);
@@ -197,31 +208,9 @@ export default function CardStatement({ card, getBrand }) {
                 <section key={day.key} className="cartoes__statement-day" aria-label={formatDate(day.key)}>
                   <h3 className="cartoes__statement-day-title">{formatDayTitle(day.key)}</h3>
                   <ul className="cartoes__rows">
-                    {day.items.map((t) => {
-                      const isIncome = t.type === "Income";
-                      return (
-                        <li key={t.id} className="cartoes__row cartoes__row--statement">
-                          <span className="cartoes__row-info">
-                            <span className="cartoes__row-name" title={t.name}>
-                              {t.name}
-                            </span>
-                            <span className="cartoes__row-meta">
-                              {t.categoryName || "Sem categoria"}
-                              {t.isTransfer && " · Transferência"}
-                            </span>
-                          </span>
-                          <span className="cartoes__row-end">
-                            {t.status !== "Paid" && (
-                              <StatusPill status={t.status} pendingTone="neutral">{STATUS_LABELS[t.status] || t.status}</StatusPill>
-                            )}
-                            <span className={`cartoes__row-amount cartoes__row-amount--${transactionTone(t.type, t.amount, t.isTransfer)}`}>
-                              {isIncome ? "+" : "\u2212"}
-                              {formatCurrency(t.amount)}
-                            </span>
-                          </span>
-                        </li>
-                      );
-                    })}
+                    {day.items.map((t) => (
+                      <CardTransactionRow key={t.id} transaction={t} onOpen={rememberView} />
+                    ))}
                   </ul>
                 </section>
               ))}

@@ -160,12 +160,14 @@ function OwnedAccountProvider({ children }) {
   const changeDefaultAccount = useCallback(async (accountId) => {
     defaultWriteSeq.current += 1;
     let saved = false;
+    // O erro volta para quem chamou (o diálogo o mostra): aviso global aqui duplicaria a mensagem.
+    let failure = null;
     try {
       if (accountId) await setDefaultBankAccount(accountId);
       else await clearDefaultBankAccount();
       saved = true;
     } catch (err) {
-      setNotice({ tone: "error", text: err.message || "Não foi possível alterar a conta padrão." });
+      failure = err.message || "Não foi possível alterar a conta padrão.";
     }
     const seq = ++defaultWriteSeq.current;
     if (saved) setAccounts((prev) => prev.map((account) => ({ ...account, isDefault: account.id === accountId })));
@@ -173,9 +175,9 @@ function OwnedAccountProvider({ children }) {
       const fresh = await getIntegrations();
       if (seq === defaultWriteSeq.current) setAccounts(fresh);
     } catch {
-      return saved;
+      return { saved, error: failure };
     }
-    return saved;
+    return { saved, error: failure };
   }, []);
 
   const dismissNotice = useCallback(() => setNotice(null), []);

@@ -64,7 +64,9 @@ function DashboardLayoutContent() {
   const isInvestmentsTab = path === "/dashboard/investimentos";
   // Só abas do próprio titular: uma rota do outro ambiente cai no 404 sem seletor de conta por cima.
   const inNavigation = tabs.some((tab) => tab.to === path);
-  const showToolbar = inNavigation && (isCardsTab || isInvestmentsTab || ACCOUNT_SCOPED_PATHS.has(path));
+  // O detalhe do mês do Fluxo de caixa também é filtrado pela conta: o seletor mostra qual (só se a aba é do titular).
+  const isCashMonth = /^\/dashboard\/fluxo-de-caixa\/mes\/[^/]+$/.test(path) && tabs.some((tab) => tab.to === "/dashboard/fluxo-de-caixa");
+  const showToolbar = isCashMonth || (inNavigation && (isCardsTab || isInvestmentsTab || ACCOUNT_SCOPED_PATHS.has(path)));
 
   // No desktop a barra fica na linha do título da aba, sobreposta ao topo da página; a largura
   // real dela (que muda com o nome da conta ou o seletor de Cartões) vira o espaço reservado ao

@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { getRecentTransactions } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
+import MerchantLogo from "../../../components/ui/MerchantLogo/MerchantLogo.jsx";
 import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import CreditCardVisual from "../../../components/dashboard/CreditCardVisual/CreditCardVisual.jsx";
 import { formatCurrency } from "../../../utils/financeMath.js";
@@ -24,16 +25,6 @@ function formatShortDate(value) {
     })
     .replace(/\./g, "")
     .replace(/ de /g, " ");
-}
-
-function formatSyncedAt(value) {
-  if (!value || Number.isNaN(new Date(value).getTime())) return null;
-  return new Date(value).toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function RecentTransactions({ card, refreshKey }) {
@@ -91,6 +82,7 @@ function RecentTransactions({ card, refreshKey }) {
               {formatShortDate(t.dueDate)}
             </time>
             <span className="card-overview__info">
+              <MerchantLogo name={t.name} isTransfer={t.isTransfer} />
               <span className="card-overview__name" title={t.name}>
                 {t.name}
               </span>
@@ -116,8 +108,6 @@ function RecentTransactions({ card, refreshKey }) {
 }
 
 export default function CardOverview({ card, cardholderName, onOpenCards, refreshKey }) {
-  const syncedAt = formatSyncedAt(card.connectionLastSyncedAt);
-
   return (
     <div className="card-overview">
       <div className="card-overview__wallet">
@@ -129,7 +119,6 @@ export default function CardOverview({ card, cardholderName, onOpenCards, refres
           <h4 id="card-overview-recent" className="card-overview__title">
             Últimos lançamentos
           </h4>
-          {syncedAt && <span className="card-overview__note">Banco sincronizado em {syncedAt}</span>}
         </header>
         <RecentTransactions card={card} refreshKey={refreshKey} />
         <Link to="/dashboard/cartoes" state={{ cardId: card.id }} className="card-overview__link">

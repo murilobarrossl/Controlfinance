@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router";
-import { getCreditCardsSummary } from "../../../api/creditCards.js";
-import { getTransactions } from "../../../api/transactions.js";
+import { Link, useLocation, useSearchParams } from "react-router";
+import { getCreditCardsOverview } from "../../../api/creditCards.js";
 import { isAbortError } from "../../../api/client.js";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
@@ -16,6 +15,7 @@ import { summarizeCards, groupCards } from "../../../utils/cardGroups.js";
 import { buildUpcoming } from "../../../utils/upcomingDues.js";
 import { formatDueDay, formatDataAge } from "../../../utils/invoiceDue.js";
 import { isInvoiceOverdue } from "../../../utils/cardLimits.js";
+import CardCategories from "./CardCategories.jsx";
 import CardStatement from "./CardStatement.jsx";
 import CardDetail from "./CardDetail.jsx";
 import CardFace from "../../../components/dashboard/CardFace/CardFace.jsx";
@@ -25,7 +25,6 @@ import usePageTitle from "../../../hooks/usePageTitle.js";
 
 const STATUS_LABELS = { Pending: "Pendente", Paid: "Pago", Overdue: "Atrasado" };
 const EMPTY_LIST = [];
-const TRANSACTIONS_CAP = 2000;
 
 function Section({ id, title, aside, children }) {
   return (
@@ -52,7 +51,7 @@ function SummaryMetric({ label, value, warning = false, tone = "default", note }
 }
 
 // Esta página não depende da conta selecionada no seletor lateral (useAccount()): os cartões vêm
-// prontos de getCreditCardsSummary(), independente de qual conta está ativa no Dashboard.
+// prontos de getCreditCardsOverview(), independente de qual conta está ativa no Dashboard.
 export default function Cartoes() {
   usePageTitle("Cartões");
   const { user } = useAuth();
@@ -65,11 +64,13 @@ export default function Cartoes() {
   // O topo e os próximos vencimentos somam sempre todos os cartões; a seleção só abre o painel do
   // cartão e escolhe o extrato.
   const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const showCategories = params.get("visao") === "categorias";
   const [selectedId, setSelectedId] = useState(() => location.state?.cardId ?? null);
   const pendingScrollId = useRef(location.state?.cardId ?? null);
 
   const cards = data?.cards ?? EMPTY_LIST;
-  const pendingTransactions = data?.pendingTransactions ?? EMPTY_LIST;
+  const dueItems = data?.upcoming ?? EMPTY_LIST;
 
   const reload = () => setReloadKey((key) => key + 1);
 
@@ -77,15 +78,11 @@ export default function Cartoes() {
     const controller = new AbortController();
     const { signal } = controller;
 
-    Promise.all([
-      getCreditCardsSummary({ signal }),
-      getTransactions({ status: "Overdue", type: "Expense" }, { signal }),
-      getTransactions({ status: "Pending", type: "Expense" }, { signal }),
-    ])
-      .then(([cardsData, overdueData, pendingData]) => {
+    getCreditCardsOverview({ signal })
+      .then((overview) => {
         if (signal.aborted) return;
         setLoadError("");
-        setData({ cards: cardsData, pendingTransactions: [...overdueData, ...pendingData] });
+        setData(overview);
         setLoadedKey(reloadKey);
       })
       .catch((err) => {
@@ -98,7 +95,7 @@ export default function Cartoes() {
     return () => controller.abort();
   }, [reloadKey]);
 
-  const upcoming = useMemo(() => buildUpcoming(cards, pendingTransactions), [cards, pendingTransactions]);
+  const upcoming = useMemo(() => buildUpcoming(cards, dueItems), [cards, dueItems]);
 
   // Se o cartão escolhido deixou de existir (banco desconectado), a seleção some sozinha.
   const selectedCard = useMemo(() => cards.find((c) => c.id === selectedId) ?? null, [cards, selectedId]);
@@ -109,9 +106,10 @@ export default function Cartoes() {
     const targetId = pendingScrollId.current;
     pendingScrollId.current = null;
     if (selectedCard?.id === targetId) {
-      document.getElementById(`cartao-${targetId}`)?.scrollIntoView({ block: "start" });
+      const target = location.state?.cardStatement?.cardId === targetId ? "cartoes-extrato" : `cartao-${targetId}`;
+      document.getElementById(target)?.scrollIntoView({ block: "start" });
     }
-  }, [loading, selectedCard]);
+  }, [loading, selectedCard, location.state]);
   const { groups } = useMemo(() => groupCards(cards), [cards]);
 
   const connectorsMap = useMemo(() => buildConnectorsMap(connectors), [connectors]);
@@ -199,6 +197,20 @@ export default function Cartoes() {
       <SectionHeading title="Cartões" level={1} />
 
 
+      <div className="cartoes__view-switch">
+        <div className="categorias__period-modes" role="group" aria-label="Visualização dos cartões">
+          {[[false, "Visão geral"], [true, "Categorias"]].map(([categories, label]) => (
+            <button key={label} type="button" aria-pressed={showCategories === categories}
+              className={`categorias__segment${showCategories === categories ? " categorias__segment--active" : ""}`}
+              onClick={() => setParams(categories ? { visao: "categorias" } : {}, { replace: true, state: location.state })}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {showCategories ? (
+        loading ? <Skeleton width="100%" height="12rem" /> : <CardCategories cards={cards} brandOf={brandOf} />
+      ) : <>
       {noCards ? (
         <Card className="cartoes__empty">
           <p className="cartoes__empty-title">Nenhum cartão encontrado</p>
@@ -242,9 +254,6 @@ export default function Cartoes() {
       )}
 
       <Section id="cartoes-vencimentos" title="Próximos vencimentos">
-        {!loading && pendingTransactions.length >= TRANSACTIONS_CAP && (
-          <p className="cartoes__hint">Mostrando os 2.000 lançamentos mais recentes.</p>
-        )}
         {loading ? (
           <Skeleton width="100%" height="6rem" />
         ) : upcoming.length === 0 ? (
@@ -269,6 +278,8 @@ export default function Cartoes() {
           </ul>
         )}
       </Section>
+
+      </>}
 
       {!noCards && (
         <Section

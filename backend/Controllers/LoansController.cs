@@ -8,8 +8,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ControlFinance.API.Controllers;
 
-// Contratos são só leitura e nunca entram em totais: o valor liberado e as parcelas pagas já
-// aparecem pelo extrato da conta. Login CNPJ recebe 404, como as outras rotas só de CPF.
+// Contratos são só leitura e nunca entram em totais: o valor liberado e as parcelas pagas entram
+// pelo extrato da conta, na categoria Empréstimo (TransferDetection.CategoryBucket). Login CNPJ recebe 404, como as outras rotas só de CPF.
 [ApiController]
 [Route("api/loans")]
 [Authorize]

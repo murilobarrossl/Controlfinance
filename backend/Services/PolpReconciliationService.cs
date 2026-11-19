@@ -90,9 +90,9 @@ public class PolpReconciliationService(
                 {
                     p.Id, p.PolpIntegrationId, p.SyncedLocally,
                     NeedsTransactionDetails = p.SyncedLocally && p.TransactionDetailsVersion < PolpSyncService.TransactionDetailsVersion,
-                    AllowsInvestments = db.Users.Any(u => u.Id == p.UserId && u.DocumentType != DocumentTypes.Cnpj),
+                    AllowsInvestments = p.User.DocumentType != DocumentTypes.Cnpj,
                     // Upgrade/startup recovery must not wait for this connection's daily bucket.
-                    NeedsInvestmentRecovery = db.Users.Any(u => u.Id == p.UserId && u.DocumentType != DocumentTypes.Cnpj)
+                    NeedsInvestmentRecovery = p.User.DocumentType != DocumentTypes.Cnpj
                         && (!db.InvestmentSyncStates.Any(s => s.UserId == p.UserId
                         && s.IntegrationId == p.Id && s.Kind == "discovery")
                         || db.InvestmentSyncStates.Any(s => s.UserId == p.UserId && s.IntegrationId == p.Id

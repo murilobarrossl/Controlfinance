@@ -26,8 +26,8 @@ function dayRange(date) {
   return { from: toIsoDate(date), to: toIsoDate(next) };
 }
 
-function yearRange(year) {
-  return { from: `${year}-01-01`, to: `${year + 1}-01-01` };
+export function yearRange(year) {
+  return { from: `${String(year).padStart(4, "0")}-01-01`, to: `${String(year + 1).padStart(4, "0")}-01-01` };
 }
 
 const SHORT_DAY = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -37,7 +37,8 @@ const SHORT_DAY = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "sho
 // currentRange nulo = período encerrado, comparação inteiro × inteiro com os totais exibidos.
 export function compareMonth(monthDate) {
   const { year, month, day } = localToday();
-  const previous = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() - 1, 1));
+  const previous = new Date(monthDate);
+  previous.setUTCMonth(previous.getUTCMonth() - 1, 1);
   const previousName = formatMonthLong(previous);
   if (monthDate.getUTCFullYear() !== year || monthDate.getUTCMonth() !== month) {
     return { currentRange: null, range: monthRange(previous), trendLabel: `vs ${previousName.toLowerCase()}`, currentName: formatMonthLong(monthDate), previousName };
@@ -53,7 +54,7 @@ export function compareMonth(monthDate) {
   };
 }
 
-function compareYear(targetYear) {
+export function compareYear(targetYear) {
   const { year, month, day } = localToday();
   if (targetYear !== year) {
     return { currentRange: null, range: yearRange(targetYear - 1), trendLabel: "vs ano anterior", currentName: String(targetYear), previousName: String(targetYear - 1) };

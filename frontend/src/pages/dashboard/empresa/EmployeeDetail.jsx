@@ -190,6 +190,19 @@ export default function EmployeeDetail() {
           <Field label="Salário bruto mensal" tone="money">
             {formatCurrency(employee.grossSalary)}
           </Field>
+          <Field
+            label="Pago no mês (identificado pelo banco)"
+            tone="money"
+            muted={paymentMonth.loaded && paymentMonth.state?.bankPaidAmount == null}
+          >
+            {!paymentMonth.loaded
+              ? <Skeleton width="6rem" />
+              : !paymentMonth.state
+              ? "Indisponível"
+              : paymentMonth.state.bankPaidAmount != null
+              ? formatCurrency(paymentMonth.state.bankPaidAmount)
+              : "Nenhum pagamento identificado"}
+          </Field>
         </dl>
       </Section>
 

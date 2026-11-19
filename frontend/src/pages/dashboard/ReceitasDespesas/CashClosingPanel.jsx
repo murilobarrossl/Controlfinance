@@ -130,7 +130,7 @@ export default function CashClosingPanel({ date, scopeQuery, scopeKey, refreshKe
       .then((days) => setAdjustedDays({ key: listKey, days }))
       .catch((err) => {
         if (isAbortError(err) || controller.signal.aborted) return;
-        setAdjustedDays({ key: listKey, days: [] });
+        setAdjustedDays({ key: listKey, days: [], failed: true });
       });
     return () => controller.abort();
   }, [listKey, scopeQuery]);
@@ -141,6 +141,7 @@ export default function CashClosingPanel({ date, scopeQuery, scopeKey, refreshKe
   const data = current?.data;
   const closing = data?.closing;
   const otherAdjusted = adjustedDays?.key === listKey ? adjustedDays.days.filter((d) => d.day !== date) : [];
+  const adjustedFailed = adjustedDays?.key === listKey && adjustedDays.failed;
 
   async function run(action) {
     setBusy(true);
@@ -235,6 +236,9 @@ export default function CashClosingPanel({ date, scopeQuery, scopeKey, refreshKe
         <div className="cash-close__notes">
           <BalanceGap data={data.reconciliation} />
           {closing && data.adjustments.length > 0 && <Adjustments items={data.adjustments} />}
+          {adjustedFailed && (
+            <p className="receitas-despesas__error">Não foi possível carregar os dias fechados com ajustes.</p>
+          )}
           {otherAdjusted.length > 0 && (
             <div className="cash-close__adjusted">
               <span>Dias fechados com ajustes</span>

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import useModalBehavior from "../../../hooks/useModalBehavior.js";
 import { CloseIcon } from "../icons/FeatureIcons.jsx";
 import "./FormDialog.css";
@@ -22,12 +22,15 @@ export default function FormDialog({
   children,
 }) {
   const panelRef = useRef(null);
-  useModalBehavior(open, onClose, panelRef);
+  // Durante o envio, fundo e Esc não fecham (os botões já ficam desabilitados): fechar no meio esconderia o
+  // resultado ou o erro de uma gravação que continua.
+  const close = useCallback(() => { if (!submitting) onClose?.(); }, [submitting, onClose]);
+  useModalBehavior(open, close, panelRef);
 
   if (!open) return null;
 
   return (
-    <div className="form-dialog-overlay" onClick={onClose}>
+    <div className="form-dialog-overlay" onClick={close}>
       <div
         ref={panelRef}
         className={`form-dialog${showCloseButton ? ` form-dialog--closable form-dialog--close-${closeButtonPlacement}` : ""}`}

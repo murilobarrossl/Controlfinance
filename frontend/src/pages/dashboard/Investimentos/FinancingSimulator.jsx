@@ -12,7 +12,8 @@ function formatAxisCurrency(value) {
   return `R$ ${(value / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`;
 }
 
-const EMPTY_FORM = { totalValue: "", downPayment: "0", monthlyRate: "1.5", installmentsCount: "36" };
+// Sem taxa pré-preenchida: a taxa é a do contrato do usuário, e um valor sugerido viraria parcela inventada.
+const EMPTY_FORM = { totalValue: "", downPayment: "0", monthlyRate: "", installmentsCount: "36" };
 const COMPARE_TERMS = [12, 24, 36, 48, 60];
 
 // Simulador de financiamento/consórcio pela Tabela Price, calculado enquanto o usuário digita.
@@ -26,12 +27,14 @@ export default function FinancingSimulator() {
 
   const totalValue = Math.max(0, Number(form.totalValue) || 0);
   const downPayment = Math.max(0, Number(form.downPayment) || 0);
+  const rateInformed = String(form.monthlyRate).trim() !== "";
   const monthlyRate = Math.max(0, (Number(form.monthlyRate) || 0) / 100);
   const installmentsCount = Math.min(480, Math.max(0, Math.round(Number(form.installmentsCount) || 0)));
   const financedAmount = Math.max(totalValue - downPayment, 0);
   const downPaymentTooBig = totalValue > 0 && downPayment >= totalValue;
 
   const analysis = useMemo(() => {
+    if (!rateInformed) return null;
     const schedule = buildPriceSchedule(financedAmount, monthlyRate, installmentsCount);
     if (schedule.length === 0) return null;
 
@@ -61,7 +64,7 @@ export default function FinancingSimulator() {
       terms: compareTerms(financedAmount, monthlyRate, terms),
       chartData,
     };
-  }, [financedAmount, monthlyRate, installmentsCount, narrowChart]);
+  }, [rateInformed, financedAmount, monthlyRate, installmentsCount, narrowChart]);
 
   return (
     <section className="investimentos__section" aria-labelledby="investimentos-financing-title">

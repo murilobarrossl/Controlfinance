@@ -15,12 +15,17 @@ public static class CreditCardSummaryBuilder
     {
         var accounts = await db.BankAccounts
             .Where(a => a.UserId == userId && a.IsActive)
-            .OrderBy(a => a.CreatedAt)
+            .OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
+            .Select(a => new { a.Id, a.PolpAccountType, a.PolpAccountSubtype, a.PolpIntegrationId,
+                a.Name, a.Brand, a.Number, a.CreditLimit, a.UsedLimit, a.ClosingDay, a.DueDay,
+                a.CurrentInvoiceAmount, a.InvoiceDueDate, a.ProductType, a.PolpOriginalName, a.AvailableLimit })
             .ToListAsync(ct);
-        var cardAccounts = accounts.Where(CreditCardAccountDetector.LooksLikeCreditCard).ToList();
+        var cardAccounts = accounts.Where(a => CreditCardAccountDetector.LooksLikeCreditCard(a.PolpAccountType, a.PolpAccountSubtype)).ToList();
+        if (cardAccounts.Count == 0) return [];
+        var consents = cardAccounts.Where(a => a.PolpIntegrationId.HasValue).Select(a => a.PolpIntegrationId!.Value).Distinct().ToArray();
 
         var connections = (await db.PolpIntegrations
-                .Where(p => p.UserId == userId)
+                .Where(p => p.UserId == userId && consents.Contains(p.PolpIntegrationId))
                 .Select(p => new { p.Id, p.PolpIntegrationId, p.InstitutionId, p.InstitutionName, p.LastSyncedAt })
                 .ToListAsync(ct))
             .GroupBy(p => p.PolpIntegrationId)

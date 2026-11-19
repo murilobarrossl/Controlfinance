@@ -10,3 +10,6 @@ export function getRecurringExpenses({ year, month, bankAccountId, page, search 
 
 export const getRecurringExpense = (id, { signal } = {}) =>
   apiFetch(`/recurring-expenses/${encodeURIComponent(id)}`, { signal });
+
+export const getUpcomingRecurring = (bankAccountId, { signal }) =>
+  apiFetch(`/recurring-expenses/upcoming${bankAccountId ? "?" + new URLSearchParams({ bankAccountId }) : ""}`, { signal });

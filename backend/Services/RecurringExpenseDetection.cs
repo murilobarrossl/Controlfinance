@@ -118,7 +118,7 @@ public static class RecurringExpenseDetection
                 }
             }
         }
-        return result.OrderByDescending(g => g.Expense.LastChargeDate).ThenBy(g => g.Expense.Name).ToList();
+        return result.OrderByDescending(g => g.Expense.LastChargeDate).ThenBy(g => g.Expense.Name).ThenBy(g => g.Expense.Id, StringComparer.Ordinal).ToList();
     }
 
     private static string? AccountKey(RecurringChargeRow t)

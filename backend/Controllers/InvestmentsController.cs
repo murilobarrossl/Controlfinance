@@ -24,6 +24,40 @@ public class InvestmentsController(AppDbContext db, TimeProvider clock) : ApiCon
     private IQueryable<ImportedReservedBalance> OwnedReserves => db.ImportedReservedBalances.AsNoTracking().Where(x => x.UserId == UserId
         && db.PolpIntegrations.Any(p => p.Id == x.IntegrationId && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus && !PolpAuthorizationEnd.EndedStatuses.Contains(p.Status)));
 
+    [HttpGet("dashboard")]
+    public async Task<IActionResult> Dashboard([FromQuery] Guid? integrationId, CancellationToken ct)
+    {
+        if (await db.Users.AnyAsync(u => u.Id == UserId && u.DocumentType == DocumentTypes.Cnpj, ct)) return Forbid();
+        const int limit = 3;
+        var assets = Owned.Where(a => integrationId == null || a.IntegrationId == integrationId);
+        var institutions = db.PolpIntegrations.AsNoTracking().Where(p => p.UserId == UserId);
+        var rows = await (from a in assets
+            join bank in institutions on a.IntegrationId equals bank.Id
+            join pos in db.InvestmentPositions on a.Id equals pos.InvestmentId into positions
+            from pos in positions.DefaultIfEmpty()
+            orderby a.LastObservedAt descending, a.Id
+            select new { a.Id, a.Name, a.Family, a.ProductType, a.IdentityJson, bank.InstitutionName,
+                Values = pos == null ? null : pos.ValuesJson, Availability = pos == null ? null : pos.AvailabilityJson,
+                ReferenceAt = pos == null ? null : pos.ReferenceAt })
+            .Take(limit).ToListAsync(ct);
+        var products = new List<object>(limit);
+        products.AddRange(rows.Select(a => new { a.Id, a.Name, a.Family, a.ProductType, a.InstitutionName,
+            reserved = false, identity = new { values = Json(a.IdentityJson) },
+            position = a.Values == null ? null : new { a.ReferenceAt, document = Document(a.Values, a.Availability!) } }));
+        if (products.Count < limit)
+        {
+            var reserves = await (from r in OwnedReserves
+                join bank in institutions on r.IntegrationId equals bank.Id
+                where integrationId == null || r.IntegrationId == integrationId
+                orderby r.LastObservedAt descending, r.Id
+                select new { r.Id, r.Name, r.ValuesJson, r.AvailabilityJson, bank.InstitutionName })
+                .Take(limit - products.Count).ToListAsync(ct);
+            products.AddRange(reserves.Select(r => new { r.Id, r.Name, r.InstitutionName, reserved = true,
+                document = Document(r.ValuesJson, r.AvailabilityJson) }));
+        }
+        return Ok(products);
+    }
+
     [HttpGet("connections")]
     public async Task<IActionResult> Connections([FromQuery] string? cursor, CancellationToken ct)
     {
@@ -31,7 +65,9 @@ public class InvestmentsController(AppDbContext db, TimeProvider clock) : ApiCon
         var query = db.PolpIntegrations.AsNoTracking().Where(p => p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus);
         if (after is not null) query = query.Where(p => p.CreatedAt > after.At || (p.CreatedAt == after.At && p.Id.CompareTo(after.Id) > 0));
         var roots = await query.OrderBy(p => p.CreatedAt).ThenBy(p => p.Id).Take(101).ToListAsync(ct);
-        var page = roots.Take(100).ToList(); var ids = page.Select(p => p.Id).ToArray();
+        if (roots.Count == 0) return Ok(new { data = Array.Empty<object>(), nextCursor = (string?)null });
+        var page = roots.Take(100).ToList();
+        var ids = page.Select(p => p.Id).ToArray();
         var remoteIds = page.Select(p => p.PolpIntegrationId).ToArray();
         var auths = await db.PolpInvestmentAuthorizations.AsNoTracking().Where(a => a.IntegrationId != null && ids.Contains(a.IntegrationId.Value))
             .Select(a => new { a.IntegrationId, a.PolpConsentId, a.State, a.ProviderStatus, a.ProductsJson, a.AuthorizationUrlExpiresAt }).ToListAsync(ct);
@@ -145,23 +181,45 @@ public class InvestmentsController(AppDbContext db, TimeProvider clock) : ApiCon
         }
         if (after is not null) query = query.Where(x => x.FirstObservedAt > after.At || (x.FirstObservedAt == after.At && x.Id.CompareTo(after.Id) > 0));
         var rows = await query.OrderBy(x => x.FirstObservedAt).ThenBy(x => x.Id).Take(limit + 1).ToListAsync(ct);
-        var page = rows.Take(limit).ToList(); var ids = page.Select(x => x.Id).ToArray();
+        var page = rows.Take(limit).ToList();
+        return Ok(new
+        {
+            data = await CatalogItemsAsync(page, ct),
+            nextCursor = rows.Count > limit ? Cursor(page[^1].FirstObservedAt, page[^1].Id) : null,
+            numericEncoding = "exact-base10-strings"
+        });
+    }
+
+    private async Task<object[]> CatalogItemsAsync(List<ImportedInvestment> page, CancellationToken ct)
+    {
+        if (page.Count == 0) return [];
+        var ids = page.Select(x => x.Id).ToArray();
         var positions = await db.InvestmentPositions.AsNoTracking().Where(x => ids.Contains(x.InvestmentId)).ToDictionaryAsync(x => x.InvestmentId, ct);
         var integrations = page.Select(x => x.IntegrationId).Distinct().ToArray();
         var catalogs = await db.InvestmentSyncStates.AsNoTracking().Where(x => x.UserId == UserId
             && integrations.Contains(x.IntegrationId) && x.Kind == "list")
             .Select(x => new { x.IntegrationId, x.SourceConsentId, x.Family, x.LastFullSuccessAt }).ToListAsync(ct);
         var lastScans = catalogs.ToDictionary(x => (x.IntegrationId, x.SourceConsentId, x.Family), x => x.LastFullSuccessAt);
-        return Ok(new
-        {
-            data = page.Select(x => new { x.Id, x.IntegrationId, x.SourceConsentId, x.Family, x.ExternalId, x.Name, x.ProductType,
-                identity = Document(x.IdentityJson, x.IdentityAvailabilityJson),
-                catalogPresence = Presence(x.LastObservedAt, lastScans.GetValueOrDefault((x.IntegrationId, x.SourceConsentId, x.Family))),
-                position = positions.TryGetValue(x.Id, out var p) ? Position(p) : null,
-                x.FirstObservedAt, x.LastObservedAt }),
-            nextCursor = rows.Count > limit ? Cursor(page[^1].FirstObservedAt, page[^1].Id) : null,
-            numericEncoding = "exact-base10-strings"
-        });
+        return page.Select(x => new { x.Id, x.IntegrationId, x.SourceConsentId, x.Family, x.ExternalId, x.Name, x.ProductType,
+            identity = Document(x.IdentityJson, x.IdentityAvailabilityJson),
+            catalogPresence = Presence(x.LastObservedAt, lastScans.GetValueOrDefault((x.IntegrationId, x.SourceConsentId, x.Family))),
+            position = positions.TryGetValue(x.Id, out var p) ? Position(p) : null,
+            x.FirstObservedAt, x.LastObservedAt }).ToArray();
+    }
+
+    public sealed record ResourceIds(Guid[] Investments, Guid[] Reserves);
+
+    [HttpPost("linked-resources")]
+    public async Task<IActionResult> LinkedResources([FromBody] ResourceIds requested, CancellationToken ct)
+    {
+        if (requested.Investments == null || requested.Reserves == null
+            || (long)requested.Investments.Length + requested.Reserves.Length > 100) return BadRequest();
+        if (!await InvestmentHolder.AllowsAsync(db, UserId, ct)) return Forbid();
+        var assets = requested.Investments.Length == 0 ? new List<ImportedInvestment>()
+            : await Owned.Where(x => requested.Investments.Contains(x.Id)).ToListAsync(ct);
+        var reserves = requested.Reserves.Length == 0 ? new List<ImportedReservedBalance>()
+            : await OwnedReserves.Where(x => requested.Reserves.Contains(x.Id)).ToListAsync(ct);
+        return Ok(new { investments = await CatalogItemsAsync(assets, ct), reserves = reserves.Select(ReserveItem) });
     }
 
     [HttpGet("{id:guid}")]
@@ -240,11 +298,13 @@ public class InvestmentsController(AppDbContext db, TimeProvider clock) : ApiCon
         if (after is not null) query = query.Where(x => x.FirstObservedAt > after.At || (x.FirstObservedAt == after.At && x.Id.CompareTo(after.Id) > 0));
         var rows = await query.OrderBy(x => x.FirstObservedAt).ThenBy(x => x.Id).Take(limit + 1).ToListAsync(ct);
         var page = rows.Take(limit).ToList();
-        return Ok(new { data = page.Select(x => new { x.Id, x.IntegrationId, x.BankAccountId, x.SourceConsentId, x.ExternalId,
-                x.ReservedIdentification, x.Name, x.ProviderUpdatedAt, x.FirstObservedAt, x.LastObservedAt,
-                document = Document(x.ValuesJson, x.AvailabilityJson, x.ProvenanceJson) }),
+        return Ok(new { data = page.Select(ReserveItem),
             nextCursor = rows.Count > limit ? Cursor(page[^1].FirstObservedAt, page[^1].Id) : null, numericEncoding = "exact-base10-strings" });
     }
+
+    private static object ReserveItem(ImportedReservedBalance x) => new { x.Id, x.IntegrationId, x.BankAccountId, x.SourceConsentId, x.ExternalId,
+                x.ReservedIdentification, x.Name, x.ProviderUpdatedAt, x.FirstObservedAt, x.LastObservedAt,
+                document = Document(x.ValuesJson, x.AvailabilityJson, x.ProvenanceJson) };
 
     [HttpGet("reserved-balances/{id:guid}/positions")]
     public async Task<IActionResult> ReservePositions(Guid id, [FromQuery] string? cursor, [FromQuery] int limit = 50, CancellationToken ct = default)

@@ -17,25 +17,12 @@ namespace ControlFinance.API.Controllers;
 [BusinessHolderOnly]
 public class PayrollController(AppDbContext db) : ApiControllerBase
 {
-    // Funcionário cadastrado antes dos custos adicionais ganha os gastos iniciais na primeira abertura, sob a
-    // trava do usuário e com a marca relida: duas abas abertas juntas nunca criam os gastos duas vezes.
+    // Só leitura. Os gastos iniciais são criados junto com o funcionário (EmployeeCostDefaults.Seed no cadastro).
     [HttpGet("employees/{employeeId:guid}")]
     public async Task<IActionResult> GetEmployee(Guid employeeId, CancellationToken ct)
     {
-        var seeded = await db.Employees.Where(e => e.Id == employeeId && e.UserId == UserId)
-            .Select(e => (bool?)e.CostsSeeded).FirstOrDefaultAsync(ct);
-        if (seeded is null) return NotFound();
-        if (seeded.Value) return Ok(await EmployeeViewAsync(employeeId, ct));
-        return await WriteAsync(async () =>
-        {
-            var employee = await db.Employees.FirstAsync(e => e.Id == employeeId && e.UserId == UserId, ct);
-            if (!employee.CostsSeeded)
-            {
-                EmployeeCostDefaults.Seed(db, employee);
-                await db.SaveChangesAsync(ct);
-            }
-            return Ok(await EmployeeViewAsync(employeeId, ct));
-        }, ct);
+        if (!await db.Employees.AnyAsync(e => e.Id == employeeId && e.UserId == UserId, ct)) return NotFound();
+        return Ok(await EmployeeViewAsync(employeeId, ct));
     }
 
     [HttpPost("employees/{employeeId:guid}/costs")]
@@ -97,7 +84,7 @@ public class PayrollController(AppDbContext db) : ApiControllerBase
         {
             result = await work();
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (DatabaseFailure.IsUniqueViolation(ex))
         {
             db.ChangeTracker.Clear();
             return Conflict(new { message = "Já existe um registro igual. Atualize a página." });

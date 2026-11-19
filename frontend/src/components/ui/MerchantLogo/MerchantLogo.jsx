@@ -13,27 +13,33 @@ function NeutralGlyph({ transfer }) {
   );
 }
 
-export default function MerchantLogo({ name, isTransfer = false }) {
+export default function MerchantLogo({ name, isTransfer = false, recurring = false }) {
   const brand = merchantBrand(name, { isTransfer });
 
+  const base = recurring ? "recurring-logo" : "merchant-logo";
   if (!brand) {
     return (
-      <span className="merchant-logo merchant-logo--neutral" aria-hidden="true">
+      <span className={recurring ? "recurring-logo recurring-logo--glyph recurring-logo--neutral" : "merchant-logo merchant-logo--neutral"} aria-hidden="true">
         <NeutralGlyph transfer={isTransfer} />
       </span>
     );
   }
 
+  const crop = recurring && brand.recurringViewBox;
   return (
     <span
-      className={`merchant-logo${brand.wide ? " merchant-logo--wide" : ""}`}
+      className={`${base}${crop || brand.wide ? ` ${base}--wide` : ""}`}
       style={brand.color ? { color: brand.color } : undefined}
       role="img"
       aria-label={brand.title}
       title={brand.title}
     >
-      <svg viewBox={brand.viewBox ?? "0 0 24 24"} fill="currentColor" aria-hidden="true">
-        <path d={brand.path} fillRule={brand.fillRule} />
+      <svg viewBox={crop || brand.viewBox || "0 0 24 24"} fill="currentColor" aria-hidden="true">
+        {brand.paths ? (
+          <g transform={brand.transform}>
+            {brand.paths.map((p, i) => <path key={i} d={p.d} fill={p.fill} fillRule={p.fillRule} />)}
+          </g>
+        ) : <path d={brand.path} fillRule={brand.fillRule} />}
       </svg>
     </span>
   );

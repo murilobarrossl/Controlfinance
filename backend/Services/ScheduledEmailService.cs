@@ -109,34 +109,51 @@ public class ScheduledEmailService(IServiceScopeFactory scopeFactory, IJobLock j
                      && (u.LastMonthlySummaryMonth == null || u.LastMonthlySummaryMonth < latestPossibleMonth))
             .ToListAsync(ct);
 
-        foreach (var user in users)
+        var eligible = users.Select(user =>
         {
-            var localNow = UserClock.NowIn(user.TimeZone, utcNow);
-            if (localNow.Day == 1 && localNow.Hour < SendFromLocalHour) continue;
+            var local = UserClock.NowIn(user.TimeZone, utcNow);
+            var month = FirstOfMonth(DateOnly.FromDateTime(local)).AddMonths(-1);
+            return (User: user, Month: month, Ready: local.Day != 1 || local.Hour >= SendFromLocalHour);
+        }).Where(x => x.Ready && !(LastSummarizedMonth(x.User) >= x.Month));
 
-            var currentMonth = FirstOfMonth(DateOnly.FromDateTime(localNow));
-            var previousMonth = currentMonth.AddMonths(-1);
-            if (LastSummarizedMonth(user) >= previousMonth) continue;
-
-            var start = previousMonth.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-            var end = currentMonth.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-
-            try
+        foreach (var month in eligible.GroupBy(x => x.Month))
+        {
+            var start = month.Key.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            var end = start.AddMonths(1);
+            foreach (var batch in month.Chunk(200))
             {
-                // Mês sem nenhuma transação não gera aviso, mas fica marcado como tratado: senão uma
-                // importação atrasada no meio do mês seguinte dispararia "seu mês fechou" fora de hora.
-                if (await db.Transactions.AnyAsync(t => t.UserId == user.Id && t.DueDate >= start && t.DueDate < end
-                        && (t.BankAccount == null || t.BankAccount.IsActive), ct))
+                var ids = batch.Select(x => x.User.Id).ToArray();
+                HashSet<Guid> withActivity;
+                try
                 {
-                    await email.SendMonthlyNoticeAsync(user.Email);
-                    user.LastMonthlySummarySentAt = utcNow.UtcDateTime;
+                    // EXISTS pode encerrar no primeiro movimento do titular naquele mês.
+                    withActivity = (await db.Users.Where(u => ids.Contains(u.Id)
+                            && db.Transactions.Any(t => t.UserId == u.Id && t.DueDate >= start && t.DueDate < end
+                                && (t.BankAccount == null || t.BankAccount.IsActive)))
+                        .Select(u => u.Id).ToListAsync(ct)).ToHashSet();
                 }
-                user.LastMonthlySummaryMonth = previousMonth;
-                await db.SaveChangesAsync(ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning("Falha ao enviar aviso mensal pro usuário {UserId} ({ErrorType})", user.Id, ex.GetType().Name);
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    logger.LogWarning("Falha ao consultar movimentos para avisos mensais ({ErrorType}).", ex.GetType().Name);
+                    continue;
+                }
+                foreach (var (user, _, _) in batch)
+                {
+                    try
+                    {
+                        if (withActivity.Contains(user.Id))
+                        {
+                            await email.SendMonthlyNoticeAsync(user.Email);
+                            user.LastMonthlySummarySentAt = utcNow.UtcDateTime;
+                        }
+                        user.LastMonthlySummaryMonth = month.Key;
+                        await db.SaveChangesAsync(ct);
+                    }
+                    catch (Exception ex) when (!ct.IsCancellationRequested)
+                    {
+                        logger.LogWarning("Falha ao enviar aviso mensal pro usuário {UserId} ({ErrorType})", user.Id, ex.GetType().Name);
+                    }
+                }
             }
         }
     }

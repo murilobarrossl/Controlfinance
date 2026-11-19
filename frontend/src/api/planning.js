@@ -39,4 +39,3 @@ export const setInvestmentRate = (accountId, { kind, value, incomeTaxExempt }) =
 export const deleteInvestmentRate = (accountId) =>
   apiFetch(`/planning/investments/${accountId}/rate`, { method: "DELETE" });
 
-export const getReferenceRates = ({ signal } = {}) => apiFetch("/market/reference-rates", { signal });

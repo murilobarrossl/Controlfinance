@@ -1,0 +1,80 @@
+.month-navigator {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 1rem;
+  max-width: 100%;
+}
+
+.month-navigator__group {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+}
+
+.month-navigator__value {
+  min-width: 4ch;
+  padding-inline: 0.25rem;
+  text-align: center;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.month-navigator__value[data-unit="mes"] {
+  min-width: 5.5em;
+}
+
+.month-navigator__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.625rem;
+}
+
+.month-navigator__modes {
+  display: inline-flex;
+  padding: 0.125rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.month-navigator .month-navigator__modes button {
+  width: auto;
+  padding-inline: 0.75rem;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+.month-navigator .month-navigator__modes button[aria-pressed="true"] {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
+  font-weight: 600;
+}
+
+.month-navigator button {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.month-navigator button svg { transform: rotate(90deg); }
+.month-navigator button:last-child svg { transform: rotate(-90deg); }
+.month-navigator button:hover:enabled { background: var(--color-surface-hover); }
+.month-navigator button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.month-navigator button:disabled { opacity: 0.35; cursor: default; }
+
+@media (pointer: coarse) {
+  .month-navigator button {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}

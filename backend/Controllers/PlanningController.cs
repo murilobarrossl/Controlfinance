@@ -148,7 +148,7 @@ public class PlanningController(AppDbContext db) : ApiControllerBase
         {
             await db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (DatabaseFailure.IsUniqueViolation(ex))
         {
             // Duas abas importando ao mesmo tempo: a outra já gravou. Nada se perde, o cliente só
             // apaga do navegador o que aparece como guardado na resposta.
@@ -204,7 +204,7 @@ public class PlanningController(AppDbContext db) : ApiControllerBase
         {
             await db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (DatabaseFailure.IsUniqueViolation(ex))
         {
             // O índice único por recurso barrou duas abas vinculando o mesmo investimento ao mesmo tempo.
             return Conflict(new { message = "Este investimento acabou de ser vinculado em outro lugar. Atualize a página." });

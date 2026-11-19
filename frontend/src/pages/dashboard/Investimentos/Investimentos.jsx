@@ -134,7 +134,7 @@ export default function Investimentos() {
     return [...investmentData.map((row) => normalizeInvestment(row, false, allConnections)), ...reserves];
   }, [investmentData, reservedData, allConnections, accounts]);
   const groups = Object.values(MODALITIES).map((modality) => ({ modality, items: items.filter((item) => item.modality.key === modality.key) })).filter((group) => group.items.length);
-  const resolve = useLinkedResources(planning, items, allConnections, `${dataRefreshKey}:${catalog.refreshSequence}`);
+  const resolve = useLinkedResources(planning, items, allConnections, `${owner}:${dataRefreshKey}:${catalog.refreshSequence}`);
   const reserveEntries = resolve(planning.reserve);
   const goalEntries = Object.fromEntries(planning.goals.map((goal) => [goal.id, resolve(goal)]));
   const reserveSummary = summarize(reserveEntries);
