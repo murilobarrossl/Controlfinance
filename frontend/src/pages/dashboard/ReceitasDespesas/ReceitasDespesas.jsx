@@ -57,16 +57,18 @@ export default function ReceitasDespesas() {
     Promise.all([
       getTransactionAggregates({ ...scopeQuery, ...current.range }, { signal }),
       getTransactionAggregates({ ...scopeQuery, ...comparison.range }, { signal }),
+      comparison.currentRange ? getTransactionAggregates({ ...scopeQuery, ...comparison.currentRange }, { signal }) : null,
     ])
-      .then(([currentTotals, previousTotals]) => {
+      .then(([currentTotals, previousTotals, comparedTotals]) => {
         if (signal.aborted) return;
-        setAggregateResult({ key: aggregateKey, current: currentTotals, previous: previousTotals, error: "" });
+        setAggregateResult({ key: aggregateKey, current: currentTotals, compared: comparedTotals ?? currentTotals, previous: previousTotals, error: "" });
       })
       .catch((err) => {
         if (signal.aborted || isAbortError(err)) return;
         setAggregateResult({
           key: aggregateKey,
           current: null,
+          compared: null,
           previous: null,
           error: err.message || "Não foi possível carregar as transações.",
         });
@@ -77,6 +79,7 @@ export default function ReceitasDespesas() {
 
   const totals = aggregateResult?.key === aggregateKey ? aggregateResult.current : null;
   const previous = aggregateResult?.key === aggregateKey ? aggregateResult.previous : null;
+  const compared = aggregateResult?.key === aggregateKey ? aggregateResult.compared : null;
   const error =
     accountsStatus === "error"
       ? "Não foi possível carregar as contas."
@@ -88,8 +91,8 @@ export default function ReceitasDespesas() {
   const incomeBreakdown = useMemo(() => breakdownFromAggregates(totals?.categories, "Income"), [totals]);
   const expenseBreakdown = useMemo(() => breakdownFromAggregates(totals?.categories, "Expense"), [totals]);
 
-  const incomeTrend = computeTrend(totalIncome, previous?.totalIncome, { label: comparison.trendLabel });
-  const expenseTrend = computeTrend(totalExpense, previous?.totalExpense, { invertTone: true, label: comparison.trendLabel });
+  const incomeTrend = computeTrend(compared?.totalIncome, previous?.totalIncome, { label: comparison.trendLabel });
+  const expenseTrend = computeTrend(compared?.totalExpense, previous?.totalExpense, { invertTone: true, label: comparison.trendLabel });
 
   function toggleIn(setter) {
     return (name) =>

@@ -64,10 +64,18 @@ public class AuthController : ApiControllerBase
     [HttpPost("login")]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto dto)
     {
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var (success, error, data) = await _authService.LoginAsync(dto, ipAddress);
+        var (success, error, data, lockedFor) = await _authService.LoginAsync(dto, ipAddress);
+
+        if (lockedFor is { } remaining)
+        {
+            var seconds = Math.Max(1, (int)Math.Ceiling(remaining.TotalSeconds));
+            Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return StatusCode(StatusCodes.Status429TooManyRequests, new { message = error, retryAfterSeconds = seconds });
+        }
 
         if (!success)
             return Unauthorized(new { message = error });

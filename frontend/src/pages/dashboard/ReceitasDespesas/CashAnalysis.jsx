@@ -20,10 +20,6 @@ const GRANULARITIES = [
 const compactCurrency = (value) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", notation: "compact", maximumFractionDigits: 1 });
 
-function previousLabel(granularity, offset) {
-  if (granularity === "month") return formatMonthLong(getMonthsWindow(1, offset + 1)[0]);
-  return String(new Date().getFullYear() - offset - 1);
-}
 
 function variation(current, previous) {
   if (typeof current !== "number" || typeof previous !== "number" || previous === 0) return "—";
@@ -53,7 +49,7 @@ export default function CashAnalysis({ scopeQuery, scopeKey, refreshKey }) {
     const controller = new AbortController();
     const { signal } = controller;
     Promise.all([
-      getTransactionAggregates({ ...scopeQuery, ...current.range }, { signal }),
+      getTransactionAggregates({ ...scopeQuery, ...(comparison.currentRange ?? current.range) }, { signal }),
       getTransactionAggregates({ ...scopeQuery, ...comparison.range }, { signal }),
     ])
       .then(([now, before]) => setResult({ key, now, before, error: "" }))
@@ -68,8 +64,8 @@ export default function CashAnalysis({ scopeQuery, scopeKey, refreshKey }) {
   const loading = !ready;
   const now = ready?.now;
   const before = ready?.before;
-  const currentName = current.label;
-  const previousName = previousLabel(granularity, offset);
+  const currentName = comparison.currentName;
+  const previousName = comparison.previousName;
 
   const rows = now && before ? [
     { key: "income", label: "Receitas", current: now.totalIncome, previous: before.totalIncome },
@@ -105,7 +101,7 @@ export default function CashAnalysis({ scopeQuery, scopeKey, refreshKey }) {
             ))}
           </div>
           <RangePicker
-            label={currentName}
+            label={current.label}
             onPrev={() => setOffset((prev) => prev + 1)}
             onNext={() => setOffset((prev) => Math.max(0, prev - 1))}
             nextDisabled={offset === 0}

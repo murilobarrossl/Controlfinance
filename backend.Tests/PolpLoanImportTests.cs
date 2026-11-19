@@ -23,6 +23,20 @@ public class PolpLoanImportTests
                 : Task.FromResult(Loans.ToList());
         }
 
+        // Consulta individual: contrato fora de Loans responde 404 (removido na Polp), a menos que esteja em
+        // StillExisting (lista transitória incompleta) ou que SingleFailure simule uma falha do provedor.
+        public List<PolpLoanDto> StillExisting { get; set; } = [];
+        public HttpStatusCode? SingleFailure { get; set; }
+
+        public Task<PolpLoanDto> GetLoanAsync(Guid loanId, CancellationToken ct = default)
+        {
+            if (SingleFailure is { } status) throw new HttpRequestException("Falha simulada.", null, status);
+            var found = Loans.Concat(StillExisting).FirstOrDefault(l => l.Id == loanId);
+            return found is not null
+                ? Task.FromResult(found)
+                : throw new HttpRequestException("Não encontrado.", null, HttpStatusCode.NotFound);
+        }
+
         public Task<List<PolpInstitutionDto>> GetInstitutionsAsync(CancellationToken ct = default) => inner.GetInstitutionsAsync(ct);
         public Task<PolpConsentDto> CreateConsentAsync(CreatePolpConsentRequest request, CancellationToken ct = default) => inner.CreateConsentAsync(request, ct);
         public Task<PolpConsentDto> GetConsentAsync(Guid consentId, CancellationToken ct = default) => inner.GetConsentAsync(consentId, ct);
@@ -80,6 +94,30 @@ public class PolpLoanImportTests
         Assert.Equal(0.29m, values.Cet);
         Assert.Null(values.NextInstalmentAmount);
         Assert.Null(values.PastDueInstalments);
+    }
+
+    [Fact]
+    public async Task Empty_or_incomplete_list_keeps_contracts_until_polp_confirms_removal()
+    {
+        using var t = new TestDb();
+        var integration = Integration(t, DocumentTypes.Cpf, WithCredit);
+        var contract = Loan(Guid.NewGuid(), integration.PolpIntegrationId, "10000.00");
+        var polp = new LoansPolp(new ScriptedPolp()) { Loans = [contract] };
+        await Service(t, polp).ImportAsync(integration, default);
+
+        polp.Loans = [];
+        polp.StillExisting = [contract];
+        await Service(t, polp).ImportAsync(integration, default);
+        Assert.Single(await t.Db.LoanContracts.ToListAsync());
+
+        polp.StillExisting = [];
+        polp.SingleFailure = HttpStatusCode.ServiceUnavailable;
+        await Service(t, polp).ImportAsync(integration, default);
+        Assert.Single(await t.Db.LoanContracts.ToListAsync());
+
+        polp.SingleFailure = null;
+        await Service(t, polp).ImportAsync(integration, default);
+        Assert.Empty(await t.Db.LoanContracts.ToListAsync());
     }
 
     [Fact]

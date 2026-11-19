@@ -17,7 +17,7 @@ ignore it.
 
 ```bash
 dotnet restore                        # install packages
-dotnet run                            # run the API (applies EF migrations automatically on startup)
+dotnet run                            # run the API (applies EF migrations on startup, one instance at a time via JobLockKeys.StartupMigrations)
 dotnet build                          # build only
 dotnet ef migrations add <Name>       # add a migration after changing a Model/AppDbContext
 dotnet ef database update             # apply migrations manually
@@ -131,7 +131,8 @@ accepts that same document (hash check) and refuses an institution whose Polp `t
 `BankAccount.Ownership` (Personal/Business/Mixed) is only a user-editable tag, not an isolation boundary.
 `BankAccount.IsDefault` (CNPJ only, `PUT /api/bank-accounts/{id}/default`, `DELETE /api/bank-accounts/default`, set from the
 account switcher menu) marks the company's default account: one per user (partial unique index + user-row lock),
-only a non-card account of an `AUTHORISED` connection; `/polp/integrations` returns `isDefault` only while the
+only a non-card account of an `AUTHORISED` connection; the user-row lock is `FOR NO KEY UPDATE` so it never waits for
+sync inserts (their FK `KEY SHARE`), while account deletion keeps `FOR UPDATE`; `/polp/integrations` returns `isDefault` only while the
 connection is `AUTHORISED`, never promotes another account, and never changes the selected scope or any total. A CNPJ consent created when the company has no
 bank account gets `PolpIntegration.AutoDefaultPending`; syncs of a flagged consent try `DefaultBankAccounts.AssignPendingAsync`
 (retried until it succeeds, never fails the sync); once any default exists every flag is cleared, so later banks never become
@@ -166,14 +167,17 @@ secret isn't configured). The payload is only a notice (`event`, `resource`, `re
 `query_parameters`) and Polp signs no timestamp, so nothing in it is trusted: unknown ids are ignored,
 the date window is rebuilt field by field (`PolpQueryWindow`) and data always comes from the
 authenticated API. There is no "sync now"; the only on-demand call
-is `POST /api/polp/accounts/{id}/balance-sync`. Regulatory monthly limits per CPF/institution apply:
+is `POST /api/polp/accounts/{id}/balance-sync`, limited across instances by `PolpBalanceSyncLimiter` (1 min per account
+plus Polp's documented 30 req/min per client, kept in `PolpApiCooldowns`; a 429 there would pause every Polp call). Regulatory monthly limits per CPF/institution apply:
 reconnecting the same CPF burns them, hence `avoidDuplicates`.
 
 Transactions are never created or freely edited by the user: `TransactionsController` has no POST and
 no `PUT {id}` (guarded by a test). Users only personalize `Name`/`CategoryId` (`PUT {id}/details`, which
 the sync respects) and `IsFixed`; `DELETE {id}` only removes legacy manual rows (no Polp id in
 `Description`). Upsert is by Polp transaction id (`Transaction.Description`, per `BankAccountId`); the id is stable
-when a card purchase moves from open to billed. `counterparty` and `category_ref` arrive later (a new
+when a card purchase moves from open to billed. A missing amount or `credit_debit_type` never overwrites the
+stored value or type (a new transaction without them is not imported until it comes complete), and Polp enrichment
+never replaces or demotes a CNPJ the bank sent (`CounterpartyCnpjFromBank`). `counterparty` and `category_ref` arrive later (a new
 webhook) and only fill name/category that were never edited. `category_ref` maps to app categories by
 top-level group (`PolpCategoryMap`). `execution_status` `PARTIAL_SUCCESS` never blocks the user. Card
 closing/due day come from bills (`bill_closing_date`/`due_date`), not from the card resource.
@@ -181,7 +185,8 @@ Investments and reserved balances ("caixinhas") are imported (`Services/Investme
 columns, purged by the history retention, included in the export and listed in the privacy policy).
 Loan contracts (CPF only): CPF consents request `CREDIT_OPERATIONS` (`PolpService.ProductsFor`); older consents
 get it only by reconnecting (recreate). `PolpLoanImportService` mirrors `GET /consents/{id}/loans` into
-`LoanContracts` (minimized encrypted JSON) on backfill, reconcile and `loans` webhooks; `GET /api/loans` is
+`LoanContracts` (minimized encrypted JSON) on backfill, reconcile and `loans` webhooks (a contract missing from the list
+is removed only after `GET /loans/{id}` answers 404; empty or partial lists never delete); `GET /api/loans` is
 read-only and contracts never enter totals. Loan proceeds in the statement (`LOAN_DISBURSEMENTS*`) are
 `PolpMovementKind.LoanDisbursement`, out of totals. Migration `LoanContracts` is schema-only (an earlier
 local version wiped every bank connection and was applied only to the dev database); migrations must never
@@ -308,7 +313,8 @@ at the bottom (`CashAnalysis`) and `fluxo-de-caixa/mes/:month` (`CashMonth`) det
 
 ### Impostos (CNPJ only)
 
-`TaxesController` (`GET api/taxes?year&month[&bankAccountId]`, `[BusinessHolderOnly]`) lists bank payments identified as
+`TaxesController` (`GET api/taxes?year&month[&bankAccountId]`, `[BusinessHolderOnly]`; the page shows the account
+selector like the other account-scoped pages, so the filtered account is always visible) lists bank payments identified as
 taxes, one query per year over `TaxPaymentDetection.IdentifiedTaxPayments` (paid account debits, `PolpMovementKind.None`,
 never cards). Always requires `PolpTaxPayment` (`category_ref = GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT`, Polp's AI
 classification, never enough alone) **plus** one bank fact: `Transaction.TaxAuthority` (bank-sent `partie_cnpj_cpf` equal
@@ -364,7 +370,9 @@ no DARF/DAS/GPS revenue code, so the specific tax is never shown, only the autho
   module is built it shows "Em preparação" and "Ainda não disponível.", never a fake "no records" state).
   Shared pages branch on the holder internally (Receitas e despesas is one page for both: CPF always
   sees the month; CNPJ picks Dia | Mês | Ano, defined in `utils/periods.js` as ranges for the same
-  aggregates endpoint; the current year is compared with the same span of the previous year). The
+  aggregates endpoint; a period still in progress (current month or year) is compared from its start to today against
+the same span of the previous period, with both labels naming that span (`compareMonth`/`compareYear`); closed periods
+compare whole against whole). The
   transaction list stays in Relatórios. `GET /transactions/report` still accepts `excludeTransfers`. Business endpoints added later must check `DocumentType` server-side too.
 - `pages/dashboard/*` are the authenticated app screens (income/expenses, reports, categories,
   investments, cards); `pages/home/sections/*` compose the public marketing landing page.

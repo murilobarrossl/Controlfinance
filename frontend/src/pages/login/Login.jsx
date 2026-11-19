@@ -87,7 +87,8 @@ export default function LoginPage({ mode = "email" }) {
       navigate(hasAccount ? "/dashboard" : "/conectar-banco");
     } catch (err) {
       const invalidCredentials = isCpf ? "CPF/CNPJ ou senha incorretos." : "E-mail ou senha incorretos.";
-      setError(err.status === 401 ? invalidCredentials : err.message || "Não foi possível entrar. Tente novamente.");
+      const tooManyAttempts = err.message || "Muitas tentativas de login. Aguarde alguns minutos antes de tentar novamente.";
+      setError(err.status === 401 ? invalidCredentials : err.status === 429 ? tooManyAttempts : err.message || "Não foi possível entrar. Tente novamente.");
       setErrorAttempt((n) => n + 1);
     } finally {
       setSubmitting(false);

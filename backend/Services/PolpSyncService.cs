@@ -663,7 +663,6 @@ public class PolpSyncService(
 
                 var paidAt = rt.IsFuture ? (DateTime?)null : dueDate;
                 var status = rt.IsFuture ? TransactionStatus.Pending : TransactionStatus.Paid;
-                var type = rt.IsCredit ? TransactionType.Income : TransactionType.Expense;
                 var categoryName = rt.CategoryName;
                 Guid? categoryId = categoryIds.TryGetValue(categoryName, out var cid) ? cid : fallbackCategoryId;
 
@@ -671,8 +670,8 @@ public class PolpSyncService(
                 {
                     // A Polp corrige valor/status depois (pré-autorização confirmada com outro
                     // valor, parcela futura que entra na fatura).
-                    existing.Amount = rt.Amount;
-                    existing.Type = type;
+                    if (rt.Amount is { } amount) existing.Amount = amount;
+                    if (rt.IsCredit is { } credit) existing.Type = credit ? TransactionType.Income : TransactionType.Expense;
                     existing.Status = status;
                     existing.DueDate = dueDate;
                     existing.PaidAt = paidAt;
@@ -692,6 +691,12 @@ public class PolpSyncService(
                     continue;
                 }
 
+                if (rt.Amount is not { } newAmount || rt.IsCredit is not { } newCredit)
+                {
+                    logger?.LogWarning("Transação da Polp sem valor ou sem tipo: não importada até vir completa.");
+                    continue;
+                }
+
                 var transaction = new Transaction
                 {
                     UserId = account.UserId,
@@ -699,9 +704,9 @@ public class PolpSyncService(
                     CategoryId = categoryId,
                     Name = rt.EnrichedName ?? rt.RawName,
                     Description = polpTransactionId, // id da Polp: chave do upsert
-                    Type = type,
+                    Type = newCredit ? TransactionType.Income : TransactionType.Expense,
                     Status = status,
-                    Amount = rt.Amount,
+                    Amount = newAmount,
                     DueDate = dueDate,
                     PolpMovementKind = rt.MovementKind(PolpMovementKind.None),
                     PolpTaxPayment = rt.TaxPayment(false),
@@ -781,7 +786,7 @@ public class PolpSyncService(
 
     // Visão comum de transação de conta e de cartão, só com o que o upsert precisa.
     private sealed record RemoteTransaction(
-        Guid Id, string RawName, string? EnrichedName, decimal Amount, bool IsCredit, bool IsFuture,
+        Guid Id, string RawName, string? EnrichedName, decimal? Amount, bool? IsCredit, bool IsFuture,
         string? DateTime, string? CategoryRef, bool IsCardBillPayment,
         string? BillPostDate = null, string? BillForecastDate = null, string? IdentificationNumber = null)
     {
@@ -809,10 +814,11 @@ public class PolpSyncService(
             {
                 t.CounterpartyName = string.IsNullOrWhiteSpace(cp.Name) ? null : cp.Name.Trim();
                 t.CounterpartyAlias = string.IsNullOrWhiteSpace(cp.Alias) ? null : cp.Alias.Trim();
-                // Só CNPJ (cadastro público de empresa); um CPF de terceiro nunca é guardado.
-                t.CounterpartyCnpj = cp.TaxId is { Length: 14 } taxId && taxId.All(char.IsAsciiDigit) ? taxId : null;
-                // Enriquecimento não é prova; o documento do banco, aplicado depois, volta a marcar.
-                t.CounterpartyCnpjFromBank = false;
+                // CNPJ que veio do banco é prova e o enriquecimento nunca o troca nem o rebaixa: uma releitura sem
+                // partie_cnpj_cpf faria o pagamento de imposto sumir. Só CNPJ (cadastro público de empresa); um CPF
+                // de terceiro nunca é guardado.
+                if (!t.CounterpartyCnpjFromBank)
+                    t.CounterpartyCnpj = cp.TaxId is { Length: 14 } taxId && taxId.All(char.IsAsciiDigit) ? taxId : null;
             }
             t.CounterpartyPersonType = CounterpartyPersonType is "PESSOA_NATURAL" or "PESSOA_JURIDICA" ? CounterpartyPersonType : null;
             t.CounterpartyBankCode = CounterpartyBankCode is { Length: > 0 and <= 8 } code && code.All(char.IsAsciiDigit) ? code : null;
@@ -845,12 +851,20 @@ public class PolpSyncService(
         public bool TaxPayment(bool existing) =>
             CategoryRef is null ? existing : TaxPaymentDetection.IsTaxPaymentClassification(CategoryRef);
 
+        // Campo ausente fica nulo, nunca 0 nem "débito": um valor ou tipo inventado sobrescreveria o que o banco
+        // já tinha informado.
+        private static decimal? AbsOrNull(decimal? value) => value is { } v ? Math.Abs(v) : null;
+        private static bool? CreditFlag(string? type) =>
+            string.Equals(type, "CREDITO", StringComparison.OrdinalIgnoreCase) ? true
+            : string.Equals(type, "DEBITO", StringComparison.OrdinalIgnoreCase) ? false
+            : null;
+
         public static RemoteTransaction From(PolpAccountTransactionDto t) => new(
             t.Id,
             t.TransactionName ?? "Transação",
             t.Counterparty?.Alias ?? t.Counterparty?.Name,
-            Math.Abs(t.TransactionAmount?.Value ?? 0),
-            string.Equals(t.CreditDebitType, "CREDITO", StringComparison.OrdinalIgnoreCase),
+            AbsOrNull(t.TransactionAmount?.Value),
+            CreditFlag(t.CreditDebitType),
             false,
             t.TransactionDateTime,
             t.CategoryRef,
@@ -871,8 +885,8 @@ public class PolpSyncService(
             t.Id,
             t.TransactionName ?? "Transação",
             t.Counterparty?.Alias ?? t.Counterparty?.Name,
-            Math.Abs(t.BrazilianAmount?.Value ?? 0),
-            string.Equals(t.CreditDebitType, "CREDITO", StringComparison.OrdinalIgnoreCase),
+            AbsOrNull(t.BrazilianAmount?.Value),
+            CreditFlag(t.CreditDebitType),
             // Sem fatura e com a data-sentinela: lançamento futuro (parcela ou agendado).
             t.BillId is null && (t.BillPostDate?.StartsWith(FutureSentinel, StringComparison.Ordinal) ?? true),
             t.TransactionDateTime,

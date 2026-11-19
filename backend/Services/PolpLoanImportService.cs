@@ -43,6 +43,30 @@ public class PolpLoanImportService(AppDbContext db, IPolpService polp, IIntegrat
         }
         var now = time.GetUtcNow().UtcDateTime;
 
+        // Lista vazia ou incompleta pode ser transitória (importação ainda em andamento na Polp): um contrato
+        // ausente só sai se a consulta dele responder 404. Fora da trava da integração (chamadas de rede).
+        var listed = remote.Select(l => l.Id).ToHashSet();
+        var missing = await db.LoanContracts.AsNoTracking()
+            .Where(x => x.UserId == local.UserId && x.IntegrationId == local.Id && !listed.Contains(x.PolpLoanId))
+            .Select(x => x.PolpLoanId).ToListAsync(ct);
+        var confirmedRemoved = new HashSet<Guid>();
+        foreach (var loanId in missing)
+        {
+            try
+            {
+                var loan = await polp.GetLoanAsync(loanId, ct);
+                if (loan.Id == loanId && loan.ConsentId == local.PolpIntegrationId) remote.Add(loan);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                confirmedRemoved.Add(loanId);
+            }
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
+            {
+                // Sem confirmação: o contrato fica como está e é reavaliado na próxima importação.
+            }
+        }
+
         await integrationLock.RunAsync(db, local.Id, async () =>
         {
             var active = await db.PolpIntegrations.AnyAsync(p => p.Id == local.Id && p.UserId == local.UserId
@@ -73,7 +97,7 @@ public class PolpLoanImportService(AppDbContext db, IPolpService polp, IIntegrat
                     });
                 }
             }
-            db.LoanContracts.RemoveRange(existing.Where(e => !seen.Contains(e.Key)).Select(e => e.Value));
+            db.LoanContracts.RemoveRange(existing.Where(e => !seen.Contains(e.Key) && confirmedRemoved.Contains(e.Key)).Select(e => e.Value));
             await db.SaveChangesAsync(ct);
             return true;
         }, ct);

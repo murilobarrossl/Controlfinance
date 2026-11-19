@@ -17,6 +17,7 @@ public static class JobLockKeys
     public const long PolpInboxCleanup = 0x4346_4A4F_0000_0004;
     public const long PolpReconciliation = 0x4346_4A4F_0000_0005;
     public const long InactiveAccounts = 0x4346_4A4F_0000_0006;
+    public const long StartupMigrations = 0x4346_4A4F_0000_0007;
 }
 
 public static class JobLockExtensions

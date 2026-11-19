@@ -103,10 +103,13 @@ public class PolpReconciliationService(
                 if (integrations.Count == 0) break;
                 foreach (var integration in integrations)
                 {
-                    if (integration.NeedsTransactionDetails)
+                    var scheduled = Schedule.Bucket(integration.Id) == round;
+                    // A releitura do histórico inteiro só entra no bucket da integração: fora dele, uma
+                    // versão nova enfileiraria todas as conexões na mesma rodada. Falha é refeita pela inbox
+                    // e, sem gravar a versão, a integração volta no próximo ciclo.
+                    if (integration.NeedsTransactionDetails && scheduled)
                         await inbox.EnqueueAsync(new PolpInboxEvent(
                             PolpInternalEvents.TransactionDetails, "consents", integration.PolpIntegrationId.ToString(), null, PolpInboxPriority.Low), ct);
-                    var scheduled = Schedule.Bucket(integration.Id) == round;
                     if (!scheduled && !integration.NeedsInvestmentRecovery) continue;
                     if (scheduled)
                     {

@@ -317,6 +317,13 @@ using (var scope = app.Services.CreateScope())
     await StartupDatabaseConnection.OpenAsync(
         ct => db.Database.OpenConnectionAsync(ct), app.Logger, app.Lifetime.ApplicationStopping);
 
+    // Uma instância por vez aplica migrations e backfills: o EF Core 8 não trava a aplicação, e duas
+    // instâncias subindo juntas aplicariam a mesma migration (ou o backfill do Radar) em paralelo. A
+    // outra espera e, ao entrar, já não encontra nada pendente. Trava de transação (IJobLock), que vale
+    // também no pooler do Supabase; tem de vir antes de GetPendingMigrationsAsync.
+    await using var startupLock = await AcquireStartupLockAsync(
+        scope.ServiceProvider.GetRequiredService<IJobLock>(), app.Logger, app.Lifetime.ApplicationStopping);
+
     // Precisa saber se a migration do Radar de Recorrências ainda não tinha rodado nessa base
     // ANTES de aplicar (MigrateAsync abaixo já marca ela como aplicada). É o gatilho do backfill
     // logo depois. Sem essa checagem, toda vez que o app subisse ele tentaria rodar de novo o
@@ -349,6 +356,18 @@ using (var scope = app.Services.CreateScope())
 // Roda uma única vez, no exato momento em que a migration acima é aplicada. Nunca mais depois
 // disso, então uma conta marcada como Mixed pelo usuário fica assim pra sempre, mesmo em
 // reinícios futuros do app.
+static async Task<IAsyncDisposable> AcquireStartupLockAsync(IJobLock jobLock, ILogger logger, CancellationToken ct)
+{
+    var waited = false;
+    while (true)
+    {
+        if (await jobLock.TryAcquireAsync(JobLockKeys.StartupMigrations, ct) is { } handle) return handle;
+        if (!waited) logger.LogInformation("Outra instância está aplicando migrations; aguardando.");
+        waited = true;
+        await Task.Delay(TimeSpan.FromSeconds(5), ct);
+    }
+}
+
 static async Task BackfillAccountOwnershipAsync(AppDbContext db)
 {
     var accounts = await db.BankAccounts.Include(b => b.User).ToListAsync();

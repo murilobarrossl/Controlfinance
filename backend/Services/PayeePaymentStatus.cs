@@ -213,6 +213,51 @@ public static class PayeePaymentStatus
         return Combine(bank, marks);
     }
 
+    /// <summary>Estado do mês de um funcionário, com o mesmo resultado de EmployeesAsync para ele.</summary>
+    public static async Task<PayeeMonthStatus> EmployeeAsync(
+        AppDbContext db, IEncryptionService encryption, Guid userId, Guid employeeId, DateTime today, CancellationToken ct)
+    {
+        var bank = await EmployeeBankAsync(db, encryption, userId, employeeId, MonthOutgoing(db, userId, today), ct);
+        return await WithMarkAsync(db, userId, employeeId, ReferenceMonth(today), bank, ct);
+    }
+
+    /// <summary>Relê só a marcação do mês e a combina com a parte bancária já calculada.</summary>
+    public static async Task<PayeeMonthStatus> WithMarkAsync(
+        AppDbContext db, Guid userId, Guid employeeId, DateOnly month, Dictionary<Guid, List<PayeeBankPayment>> bank, CancellationToken ct)
+    {
+        var marks = await db.EmployeePaymentMarks.AsNoTracking()
+            .Where(m => m.UserId == userId && m.EmployeeId == employeeId && m.ReferenceMonth == month)
+            .ToDictionaryAsync(m => m.EmployeeId, m => m.Paid, ct);
+        return Combine(bank, marks);
+    }
+
+    // O ramo do matcher (CPF, CNPJ do banco ou conta) depende só da transação, então o funcionário é candidato
+    // numa saída com a empresa inteira se e só se for candidato sozinho. Sem saída candidata ele não é
+    // identificado e nenhum outro cadastro precisa ser lido; com ela, os demais entram só para checar a
+    // ambiguidade (mais de um candidato = nada) nessas saídas.
+    private static async Task<Dictionary<Guid, List<PayeeBankPayment>>> EmployeeBankAsync(
+        AppDbContext db, IEncryptionService encryption, Guid userId, Guid employeeId, IQueryable<Transaction> outgoing, CancellationToken ct)
+    {
+        var evidence = await EvidenceAsync(outgoing
+            .Where(t => t.CounterpartyCpfHash != null || t.CounterpartyCnpjFromBank || t.CounterpartyCnpj == null), ct);
+        if (evidence.Count == 0) return [];
+
+        var target = await db.Employees.AsNoTracking().Include(e => e.PaymentMethods)
+            .SingleOrDefaultAsync(e => e.UserId == userId && e.Id == employeeId, ct);
+        if (target is null) return [];
+        var self = Identity(encryption, userId, target);
+        var candidates = evidence.Where(e => SupplierPaymentMatcher.MatchEmployee(e, [self]) is not null).ToList();
+        if (candidates.Count == 0) return [];
+
+        var everyone = (await db.Employees.AsNoTracking().Include(e => e.PaymentMethods)
+                .Where(e => e.UserId == userId && e.Id != employeeId).ToListAsync(ct))
+            .Select(e => Identity(encryption, userId, e))
+            .Append(self)
+            .ToList();
+        var bank = Identified(candidates, e => SupplierPaymentMatcher.MatchEmployee(e, everyone));
+        return bank.TryGetValue(employeeId, out var payments) ? new() { [employeeId] = payments } : [];
+    }
+
     private static async Task<Dictionary<Guid, List<PayeeBankPayment>>> EmployeesBankAsync(
         AppDbContext db, IEncryptionService encryption, Guid userId, IQueryable<Transaction> outgoing, CancellationToken ct)
     {

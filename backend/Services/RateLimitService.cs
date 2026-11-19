@@ -44,13 +44,18 @@ public class RateLimitService : IDisposable
         _cleanupTimer = new Timer(_ => PurgeStale(), null, Window, Window);
     }
 
-    // De propósito, não existe um "RemainingAttempts" exposto pra API: sites grandes não avisam
-    // quantas tentativas restam nem que você foi bloqueado. A resposta de erro é sempre a mesma
-    // esteja você só errando a senha ou já travado, senão dá pra um atacante calibrar o ataque
-    // pela própria mensagem de erro.
-    public bool IsBlocked(string identifier, string ipAddress) =>
-        IsBlocked(_byIdentifier, Key(identifier), MaxAttemptsPerIdentifier) ||
-        IsBlocked(_byIp, Key(ipAddress), MaxAttemptsPerIp);
+    // Tentativas restantes nunca são expostas. O bloqueio pode ser informado: o contador cresce
+    // com qualquer identificador, exista conta ou não, então dizer que travou não revela cadastro.
+    public bool IsBlocked(string identifier, string ipAddress) => LockoutRemaining(identifier, ipAddress) is not null;
+
+    public TimeSpan? LockoutRemaining(string identifier, string ipAddress)
+    {
+        var byIdentifier = Remaining(_byIdentifier, Key(identifier), MaxAttemptsPerIdentifier);
+        var byIp = Remaining(_byIp, Key(ipAddress), MaxAttemptsPerIp);
+        if (byIdentifier is null) return byIp;
+        if (byIp is null) return byIdentifier;
+        return byIdentifier > byIp ? byIdentifier : byIp;
+    }
 
     public void RegisterFailure(string identifier, string ipAddress)
     {
@@ -64,17 +69,18 @@ public class RateLimitService : IDisposable
         _byIp.TryRemove(Key(ipAddress), out _);
     }
 
-    private static bool IsBlocked(ConcurrentDictionary<string, (int attempts, DateTime lastAttempt)> store, string key, int maxAttempts)
+    private static TimeSpan? Remaining(ConcurrentDictionary<string, (int attempts, DateTime lastAttempt)> store, string key, int maxAttempts)
     {
-        if (!store.TryGetValue(key, out var entry)) return false;
+        if (!store.TryGetValue(key, out var entry)) return null;
 
-        if (DateTime.UtcNow - entry.lastAttempt > Window)
+        var elapsed = DateTime.UtcNow - entry.lastAttempt;
+        if (elapsed > Window)
         {
             store.TryRemove(key, out _);
-            return false;
+            return null;
         }
 
-        return entry.attempts >= maxAttempts;
+        return entry.attempts >= maxAttempts ? Window - elapsed : null;
     }
 
     private static void RegisterFailure(ConcurrentDictionary<string, (int attempts, DateTime lastAttempt)> store, string key)

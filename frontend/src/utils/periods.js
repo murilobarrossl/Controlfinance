@@ -30,6 +30,45 @@ function yearRange(year) {
   return { from: `${year}-01-01`, to: `${year + 1}-01-01` };
 }
 
+const SHORT_DAY = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short", timeZone: "UTC" });
+
+// Período em andamento comparado com o anterior inteiro mistura um recorte parcial (mais lançamentos
+// futuros já agendados) com um período completo. Nesse caso os dois lados vão do início até hoje.
+// currentRange nulo = período encerrado, comparação inteiro × inteiro com os totais exibidos.
+export function compareMonth(monthDate) {
+  const { year, month, day } = localToday();
+  const previous = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() - 1, 1));
+  const previousName = formatMonthLong(previous);
+  if (monthDate.getUTCFullYear() !== year || monthDate.getUTCMonth() !== month) {
+    return { currentRange: null, range: monthRange(previous), trendLabel: `vs ${previousName.toLowerCase()}`, currentName: formatMonthLong(monthDate), previousName };
+  }
+  const previousEnd = Math.min(Date.UTC(year, month - 1, day + 1), Date.UTC(year, month, 1));
+  const span = `1 a ${day}`;
+  return {
+    currentRange: { from: toIsoDate(monthDate), to: toIsoDate(new Date(Date.UTC(year, month, day + 1))) },
+    range: { from: toIsoDate(previous), to: toIsoDate(new Date(previousEnd)) },
+    trendLabel: "vs mesmo período do mês anterior",
+    currentName: `${formatMonthLong(monthDate)} (${span})`,
+    previousName: `${previousName} (${span})`,
+  };
+}
+
+function compareYear(targetYear) {
+  const { year, month, day } = localToday();
+  if (targetYear !== year) {
+    return { currentRange: null, range: yearRange(targetYear - 1), trendLabel: "vs ano anterior", currentName: String(targetYear), previousName: String(targetYear - 1) };
+  }
+  const previousEnd = Math.min(Date.UTC(year - 1, month, day + 1), Date.UTC(year - 1, month + 1, 1));
+  const until = SHORT_DAY.format(new Date(Date.UTC(year, month, day))).replace(".", "");
+  return {
+    currentRange: { from: `${year}-01-01`, to: toIsoDate(new Date(Date.UTC(year, month, day + 1))) },
+    range: { from: `${year - 1}-01-01`, to: toIsoDate(new Date(previousEnd)) },
+    trendLabel: `vs mesmo período de ${year - 1}`,
+    currentName: `${year} (até ${until})`,
+    previousName: `${year - 1} (até ${until})`,
+  };
+}
+
 export const PERIODS = {
   day: {
     key: "day",
@@ -47,7 +86,7 @@ export const PERIODS = {
       const month = getMonthsWindow(1, offset)[0];
       return { range: monthRange(month), label: formatMonthLong(month) };
     },
-    previous: (offset) => ({ range: monthRange(getMonthsWindow(1, offset + 1)[0]), trendLabel: "vs mês anterior" }),
+    previous: (offset) => compareMonth(getMonthsWindow(1, offset)[0]),
   },
   year: {
     key: "year",
@@ -56,8 +95,6 @@ export const PERIODS = {
       const year = localToday().year - offset;
       return { range: yearRange(year), label: String(year) };
     },
-    // A base inclui pendentes/agendados do ano inteiro. A comparação usa o ano
-    // inteiro anterior também, sem misturar um ano completo com um recorte até hoje.
-    previous: (offset) => ({ range: yearRange(localToday().year - offset - 1), trendLabel: "vs ano anterior" }),
+    previous: (offset) => compareYear(localToday().year - offset),
   },
 };

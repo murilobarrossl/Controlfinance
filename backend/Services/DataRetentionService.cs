@@ -83,6 +83,10 @@ public class DataRetentionService(IServiceScopeFactory scopeFactory, IJobLock jo
                     }
 
                     await db.RevokedTokens.Where(t => t.ExpiresAt < now).ExecuteDeleteAsync(stoppingToken);
+                    var expiredReservation = now.AddDays(-1);
+                    await db.PolpApiCooldowns
+                        .Where(c => c.ClientKey.StartsWith(PolpBalanceSyncLimiter.KeyPrefix) && c.RetryAt < expiredReservation)
+                        .ExecuteDeleteAsync(stoppingToken);
 
                     var accessCutoff = now.AddDays(-DataRetentionPolicy.AccessLogRetentionDays(config));
                     var accessLogs = await db.AccessLogs

@@ -121,17 +121,19 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
 
         // Pagamentos bancários do momento vão para o evento de auditoria; a resposta é relida depois da
         // gravação para refletir também uma alteração concorrente.
-        var before = await PayeePaymentStatus.EmployeesAsync(db, encryption, UserId, today, ct);
+        var before = await PayeePaymentStatus.EmployeeAsync(db, encryption, UserId, id, today, ct);
         await PayeePaymentStatus.SaveMarkAsync(db,
             () => db.EmployeePaymentMarks.FirstOrDefaultAsync(m => m.UserId == UserId && m.EmployeeId == id && m.ReferenceMonth == month, ct),
             () => new EmployeePaymentMark { UserId = UserId, EmployeeId = id, ReferenceMonth = month },
             PayeeKind.Employee, UserId, id, month, dto.Paid, before.Bank.GetValueOrDefault(id), ct);
-        return Ok(await PaymentMonthAsync(id, today, ct));
+        // A parte bancária não muda com a marcação: só a marcação é relida (reflete gravação concorrente).
+        var after = await PayeePaymentStatus.WithMarkAsync(db, UserId, id, month, before.Bank, ct);
+        return Ok(PayeePaymentStatus.Describe(after, id, month));
     }
 
     private async Task<PayeePaymentMonthDto> PaymentMonthAsync(Guid id, DateTime today, CancellationToken ct)
     {
-        var status = await PayeePaymentStatus.EmployeesAsync(db, encryption, UserId, today, ct);
+        var status = await PayeePaymentStatus.EmployeeAsync(db, encryption, UserId, id, today, ct);
         return PayeePaymentStatus.Describe(status, id, PayeePaymentStatus.ReferenceMonth(today));
     }
 

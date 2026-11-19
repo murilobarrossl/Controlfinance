@@ -447,8 +447,6 @@ public class PolpController(
     // chega por webhook, no ritmo da agenda da Polp. A Polp limita essa rota (30 req/min para
     // todos os usuários juntos) e o saldo consome a mesma cota mensal da sincronização
     // automática, por isso a janela de 1 minuto por conta.
-    private static readonly TimeSpan BalanceSyncWindow = TimeSpan.FromMinutes(1);
-    private static readonly object BalanceSyncLock = new();
 
     [HttpPost("accounts/{id:guid}/balance-sync")]
     public async Task<IActionResult> SyncBalance(Guid id, CancellationToken ct)
@@ -461,7 +459,7 @@ public class PolpController(
         if (!await db.PolpIntegrations.AnyAsync(p => p.UserId == UserId && p.PolpIntegrationId == account.PolpIntegrationId && p.Status == "AUTHORISED", ct))
             return NotFound();
 
-        if (!TryReserveBalanceSync(account.Id, out var retryAfter))
+        if (await PolpBalanceSyncLimiter.TryReserveAsync(db, account.Id, DateTime.UtcNow, ct) is { } retryAfter)
             return BalanceSyncTooSoon(retryAfter);
 
         PolpAccountDto remote;
@@ -513,10 +511,10 @@ public class PolpController(
         if (accounts.Count == 0) return NotFound();
 
         var due = new List<BankAccount>();
-        var shortestWait = BalanceSyncWindow;
+        var shortestWait = PolpBalanceSyncLimiter.AccountWindow;
         foreach (var account in accounts)
         {
-            if (TryReserveBalanceSync(account.Id, out var wait)) due.Add(account);
+            if (await PolpBalanceSyncLimiter.TryReserveAsync(db, account.Id, DateTime.UtcNow, ct) is not { } wait) due.Add(account);
             else if (wait < shortestWait) shortestWait = wait;
         }
         if (due.Count == 0) return BalanceSyncTooSoon(shortestWait);
@@ -580,23 +578,6 @@ public class PolpController(
             await db.SaveChangesAsync(ct);
             return true;
         }, ct);
-    }
-
-    private bool TryReserveBalanceSync(Guid accountId, out TimeSpan retryAfter)
-    {
-        lock (BalanceSyncLock)
-        {
-            var cacheKey = $"polp:balance-sync:{accountId}";
-            var now = DateTime.UtcNow;
-            if (cache.TryGetValue(cacheKey, out DateTime last) && now - last < BalanceSyncWindow)
-            {
-                retryAfter = BalanceSyncWindow - (now - last);
-                return false;
-            }
-            cache.Set(cacheKey, now, BalanceSyncWindow);
-            retryAfter = TimeSpan.Zero;
-            return true;
-        }
     }
 
     private ObjectResult BalanceSyncTooSoon(TimeSpan retryAfter) =>
@@ -667,6 +648,8 @@ public class PolpController(
             return business
                 ? "A Polp não aceitou o CPF de quem opera a conta da empresa. Confira o número informado."
                 : "A Polp não aceitou o CPF para esse banco. Confira o número e se o banco escolhido atende pessoa física.";
+        if (refused.Contains("consent"))
+            return "Não foi possível criar uma nova autorização bancária agora. Tente novamente mais tarde.";
         if (refused.Contains("institution_id"))
             return "Esse banco não está disponível para conexão no momento. Escolha outro banco ou tente mais tarde.";
         return business

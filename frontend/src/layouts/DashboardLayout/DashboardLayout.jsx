@@ -18,7 +18,7 @@ import { getNavigation } from "./navigation.js";
 import logo from "../../assets/images/cflogobranco.svg";
 import "./DashboardLayout.css";
 
-const ACCOUNT_SCOPED_PATHS = new Set(["/dashboard", "/dashboard/receitas-despesas", "/dashboard/fluxo-de-caixa", "/dashboard/relatorios", "/dashboard/categorias", "/dashboard/despesas-recorrentes"]);
+const ACCOUNT_SCOPED_PATHS = new Set(["/dashboard", "/dashboard/receitas-despesas", "/dashboard/fluxo-de-caixa", "/dashboard/relatorios", "/dashboard/categorias", "/dashboard/despesas-recorrentes", "/dashboard/impostos"]);
 const CARDS_PATH = "/dashboard/cartoes";
 
 export default function DashboardLayout() {

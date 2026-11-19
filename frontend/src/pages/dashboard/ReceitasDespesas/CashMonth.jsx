@@ -14,6 +14,7 @@ import { financialTone, transactionTone } from "../../../utils/financialTone.js"
 import { formatCurrency, formatDate, roundMoney } from "../../../utils/financeMath.js";
 import { formatMonthLong } from "../../../utils/monthLabel.js";
 import { monthRange } from "../../../utils/monthlyTrend.js";
+import { compareMonth } from "../../../utils/periods.js";
 import { computeTrend } from "../../../utils/trend.js";
 import usePageTitle from "../../../hooks/usePageTitle.js";
 import SummaryMetric from "./SummaryMetric.jsx";
@@ -127,11 +128,13 @@ export default function CashMonth() {
     if (!valid || accountsStatus !== "ready" || !scopeKey) return;
     const controller = new AbortController();
     const { signal } = controller;
+    const comparison = compareMonth(month);
     Promise.all([
       getTransactionAggregates({ ...scopeQuery, ...monthRange(month) }, { signal }),
-      getTransactionAggregates({ ...scopeQuery, ...monthRange(shiftMonth(month, -1)) }, { signal }),
+      getTransactionAggregates({ ...scopeQuery, ...comparison.range }, { signal }),
+      comparison.currentRange ? getTransactionAggregates({ ...scopeQuery, ...comparison.currentRange }, { signal }) : null,
     ])
-      .then(([now, before]) => setResult({ key, now, before, error: "" }))
+      .then(([now, before, compared]) => setResult({ key, now, before, compared: compared ?? now, error: "" }))
       .catch((err) => {
         if (signal.aborted || isAbortError(err)) return;
         setResult({ key, now: null, before: null, error: err.message || "Não foi possível carregar o mês." });
@@ -146,10 +149,11 @@ export default function CashMonth() {
   const ready = result?.key === key ? result : null;
   const now = ready?.now;
   const before = ready?.before;
+  const compared = ready?.compared;
   const loading = !now;
-  const previousLabel = formatMonthLong(shiftMonth(month, -1));
-  const trendLabel = `vs ${previousLabel.toLowerCase()}`;
+  const { trendLabel, previousName } = compareMonth(month);
   const net = now ? roundMoney(now.totalIncome - now.totalExpense) : null;
+  const comparedNet = compared ? roundMoney(compared.totalIncome - compared.totalExpense) : null;
   const previousNet = before ? roundMoney(before.totalIncome - before.totalExpense) : null;
 
   let running = 0;
@@ -178,25 +182,25 @@ export default function CashMonth() {
               label="Receitas"
               value={loading ? <Skeleton width="7rem" height="1.5rem" /> : formatCurrency(now.totalIncome)}
               tone={loading ? "default" : financialTone(now.totalIncome)}
-              trend={loading ? null : computeTrend(now.totalIncome, before.totalIncome, { label: trendLabel })}
+              trend={loading ? null : computeTrend(compared.totalIncome, before.totalIncome, { label: trendLabel })}
             />
             <SummaryMetric
               label="Despesas"
               value={loading ? <Skeleton width="7rem" height="1.5rem" /> : formatCurrency(now.totalExpense)}
               tone={loading ? "default" : transactionTone("Expense", now.totalExpense)}
-              trend={loading ? null : computeTrend(now.totalExpense, before.totalExpense, { invertTone: true, label: trendLabel })}
+              trend={loading ? null : computeTrend(compared.totalExpense, before.totalExpense, { invertTone: true, label: trendLabel })}
             />
             <SummaryMetric
               label="Resultado"
               value={loading ? <Skeleton width="7rem" height="1.5rem" /> : formatResult(net)}
               tone={loading ? "default" : financialTone(net)}
-              trend={loading ? null : computeTrend(net, previousNet, { label: trendLabel })}
+              trend={loading ? null : computeTrend(comparedNet, previousNet, { label: trendLabel })}
             />
           </div>
 
           {!loading && (
             <dl className="cash-month__previous">
-              <dt>{previousLabel}</dt>
+              <dt>{previousName}</dt>
               <dd>Receitas {formatCurrency(before.totalIncome)}</dd>
               <dd>Despesas {formatCurrency(before.totalExpense)}</dd>
               <dd>Resultado {formatResult(previousNet)}</dd>

@@ -302,7 +302,7 @@ export default function InvestmentDetail() {
         <Figure label="Valor atual" values={current.map(formatMoney)} note={lastKnown ? "Último valor informado" : null} />
         {variation && <div className="inv-page__figure">
           <dt>Variação do saldo</dt>
-          <dd className={`inv-page__figure-value inv-page__figure-value--secondary inv-financial--${financialTone(Number(variation.money.amount))}`}>{signedMoney(variation.money)}</dd>
+          <dd className="inv-page__figure-value inv-page__figure-value--secondary">{signedMoney(variation.money)}</dd>
           <dd className="inv-page__figure-note">De {variation.from} a {variation.to}</dd>
         </div>}
       </dl>

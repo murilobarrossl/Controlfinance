@@ -12,7 +12,7 @@ public enum RegisterError { None, Invalid, AlreadyRegistered }
 public interface IAuthService
 {
     Task<(bool Success, string Error, RegisterError Code, AuthResult? Data)> RegisterAsync(RegisterRequestDto dto, string ipAddress);
-    Task<(bool Success, string Error, AuthResult? Data)> LoginAsync(LoginRequestDto dto, string ipAddress);
+    Task<(bool Success, string Error, AuthResult? Data, TimeSpan? LockedFor)> LoginAsync(LoginRequestDto dto, string ipAddress);
 }
 
 public class AuthService : IAuthService
@@ -121,16 +121,14 @@ public class AuthService : IAuthService
         return (true, string.Empty, RegisterError.None, new AuthResult(user, token));
     }
 
-    public async Task<(bool Success, string Error, AuthResult? Data)> LoginAsync(LoginRequestDto dto, string ipAddress)
+    public async Task<(bool Success, string Error, AuthResult? Data, TimeSpan? LockedFor)> LoginAsync(LoginRequestDto dto, string ipAddress)
     {
         var identifier = dto.Identifier.Trim();
         const string genericError = "Credenciais inválidas.";
 
         // Rate limiting por identificador E por IP: só por identificador permitiria testar
-        // senha em várias contas diferentes do mesmo IP sem nunca travar. Só marca a flag aqui
-        // (sem retornar ainda): quando bloqueado, a resposta continua idêntica à de credenciais
-        // erradas: nem o texto nem o tempo de resposta (pula o BCrypt, que já falharia mesmo)
-        // deixam um atacante distinguir "bloqueado" de "senha errada".
+        // senha em várias contas diferentes do mesmo IP sem nunca travar. Bloqueado, nem roda o
+        // BCrypt: a senha certa também é recusada até a janela passar.
         var blocked = _rateLimit.IsBlocked(identifier, ipAddress);
 
         var cleanIdentifierDocument = CleanDocument(identifier);
@@ -142,13 +140,14 @@ public class AuthService : IAuthService
 
         // Roda o BCrypt mesmo quando o usuário não existe (contra o hash dummy), e usa a
         // mesma mensagem de erro em todos os casos: senão dá pra descobrir se um e-mail/CPF
-        // tem conta, ou se o rate limit foi batido, só pelo texto da resposta.
+        // tem conta pelo tempo ou pelo texto da resposta.
         var passwordValid = !blocked && BCrypt.Net.BCrypt.Verify(dto.Password, user?.PasswordHash ?? DummyPasswordHash);
 
         if (blocked || user is null || !user.IsActive || !passwordValid)
         {
             _rateLimit.RegisterFailure(identifier, ipAddress);
-            return (false, genericError, null);
+            var lockedFor = _rateLimit.LockoutRemaining(identifier, ipAddress);
+            return (false, lockedFor is null ? genericError : LockoutMessage(lockedFor.Value), null, lockedFor);
         }
 
         _rateLimit.RegisterSuccess(identifier, ipAddress);
@@ -170,7 +169,13 @@ public class AuthService : IAuthService
         await UserActivity.RecordWithRetryAsync(_db, user.Id, DateTime.UtcNow, CancellationToken.None);
 
         var token = _tokenService.GenerateToken(user);
-        return (true, string.Empty, new AuthResult(user, token));
+        return (true, string.Empty, new AuthResult(user, token), null);
+    }
+
+    private static string LockoutMessage(TimeSpan remaining)
+    {
+        var minutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
+        return $"Muitas tentativas de login. Aguarde {minutes} {(minutes == 1 ? "minuto" : "minutos")} antes de tentar novamente.";
     }
 
     private static string CleanDocument(string doc) =>

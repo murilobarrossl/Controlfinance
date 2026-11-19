@@ -120,8 +120,22 @@ public class CashClosingsController(AppDbContext db, TimeProvider clock) : ApiCo
             .ToListAsync(ct);
         if (closings.Count == 0) return Ok(Array.Empty<CashAdjustedDayDto>());
 
-        var rows = await CashClosingLedger.LoadRowsAsync(db, UserId, scope,
-            closings.Min(c => c.Day), closings.Max(c => c.Day).AddDays(1), ct);
+        // Só os dias fechados: o intervalo entre o mais antigo e o mais recente pode cobrir anos de
+        // transações. Dias próximos (até 7 de distância) viram uma leitura só.
+        var rows = new List<CashClosingLedger.Row>();
+        var days = closings.Select(c => c.Day).Distinct().Order().ToList();
+        var runStart = days[0];
+        var runEnd = days[0];
+        foreach (var day in days.Skip(1).Append(DateOnly.MaxValue))
+        {
+            if (day != DateOnly.MaxValue && day.DayNumber - runEnd.DayNumber <= 7)
+            {
+                runEnd = day;
+                continue;
+            }
+            rows.AddRange(await CashClosingLedger.LoadRowsAsync(db, UserId, scope, runStart, runEnd.AddDays(1), ct));
+            runStart = runEnd = day;
+        }
         var byDay = rows.ToLookup(r => r.Day);
 
         var result = closings

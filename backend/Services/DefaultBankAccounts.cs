@@ -8,11 +8,13 @@ public static class DefaultBankAccounts
     private static readonly string[] KindOrder = ["CONTA_DEPOSITO_A_VISTA", "CONTA_PAGAMENTO_PRE_PAGA", "CONTA_POUPANCA"];
 
     // Toda escrita da conta padrão (manual ou automática) trava a linha do usuário: as escritas
-    // se serializam e o índice único parcial nunca é disputado.
+    // se serializam e o índice único parcial nunca é disputado. NO KEY UPDATE, não UPDATE: não conflita
+    // com o FOR KEY SHARE que cada INSERT com FK para Users (transações do sync) segura até o commit,
+    // mas continua exclusivo entre estes chamadores e diante do FOR UPDATE da exclusão de conta.
     public static async Task LockUserAsync(AppDbContext db, Guid userId, CancellationToken ct)
     {
         if (db.Database.IsNpgsql())
-            await db.Database.ExecuteSqlAsync($"SELECT 1 FROM \"Users\" WHERE \"Id\" = {userId} FOR UPDATE", ct);
+            await db.Database.ExecuteSqlAsync($"SELECT 1 FROM \"Users\" WHERE \"Id\" = {userId} FOR NO KEY UPDATE", ct);
     }
 
     // Depois de existir uma conta padrão, nenhuma conexão volta a ser candidata, nem se a padrão
