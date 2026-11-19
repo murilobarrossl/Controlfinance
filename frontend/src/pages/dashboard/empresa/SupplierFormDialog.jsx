@@ -1,7 +1,7 @@
 import { useState } from "react";
 import FormDialog from "../../../components/ui/FormDialog/FormDialog.jsx";
 import { TextField } from "../../../components/ui/FormDialog/FormField.jsx";
-import { createSupplier, setSupplierBankAccount, setSupplierPix, updateSupplier } from "../../../api/suppliers.js";
+import { addSupplierPaymentMethod, createSupplier, updateSupplier } from "../../../api/suppliers.js";
 import { isValidCnpj, isValidCpf } from "../../../utils/authRules.js";
 import { applyMask, CNPJ_MASK, getCpfCnpjMask } from "../../../utils/masks.js";
 import { PaymentChoice } from "./PaymentFields.jsx";
@@ -80,10 +80,7 @@ export default function SupplierFormDialog({ supplier, categories = [], onClose,
     }
 
     try {
-      const withPayment = await savePaymentChoice(payment, { pix, bank }, {
-        savePix: (body) => setSupplierPix(saved.id, body),
-        saveBank: (body) => setSupplierBankAccount(saved.id, body),
-      });
+      const withPayment = await savePaymentChoice(payment, { pix, bank }, (payload) => addSupplierPaymentMethod(saved.id, payload));
       onSaved(withPayment ?? saved);
     } catch (err) {
       setCreated(saved);

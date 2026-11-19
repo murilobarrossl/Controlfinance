@@ -3,19 +3,18 @@ import { Link, useNavigate, useParams } from "react-router";
 import Button from "../../../components/ui/Button/Button.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
-import { ModuleTable } from "./BusinessModule.jsx";
 import SupplierFormDialog from "./SupplierFormDialog.jsx";
-import { BankAccountDialog, PixDialog } from "./PaymentDialogs.jsx";
-import { Field, PaymentMethodsSection, Section, TextButton } from "./RecordDetailParts.jsx";
-import { paymentRemovalConfirmations } from "./payeePayment.js";
+import { PaymentMethodDialog } from "./PaymentDialogs.jsx";
+import { Field, PaymentMethodListSection, Section, TextButton } from "./RecordDetailParts.jsx";
+import { paymentMethodRemoval } from "./payeePayment.js";
 import {
   deleteSupplier,
   getSupplier,
   getSuppliersSummary,
-  removeSupplierBankAccount,
-  removeSupplierPix,
-  setSupplierBankAccount,
-  setSupplierPix,
+  addSupplierPaymentMethod,
+  removeSupplierPaymentMethod,
+  revealSupplierPixKey,
+  updateSupplierPaymentMethod,
 } from "../../../api/suppliers.js";
 import { isAbortError } from "../../../api/client.js";
 import usePageTitle from "../../../hooks/usePageTitle.js";
@@ -27,6 +26,7 @@ export default function SupplierDetail() {
   const [result, setResult] = useState(null);
   const [categories, setCategories] = useState([]);
   const [dialog, setDialog] = useState(null);
+  const [paymentTarget, setPaymentTarget] = useState(null);
   const [actionError, setActionError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const supplier = result?.key === supplierId ? result.data : null;
@@ -106,9 +106,8 @@ export default function SupplierDetail() {
   }
 
   const confirmations = {
-    ...paymentRemovalConfirmations(supplier, {
-      removePix: () => removeSupplierPix(supplier.id),
-      removeBank: () => removeSupplierBankAccount(supplier.id),
+    ...(paymentTarget && {
+      removePayment: paymentMethodRemoval(paymentTarget, () => removeSupplierPaymentMethod(supplier.id, paymentTarget.id)),
     }),
     remove: {
       title: `Excluir ${supplier.legalName}?`,
@@ -151,20 +150,33 @@ export default function SupplierDetail() {
         </dl>
       </Section>
 
-      <PaymentMethodsSection id="supplier-payment" payee={supplier} onOpen={setDialog} />
-
-      <Section id="supplier-history" title="Pagamentos reconhecidos">
-        <ModuleTable columns={[{ label: "Data" }, { label: "Descrição no extrato" }, { label: "Conta" }, { label: "Valor", numeric: true }]} />
-      </Section>
+      <PaymentMethodListSection
+        id="supplier-payment"
+        payee={supplier}
+        loadPixKey={revealSupplierPixKey}
+        onAdd={() => {
+          setPaymentTarget(null);
+          setDialog("payment");
+        }}
+        onEdit={(method) => {
+          setPaymentTarget(method);
+          setDialog("payment");
+        }}
+        onRemove={(method) => {
+          setPaymentTarget(method);
+          setDialog("removePayment");
+        }}
+      />
 
       {dialog === "core" && <SupplierFormDialog supplier={supplier} categories={categories} onClose={closeDialog} onSaved={applySaved} />}
-      {dialog === "pix" && (
-        <PixDialog current={supplier.pix} save={(payload) => setSupplierPix(supplier.id, payload)} onClose={closeDialog} onSaved={applySaved} />
-      )}
-      {dialog === "bank" && (
-        <BankAccountDialog
-          current={supplier.bank}
-          save={(payload) => setSupplierBankAccount(supplier.id, payload)}
+      {dialog === "payment" && (
+        <PaymentMethodDialog
+          current={paymentTarget}
+          save={(payload) =>
+            paymentTarget
+              ? updateSupplierPaymentMethod(supplier.id, paymentTarget.id, payload)
+              : addSupplierPaymentMethod(supplier.id, payload)
+          }
           onClose={closeDialog}
           onSaved={applySaved}
         />

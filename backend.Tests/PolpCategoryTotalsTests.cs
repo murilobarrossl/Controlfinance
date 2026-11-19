@@ -47,11 +47,11 @@ public class PolpCategoryTotalsTests
     }
 
     [Fact]
-    public void Pagamento_de_fatura_tem_categoria_propria_e_outros_LOAN_continuam_Emprestimos()
+    public void Pagamento_de_fatura_e_emprestimo_recebido_tem_categoria_propria_e_parcelas_continuam_Emprestimos()
     {
         Assert.Equal("Pagamento de fatura", PolpCategoryMap.ToCategoryName("LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"));
         Assert.Equal("Empréstimos", PolpCategoryMap.ToCategoryName("LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT"));
-        Assert.Equal("Empréstimos", PolpCategoryMap.ToCategoryName("LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT"));
+        Assert.Equal("Empréstimos recebidos", PolpCategoryMap.ToCategoryName("LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT"));
     }
 
     [Fact]

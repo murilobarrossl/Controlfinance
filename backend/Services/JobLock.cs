@@ -16,6 +16,7 @@ public static class JobLockKeys
     public const long DataRetention = 0x4346_4A4F_0000_0003;
     public const long PolpInboxCleanup = 0x4346_4A4F_0000_0004;
     public const long PolpReconciliation = 0x4346_4A4F_0000_0005;
+    public const long InactiveAccounts = 0x4346_4A4F_0000_0006;
 }
 
 public static class JobLockExtensions

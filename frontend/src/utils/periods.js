@@ -61,5 +61,3 @@ export const PERIODS = {
     previous: (offset) => ({ range: yearRange(localToday().year - offset - 1), trendLabel: "vs ano anterior" }),
   },
 };
-
-export const BUSINESS_PERIOD_OPTIONS = [PERIODS.day, PERIODS.month, PERIODS.year];

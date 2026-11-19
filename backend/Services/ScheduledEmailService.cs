@@ -125,7 +125,8 @@ public class ScheduledEmailService(IServiceScopeFactory scopeFactory, IJobLock j
             {
                 // Mês sem nenhuma transação não gera aviso, mas fica marcado como tratado: senão uma
                 // importação atrasada no meio do mês seguinte dispararia "seu mês fechou" fora de hora.
-                if (await db.Transactions.AnyAsync(t => t.UserId == user.Id && t.DueDate >= start && t.DueDate < end, ct))
+                if (await db.Transactions.AnyAsync(t => t.UserId == user.Id && t.DueDate >= start && t.DueDate < end
+                        && (t.BankAccount == null || t.BankAccount.IsActive), ct))
                 {
                     await email.SendMonthlyNoticeAsync(user.Email);
                     user.LastMonthlySummarySentAt = utcNow.UtcDateTime;

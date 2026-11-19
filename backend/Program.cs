@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -42,6 +43,7 @@ builder.Configuration["ConnectionStrings:DefaultConnection"] = StartupDatabaseCo
 builder.Services.AddSingleton<DatabaseConnectionDiagnostics>();
 builder.Services.AddDbContext<AppDbContext>((services, options) =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+        .ReplaceService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator, ConnectedNpgsqlDatabaseCreator>()
         .AddInterceptors(services.GetRequiredService<DatabaseConnectionDiagnostics>()));
 
 // ──────────────────────────────────────────
@@ -54,10 +56,10 @@ builder.Services.AddScoped<ITokenRevocationService, TokenRevocationService>();
 builder.Services.AddScoped<PolpSyncService>();
 builder.Services.AddScoped<PolpConsentMetadataService>();
 builder.Services.AddScoped<ControlFinance.API.Services.Investments.InvestmentImportStore>();
-builder.Services.AddScoped<ControlFinance.API.Services.Investments.InvestmentFinancialService>();
 builder.Services.AddScoped<ControlFinance.API.Services.Investments.PolpInvestmentImportService>();
 builder.Services.AddSingleton<PolpApiCooldownStore>();
 builder.Services.AddScoped<PolpDisconnectService>();
+builder.Services.AddScoped<PolpLoanImportService>();
 builder.Services.AddScoped<PolpWebhookProcessor>();
 builder.Services.AddScoped<IPolpEventHandler, PolpWebhookProcessorHandler>();
 builder.Services.AddScoped<IPolpInbox, PolpInbox>();
@@ -82,6 +84,8 @@ builder.Services.AddHttpClient<ReferenceRatesService>(c =>
 builder.Services.AddHostedService<ScheduledEmailService>();
 builder.Services.AddHostedService<PendingDisconnectRetryService>();
 builder.Services.AddHostedService<DataRetentionService>();
+builder.Services.AddScoped<AccountDeletionService>();
+builder.Services.AddHostedService<InactiveAccountService>();
 
 // ──────────────────────────────────────────
 //  JWT
@@ -106,6 +110,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
         options.Events = new JwtBearerEvents
         {
+            // A database outage is not an invalid credential. Let the error handler emit 503
+            // instead of turning a provider exception into 401 and logging the user out.
+            OnAuthenticationFailed = context =>
+                DatabaseFailure.IsTransient(context.Exception)
+                    || (context.Exception is OperationCanceledException && context.HttpContext.RequestAborted.IsCancellationRequested)
+                    ? Task.FromException(context.Exception)
+                    : Task.CompletedTask,
             // A sessão do navegador vem no cookie httpOnly (SessionCookie), não no cabeçalho:
             // sem Authorization, lê do cookie. Cabeçalho Authorization continua aceito (Swagger,
             // clientes de API), e requisições assim não passam pela checagem de CSRF.
@@ -140,16 +151,44 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var bypassCache = !(HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method) || HttpMethods.IsOptions(request.Method))
                     || request.Path.StartsWithSegments("/api/account/export");
 
-                var revocation = context.HttpContext.RequestServices.GetRequiredService<ITokenRevocationService>();
-                if (await revocation.IsRevokedAsync(jti, bypassCache))
+                // Cliente que desistiu (navegou, recarregou, StrictMode em dev) cancela RequestAborted: não é
+                // falha de banco nem de credencial, então falha fechado sem exceção (o handler registraria
+                // como erro). Falha real de banco continua lançando e vira 503 em OnAuthenticationFailed.
+                try
                 {
-                    context.Fail("Token revogado.");
-                    return;
-                }
+                    var revocation = context.HttpContext.RequestServices.GetRequiredService<ITokenRevocationService>();
+                    if (await revocation.IsRevokedAsync(jti, bypassCache, context.HttpContext.RequestAborted))
+                    {
+                        context.Fail("Token revogado.");
+                        return;
+                    }
 
-                var sessions = context.HttpContext.RequestServices.GetRequiredService<SessionValidator>();
-                if (!await sessions.IsValidAsync(userId, tokenVersion, bypassCache))
-                    context.Fail("Sessão encerrada.");
+                    var sessions = context.HttpContext.RequestServices.GetRequiredService<SessionValidator>();
+                    if (!await sessions.IsValidAsync(userId, tokenVersion, bypassCache, context.HttpContext.RequestAborted))
+                    {
+                        context.Fail("Sessão encerrada.");
+                        return;
+                    }
+
+                    // Falha ao registrar a atividade sobe como ActivityNotRecordedException e vira 503: o
+                    // usuário não é atendido sem atividade gravada, e a próxima requisição tenta de novo.
+                    var services = context.HttpContext.RequestServices;
+                    try
+                    {
+                        await UserActivity.TouchAsync(services.GetRequiredService<AppDbContext>(), services.GetRequiredService<IMemoryCache>(),
+                            userId, DateTime.UtcNow, context.HttpContext.RequestAborted);
+                    }
+                    catch (ActivityNotRecordedException ex)
+                    {
+                        services.GetRequiredService<ILoggerFactory>().CreateLogger("UserActivity")
+                            .LogWarning("Atividade do usuário não registrada ({ErrorType}); requisição recusada.", ex.InnerException?.GetType().Name);
+                        throw;
+                    }
+                }
+                catch (OperationCanceledException) when (context.HttpContext.RequestAborted.IsCancellationRequested)
+                {
+                    context.Fail("Requisição cancelada pelo cliente.");
+                }
             }
         };
     });
@@ -279,7 +318,7 @@ using (var scope = app.Services.CreateScope())
         ct => db.Database.OpenConnectionAsync(ct), app.Logger, app.Lifetime.ApplicationStopping);
 
     // Precisa saber se a migration do Radar de Recorrências ainda não tinha rodado nessa base
-    // ANTES de aplicar (Migrate() abaixo já marca ela como aplicada). É o gatilho do backfill
+    // ANTES de aplicar (MigrateAsync abaixo já marca ela como aplicada). É o gatilho do backfill
     // logo depois. Sem essa checagem, toda vez que o app subisse ele tentaria rodar de novo o
     // backfill em cima de linhas que o usuário já classificou manualmente como "conta mista"
     // (Mixed), sobrescrevendo a escolha dele com o chute. Lido via reflection (o [Migration] da
@@ -287,10 +326,10 @@ using (var scope = app.Services.CreateScope())
     // ao regenerar a migration com outro timestamp e esquecer de atualizar o literal à mão.
     var recurrenceRadarMigrationId = typeof(AddRecurrenceRadarSupport)
         .GetCustomAttribute<MigrationAttribute>()!.Id;
-    var recurrenceRadarMigrationIsPending = (await db.Database.GetPendingMigrationsAsync())
+    var recurrenceRadarMigrationIsPending = (await db.Database.GetPendingMigrationsAsync(app.Lifetime.ApplicationStopping))
         .Contains(recurrenceRadarMigrationId);
 
-    db.Database.Migrate();
+    await db.Database.MigrateAsync(app.Lifetime.ApplicationStopping);
 
     // Antes do backfill do Radar: ele lê User.DocumentType, que é preenchido aqui.
     var startupLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
@@ -351,12 +390,28 @@ app.UseExceptionHandler(errorApp =>
     {
         var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
         var feature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+        if (feature?.Error is OperationCanceledException && context.RequestAborted.IsCancellationRequested)
+        {
+            context.Response.StatusCode = 499;
+            return;
+        }
+
+        var unavailable = feature?.Error is { } error && DatabaseFailure.IsTransient(error);
         if (feature?.Error is { } ex)
-            logger.LogError(ex, "Exceção não tratada em {Path}", context.Request.Path);
+        {
+            if (unavailable)
+                logger.LogWarning("PostgreSQL indisponível em {Path}: {Failure}", context.Request.Path,
+                    DatabaseConnectionDiagnostics.Describe(ex));
+            else
+                logger.LogError(ex, "Exceção não tratada em {Path}", context.Request.Path);
+        }
 
         context.Response.ContentType = "application/json";
-        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-        await context.Response.WriteAsJsonAsync(new { message = "Ocorreu um erro inesperado. Tente novamente." });
+        context.Response.StatusCode = unavailable ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status500InternalServerError;
+        if (unavailable) context.Response.Headers["Retry-After"] = "5";
+        await context.Response.WriteAsJsonAsync(new { message = unavailable
+            ? "Banco de dados temporariamente indisponível. Tente novamente em instantes."
+            : "Ocorreu um erro inesperado. Tente novamente." });
     });
 });
 

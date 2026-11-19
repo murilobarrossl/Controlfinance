@@ -50,6 +50,9 @@ public class PolpReconciliationService(
     {
         if (!ConfigSecrets.IsPolpEnabled(config)) return;
 
+        // Distribute startup work across replicas instead of competing for connections together.
+        await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(5, 21)), clock, stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try

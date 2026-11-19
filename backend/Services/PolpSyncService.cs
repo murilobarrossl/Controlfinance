@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Text.Json;
 using ControlFinance.API.Data;
 using ControlFinance.API.Models;
 using Microsoft.EntityFrameworkCore;
@@ -14,10 +15,14 @@ namespace ControlFinance.API.Services;
 // evento da inbox é reprocessado: nada parcial é commitado.
 public class PolpSyncService(
     AppDbContext db, IPolpService polp, IConfiguration config, InstitutionNameResolver institutionNames,
-    IIntegrationLock integrationLock, TimeProvider time, ILogger<PolpSyncService>? logger = null, IPolpInbox? inbox = null)
+    IIntegrationLock integrationLock, TimeProvider time, ILogger<PolpSyncService>? logger = null, IPolpInbox? inbox = null,
+    IEncryptionService? encryption = null)
 {
     public const string AuthorisedStatus = "AUTHORISED";
-    public const int TransactionDetailsVersion = 2;
+    // 4: relê o histórico para preencher documento (partie_cnpj_cpf) e conta completa da contraparte.
+    // 5: relê para marcar se o CNPJ da contraparte veio do banco (CounterpartyCnpjFromBank).
+    // 6: relê para marcar pagamentos de tributo (PolpTaxPayment, TaxAuthority).
+    public const int TransactionDetailsVersion = 6;
     public static readonly TimeSpan ReconcileWindow = TimeSpan.FromDays(7);
 
     private const string CardBillPaymentType = "PAGAMENTO_FATURA";
@@ -61,6 +66,8 @@ public class PolpSyncService(
                     .SetProperty(p => p.EnrichmentPending, enrichmentPending)
                     .SetProperty(p => p.InstitutionName, institutionName)
                     .SetProperty(p => p.UpdatedAt, now), ct);
+            if (updated > 0 && PolpAuthorizationEnd.IsEnded(remote.Status))
+                await PolpAuthorizationEnd.SuspendAsync(db, now, ct, local.Id);
 
             return updated > 0 && remote.Status == AuthorisedStatus && !current.SyncedLocally;
         }, ct);
@@ -121,6 +128,10 @@ public class PolpSyncService(
             var bills = await polp.GetBillsAsync(remoteId, null, ct);
             if (bills.Any(b => b.CreditCardId != remoteId)) throw new PolpPermanentException("Fatura de outro recurso na resposta da Polp.");
             plan.Bills[remoteId] = bills;
+            // Pagamento de fatura muda o limite sem garantia de aviso credit_cards.
+            var cards = await polp.GetCreditCardsAsync(local.PolpIntegrationId, null, ct);
+            if (cards.Any(c => c.ConsentId != local.PolpIntegrationId)) throw new PolpPermanentException("Cartão de outro consentimento na resposta da Polp.");
+            plan.Cards.AddRange(cards.Where(c => c.Id == remoteId));
         }
         else
             return;
@@ -230,6 +241,17 @@ public class PolpSyncService(
             var bills = await polp.GetBillsAsync(remoteId, null, ct);
             if (bills.Any(b => b.CreditCardId != remoteId)) throw new PolpPermanentException("Fatura de outro recurso na resposta da Polp.");
             plan.Bills[remoteId] = bills;
+            try
+            {
+                plan.Recurrings[remoteId] = await polp.GetCardRecurringsAsync(remoteId, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested
+                && ex is HttpRequestException or IOException or TaskCanceledException or JsonException or PolpPermanentException)
+            {
+                // Enriquecimento opcional: uma falha nunca interrompe a importação financeira.
+                // Mantém o snapshot anterior, cuja data continua explícita. Nenhum dado bancário no log.
+                logger?.LogWarning("Recorrências do cartão não atualizadas: {ErrorType}", ex.GetType().Name);
+            }
         }
     }
 
@@ -278,6 +300,24 @@ public class PolpSyncService(
         finally
         {
             db.ChangeTracker.Clear();
+        }
+        // Só conexões marcadas no Connect pagam essa verificação; a marca cai assim que a empresa
+        // tem conta padrão.
+        if (plan.Integration.AutoDefaultPending)
+        {
+            // Os dados do banco já foram gravados: uma falha aqui não pode marcar o sync como falho.
+            try
+            {
+                await DefaultBankAccounts.AssignPendingAsync(db, userId, plan.Integration.Id, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                logger?.LogWarning("Conta padrão automática não definida: {Error}", ex.GetType().Name);
+            }
+            finally
+            {
+                db.ChangeTracker.Clear();
+            }
         }
         if (inbox is not null)
             foreach (var account in plan.Accounts.Where(a => a.Balance?.HasReservedBalance == true))
@@ -347,13 +387,7 @@ public class PolpSyncService(
             card.Brand = remote.CreditCardNetwork;
             card.Number = CardNumber(remote, plan.Transactions.GetValueOrDefault(remote.Id), card.Number);
 
-            var limit = remote.Limits.FirstOrDefault(l => l.CreditLineLimitType == "LIMITE_CREDITO_TOTAL")
-                ?? remote.Limits.FirstOrDefault();
-            if (limit is not null)
-            {
-                card.CreditLimit = limit.LimitAmount?.Value ?? card.CreditLimit;
-                card.UsedLimit = limit.UsedAmount?.Value ?? card.UsedLimit;
-            }
+            ApplyLimit(card, remote.Limits);
         }
 
         // Identity-only enrichment of existing cards: no creation, reconnection or financial
@@ -382,6 +416,13 @@ public class PolpSyncService(
             if (!byRemote.TryGetValue(remoteId, out var card)) continue;
             hadBills[remoteId] = card.ClosingDay.HasValue;
             ApplyBillDays(card, bills);
+        }
+
+        foreach (var (remoteId, recurrings) in plan.Recurrings)
+        {
+            if (!byRemote.TryGetValue(remoteId, out var card)) continue;
+            card.PolpRecurringsJson = recurrings is null ? null : JsonSerializer.Serialize(recurrings);
+            card.PolpRecurringsSyncedAt = now.UtcDateTime;
         }
 
         await UpsertTransactionsAsync(plan, byRemote, categoryIds, zone, ct);
@@ -445,6 +486,22 @@ public class PolpSyncService(
         }
 
         return current ?? AccountNumberMask.Mask(remote.PaymentMethods.FirstOrDefault()?.IdentificationNumber);
+    }
+
+    // Os três valores vêm sempre da mesma linha: misturar com os antigos gera usado > limite que o banco nunca informou.
+    private static void ApplyLimit(BankAccount card, List<PolpCardLimitDto> limits)
+    {
+        var limit = limits.FirstOrDefault(l => l.CreditLineLimitType == "LIMITE_CREDITO_TOTAL")
+            ?? (limits.Count == 1 ? limits[0] : null);
+        if (limit is null)
+        {
+            if (limits.Count > 1) card.CreditLimit = card.UsedLimit = card.AvailableLimit = null;
+            return;
+        }
+        if (limit.LimitAmount?.Value is null && limit.UsedAmount?.Value is null && limit.AvailableAmount?.Value is null) return;
+        card.CreditLimit = limit.LimitAmount?.Value;
+        card.UsedLimit = limit.UsedAmount?.Value;
+        card.AvailableLimit = limit.AvailableAmount?.Value;
     }
 
     private static void ApplyBillDays(BankAccount card, List<PolpBillDto> bills)
@@ -542,6 +599,27 @@ public class PolpSyncService(
             .Select(p => new BillPayment(p.date!.Value, p.amount!.Value))
             .ToList();
 
+    // partie_cnpj_cpf vem do próprio banco e prevalece sobre o CNPJ do enriquecimento (que pode ser de
+    // matriz/filial ou de outra origem): é ele que identifica pagamentos. CPF só como hash. Documento
+    // inválido é ignorado.
+    private void ApplyCounterpartyDocument(Transaction t, RemoteTransaction rt, Guid userId, bool hashCpf)
+    {
+        var digits = PayeeKeys.Digits(rt.CounterpartyDocument);
+        if (digits.Length == 14 && DocumentValidator.IsValidCnpj(digits))
+        {
+            t.CounterpartyCnpj = digits;
+            t.CounterpartyCnpjFromBank = true;
+            t.CounterpartyCpfHash = null;
+        }
+        else if (digits.Length == 11 && hashCpf && DocumentValidator.IsValidCpf(digits))
+            t.CounterpartyCpfHash = encryption!.ComputeLookupHash(EmployeeKeys.CpfLookupInput(userId, digits));
+
+        // Conta completa só como hash: identifica pagamento a funcionário sem documento na linha (ver SupplierPaymentMatcher).
+        if (hashCpf && PayeeKeys.AccountLookupInput(userId, rt.CounterpartyBankCode, rt.CounterpartyBranch,
+                rt.CounterpartyNumber is null || rt.CounterpartyCheckDigit is null ? null : rt.CounterpartyNumber + rt.CounterpartyCheckDigit) is { } account)
+            t.CounterpartyAccountHash = encryption!.ComputeLookupHash(account);
+    }
+
     private async Task UpsertTransactionsAsync(
         Plan plan, Dictionary<Guid, BankAccount> byRemote, Dictionary<string, Guid> categoryIds, TimeZoneInfo zone, CancellationToken ct)
     {
@@ -567,6 +645,10 @@ public class PolpSyncService(
         // antigo nem entra no banco (minimização na origem).
         var historyCutoff = DataRetentionPolicy.SyncedHistoryCutoff(config, time.GetUtcNow().UtcDateTime);
         Guid? fallbackCategoryId = categoryIds.TryGetValue(UncategorizedFallbackName, out var fid) ? fid : null;
+        // CPF da contraparte só vira hash (HMAC por empresa, o mesmo de Employee.CpfHash) e só para
+        // login CNPJ, que precisa dele para reconhecer pagamento a funcionário. Nunca é guardado em claro.
+        var hashCounterpartyCpf = encryption is not null
+            && await db.Users.AnyAsync(u => u.Id == userId && u.DocumentType == DocumentTypes.Cnpj, ct);
 
         foreach (var (account, batch) in targets)
         {
@@ -595,7 +677,10 @@ public class PolpSyncService(
                     existing.DueDate = dueDate;
                     existing.PaidAt = paidAt;
                     existing.PolpMovementKind = rt.MovementKind(existing.PolpMovementKind);
+                    existing.PolpTaxPayment = rt.TaxPayment(existing.PolpTaxPayment);
                     rt.ApplyBankDetails(existing);
+                    ApplyCounterpartyDocument(existing, rt, userId, hashCounterpartyCpf);
+                    existing.TaxAuthority = TaxPaymentDetection.AuthorityFor(existing);
 
                     // Enriquecimento tardio: só completa o que ainda é automático; renomeação ou
                     // recategorização feita no app nunca é sobrescrita.
@@ -619,9 +704,12 @@ public class PolpSyncService(
                     Amount = rt.Amount,
                     DueDate = dueDate,
                     PolpMovementKind = rt.MovementKind(PolpMovementKind.None),
+                    PolpTaxPayment = rt.TaxPayment(false),
                     PaidAt = paidAt
                 };
                 rt.ApplyBankDetails(transaction);
+                ApplyCounterpartyDocument(transaction, rt, userId, hashCounterpartyCpf);
+                transaction.TaxAuthority = TaxPaymentDetection.AuthorityFor(transaction);
                 db.Transactions.Add(transaction);
                 existingByKey[(account.Id, polpTransactionId)] = transaction;
             }
@@ -674,6 +762,7 @@ public class PolpSyncService(
     private sealed class Plan(PolpIntegration integration)
     {
         public PolpIntegration Integration { get; } = integration;
+        public Dictionary<Guid, List<PolpCardRecurringDto>?> Recurrings { get; } = [];
         public bool Backfill { get; init; }
         public bool FullTransactionHistory { get; init; }
         public List<PolpAccountDto> Accounts { get; } = [];
@@ -701,6 +790,9 @@ public class PolpSyncService(
         public string? CounterpartyBankCode { get; init; }
         public string? CounterpartyNumber { get; init; }
         public string? CounterpartyPersonType { get; init; }
+        public string? CounterpartyDocument { get; init; }
+        public string? CounterpartyBranch { get; init; }
+        public string? CounterpartyCheckDigit { get; init; }
         public int? ChargeIdentificator { get; init; }
         public int? ChargeNumber { get; init; }
         public PolpMoney? OriginalAmount { get; init; }
@@ -719,6 +811,8 @@ public class PolpSyncService(
                 t.CounterpartyAlias = string.IsNullOrWhiteSpace(cp.Alias) ? null : cp.Alias.Trim();
                 // Só CNPJ (cadastro público de empresa); um CPF de terceiro nunca é guardado.
                 t.CounterpartyCnpj = cp.TaxId is { Length: 14 } taxId && taxId.All(char.IsAsciiDigit) ? taxId : null;
+                // Enriquecimento não é prova; o documento do banco, aplicado depois, volta a marcar.
+                t.CounterpartyCnpjFromBank = false;
             }
             t.CounterpartyPersonType = CounterpartyPersonType is "PESSOA_NATURAL" or "PESSOA_JURIDICA" ? CounterpartyPersonType : null;
             t.CounterpartyBankCode = CounterpartyBankCode is { Length: > 0 and <= 8 } code && code.All(char.IsAsciiDigit) ? code : null;
@@ -748,6 +842,9 @@ public class PolpSyncService(
             : CategoryRef is null ? existing
             : TransferDetection.ToMovementKind(CategoryRef);
 
+        public bool TaxPayment(bool existing) =>
+            CategoryRef is null ? existing : TaxPaymentDetection.IsTaxPaymentClassification(CategoryRef);
+
         public static RemoteTransaction From(PolpAccountTransactionDto t) => new(
             t.Id,
             t.TransactionName ?? "Transação",
@@ -765,6 +862,9 @@ public class PolpSyncService(
             CounterpartyBankCode = t.PartieCompeCode?.Trim(),
             CounterpartyNumber = t.PartieNumber,
             CounterpartyPersonType = t.PartiePersonType,
+            CounterpartyDocument = t.PartieCnpjCpf,
+            CounterpartyBranch = t.PartieBranchCode,
+            CounterpartyCheckDigit = t.PartieCheckDigit,
         };
 
         public static RemoteTransaction From(PolpCardTransactionDto t) => new(

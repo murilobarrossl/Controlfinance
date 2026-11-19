@@ -192,4 +192,5 @@ public record RecognizedCardDto(
     // Identity of the connected institution, not the local connection/account ID.
     public Guid? IssuerInstitutionId { get; init; }
     public string? OriginalProductName { get; init; }
+    public decimal? AvailableLimit { get; init; }
 }

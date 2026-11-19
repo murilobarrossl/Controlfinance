@@ -65,6 +65,19 @@ public class PlanningDataTests
         return investment;
     }
 
+    private static ImportedReservedBalance AddReservedBalance(TestDb t, string? name)
+    {
+        var integration = SyncHarness.AddIntegration(t);
+        var account = t.AddAccount("Conta corrente");
+        var at = t.Clock.GetUtcNow().UtcDateTime;
+        var balance = new ImportedReservedBalance { UserId = t.User.Id, IntegrationId = integration.Id, BankAccountId = account.Id,
+            SourceConsentId = integration.PolpIntegrationId, ExternalId = Guid.NewGuid().ToString(), ReservedIdentification = Guid.NewGuid().ToString(),
+            Name = name, FirstObservedAt = at, LastObservedAt = at };
+        t.Db.ImportedReservedBalances.Add(balance);
+        t.Db.SaveChanges();
+        return balance;
+    }
+
     private static Guid NewGoal(TestDb t, string name = "Viagem") =>
         Results.OkValue<SavingsGoalDto>(Planning(t).CreateGoal(new CreateSavingsGoalDto(name, 8000m, null), default).Result).Id;
 
@@ -77,8 +90,8 @@ public class PlanningDataTests
         var stranger = AddStranger(t);
         var investment = AddInvestment(t);
 
-        await Planning(t).SetImportedReserve(new AllocationChangeDto(investment.Id, null, true), default);
-        await Planning(t).CreateGoal(new CreateSavingsGoalDto("Viagem", 8000m, new DateOnly(2027, 12, 1)), default);
+        var goalId = Results.OkValue<SavingsGoalDto>(await Planning(t).CreateGoal(new CreateSavingsGoalDto("Viagem", 8000m, new DateOnly(2027, 12, 1)), default)).Id;
+        await Planning(t).SetGoalAllocation(goalId, new AllocationChangeDto(investment.Id, null, true), default);
 
         var result = await Account(t).DeleteAccount(new ConfirmPasswordDto { Password = Password }, default);
 
@@ -101,8 +114,8 @@ public class PlanningDataTests
         t.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(Password);
         t.Db.SaveChanges();
         var investment = AddInvestment(t);
-        await Planning(t).SetImportedReserve(new AllocationChangeDto(investment.Id, null, true), default);
-        await Planning(t).CreateGoal(new CreateSavingsGoalDto("Viagem", 8000m, null), default);
+        var goalId = NewGoal(t);
+        await Planning(t).SetGoalAllocation(goalId, new AllocationChangeDto(investment.Id, null, true), default);
 
         var result = await Account(t).DeleteAccount(new ConfirmPasswordDto { Password = "errada" }, default);
 
@@ -124,7 +137,7 @@ public class PlanningDataTests
         Assert.IsType<NotFoundObjectResult>(await Planning(t).SetGoalAllocation(strangerGoalId, new AllocationChangeDto(investment.Id, null, true), default));
 
         var planning = Results.OkValue<PlanningDto>(await Planning(t).Get(default));
-        Assert.Empty(planning.Reserve.InvestmentIds);
+        Assert.Empty(planning.Reserve.ReservedBalanceIds);
         Assert.Empty(planning.Goals);
 
         await using var db = t.NewContext();
@@ -143,7 +156,6 @@ public class PlanningDataTests
         t.Db.SaveChanges();
         var goalId = NewGoal(t);
 
-        Assert.IsType<NotFoundObjectResult>(await Planning(t).SetImportedReserve(new AllocationChangeDto(foreign.Id, null, true), default));
         Assert.IsType<NotFoundObjectResult>(await Planning(t).SetGoalAllocation(goalId, new AllocationChangeDto(foreign.Id, null, true), default));
         await using var db = t.NewContext();
         Assert.False(await db.PlanningAllocations.AnyAsync());
@@ -161,40 +173,40 @@ public class PlanningDataTests
         Assert.Equal([investment.Id], linked.Goals.Single(g => g.Id == trip).InvestmentIds);
 
         Assert.IsType<ConflictObjectResult>(await Planning(t).SetGoalAllocation(car, new AllocationChangeDto(investment.Id, null, true), default));
-        Assert.IsType<ConflictObjectResult>(await Planning(t).SetImportedReserve(new AllocationChangeDto(investment.Id, null, true), default));
 
         var released = Results.OkValue<PlanningDto>(await Planning(t).SetGoalAllocation(trip, new AllocationChangeDto(investment.Id, null, false), default));
         Assert.Empty(released.Goals.Single(g => g.Id == trip).InvestmentIds);
-        var reserve = Results.OkValue<PlanningDto>(await Planning(t).SetImportedReserve(new AllocationChangeDto(investment.Id, null, true), default));
-        Assert.Equal([investment.Id], reserve.Reserve.InvestmentIds);
     }
 
     [Fact]
-    public async Task Reserva_aceita_varios_investimentos()
+    public async Task Reserva_e_formada_so_pelas_caixinhas_identificadas_pelo_nome()
     {
         using var t = new TestDb();
-        var first = AddInvestment(t, "CDB A");
-        var second = AddInvestment(t, "CDB B");
+        var reserve = AddReservedBalance(t, "Reserva");
+        var cushion = AddReservedBalance(t, "Colchão financeiro");
+        AddReservedBalance(t, "Viagem");
+        AddReservedBalance(t, null);
+        AddInvestment(t, "Reserva de Emergência");
 
-        await Planning(t).SetImportedReserve(new AllocationChangeDto(first.Id, null, true), default);
-        var planning = Results.OkValue<PlanningDto>(await Planning(t).SetImportedReserve(new AllocationChangeDto(second.Id, null, true), default));
+        var planning = Results.OkValue<PlanningDto>(await Planning(t).Get(default));
 
-        Assert.Equal([first.Id, second.Id], planning.Reserve.InvestmentIds);
+        Assert.Equal(new[] { reserve.Id, cushion.Id }.OrderBy(x => x), planning.Reserve.ReservedBalanceIds.OrderBy(x => x));
     }
 
     [Fact]
-    public async Task Reserva_automatica_por_nome_so_vai_para_meta_depois_de_sair_da_reserva()
+    public async Task Caixinha_da_reserva_nao_vai_para_meta_e_vinculo_antigo_a_meta_prevalece()
     {
         using var t = new TestDb();
-        var auto = AddInvestment(t, "Reserva de Emergência");
+        var auto = AddReservedBalance(t, "Emergência");
+        var legacy = AddReservedBalance(t, "Reserva casa");
         var goalId = NewGoal(t);
+        t.Db.PlanningAllocations.Add(new PlanningAllocation { UserId = t.User.Id, GoalId = goalId, ImportedReservedBalanceId = legacy.Id });
+        t.Db.SaveChanges();
 
-        Assert.IsType<ConflictObjectResult>(await Planning(t).SetGoalAllocation(goalId, new AllocationChangeDto(auto.Id, null, true), default));
-
-        var removed = Results.OkValue<PlanningDto>(await Planning(t).SetImportedReserve(new AllocationChangeDto(auto.Id, null, false), default));
-        Assert.Contains(auto.Id, removed.Reserve.ExcludedAutoIds);
-        var linked = Results.OkValue<PlanningDto>(await Planning(t).SetGoalAllocation(goalId, new AllocationChangeDto(auto.Id, null, true), default));
-        Assert.Equal([auto.Id], linked.Goals.Single().InvestmentIds);
+        Assert.IsType<ConflictObjectResult>(await Planning(t).SetGoalAllocation(goalId, new AllocationChangeDto(null, auto.Id, true), default));
+        var planning = Results.OkValue<PlanningDto>(await Planning(t).Get(default));
+        Assert.Equal([auto.Id], planning.Reserve.ReservedBalanceIds);
+        Assert.Equal([legacy.Id], planning.Goals.Single().ReservedBalanceIds);
     }
 
     [Fact]
@@ -209,15 +221,6 @@ public class PlanningDataTests
 
         await using var db = t.NewContext();
         Assert.False(await db.PlanningAllocations.AnyAsync());
-    }
-
-    [Fact]
-    public async Task Conta_bancaria_nao_pode_mais_virar_reserva()
-    {
-        using var t = new TestDb();
-        var account = t.AddAccount("Conta corrente");
-
-        Assert.IsType<BadRequestObjectResult>(await Planning(t).SetReserveAccount(new SetReserveAccountDto(account.Id), default));
     }
 
     [Fact]

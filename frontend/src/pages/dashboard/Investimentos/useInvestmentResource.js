@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { investmentDetail, investmentHistory, investmentMovements, investmentFinancials, isThrottled } from "../../../api/investments.js";
+import { investmentDetail, investmentHistory, investmentMovements, isThrottled } from "../../../api/investments.js";
 import { isAbortError } from "../../../api/client.js";
 
 const empty = () => ({ data: [], cursor: null, status: "loading", loadingMore: false, moreError: false });
-export function useInvestmentResource(item, owner, month, refreshKey) {
+export function useInvestmentResource(item, owner, refreshKey) {
   const [reload, setReload] = useState(0);
   const [state, setState] = useState(null);
-  const [financial, setFinancial] = useState(null);
   const request = useRef(null);
   const generation = useRef(0);
   const moreLoaded = useRef(false);
@@ -42,18 +41,6 @@ export function useInvestmentResource(item, owner, month, refreshKey) {
     return () => { controller.abort(); generation.current += 1; clearInterval(timer); };
   }, [key, item.id, item.reserved, reload, refreshKey]);
 
-  useEffect(() => {
-    if (item.reserved) return;
-    const controller = new AbortController();
-    setFinancial((prev) => prev?.key === key && prev.month === month ? { ...prev, status: "loading" } : { key, month, status: "loading" });
-    investmentFinancials(item.id, month, controller.signal).then((data) => {
-      if (!controller.signal.aborted) setFinancial({ key, month, status: "ready", data });
-    }).catch((error) => {
-      if (!isAbortError(error) && !controller.signal.aborted) setFinancial((prev) => prev?.data && prev.key === key && prev.month === month && isThrottled(error) ? { ...prev, status: "ready" } : { key, month, status: "error" });
-    });
-    return () => controller.abort();
-  }, [key, item.id, item.reserved, month, reload, refreshKey]);
-
   async function more(kind) {
     const dataset = state?.[kind];
     if (state?.key !== key || !dataset?.cursor || dataset.refreshing || busy.current.has(kind)) return;
@@ -72,6 +59,5 @@ export function useInvestmentResource(item, owner, month, refreshKey) {
     } finally { if (generation.current === current) busy.current.delete(kind); }
   }
   return { ...(state?.key === key ? state : { loading: true, history: empty(), movements: empty() }),
-    financial: financial?.key === key && financial.month === month ? financial : { status: "loading" },
     more, retry: () => setReload((n) => n + 1) };
 }

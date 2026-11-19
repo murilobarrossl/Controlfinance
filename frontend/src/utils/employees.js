@@ -45,8 +45,8 @@ export function formatDateOnly(value) {
 export { todayIso };
 
 export function paymentMethodLabel({ hasPix, hasBankAccount }) {
-  if (hasPix && hasBankAccount) return "Pix e transferência";
+  if (hasPix && hasBankAccount) return "Pix e transferência (TED)";
   if (hasPix) return "Pix";
-  if (hasBankAccount) return "Transferência";
+  if (hasBankAccount) return "Transferência (TED)";
   return "—";
 }

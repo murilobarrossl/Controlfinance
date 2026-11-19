@@ -10,28 +10,17 @@ import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading
 import RangePicker from "../../../components/ui/RangePicker/RangePicker.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import CategoryBlocks from "./CategoryBlocks.jsx";
-import { TrendUpIcon, TrendDownIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
+import LoanContracts from "./LoanContracts.jsx";
+import SummaryMetric from "./SummaryMetric.jsx";
+import CashClosingPanel from "./CashClosingPanel.jsx";
+import CashAnalysis from "./CashAnalysis.jsx";
+import { dayOffsetFrom } from "./cashFormat.js";
 import { formatCurrency, roundMoney, formatPercentage } from "../../../utils/financeMath.js";
 import { computeTrend } from "../../../utils/trend.js";
-import { BUSINESS_PERIOD_OPTIONS, PERIODS } from "../../../utils/periods.js";
+import { PERIODS } from "../../../utils/periods.js";
 import { breakdownFromAggregates } from "../../../utils/categoryBreakdown.js";
 import "./ReceitasDespesas.css";
 import usePageTitle from "../../../hooks/usePageTitle.js";
-
-function SummaryMetric({ label, value, tone, trend }) {
-  return (
-    <dl className="rd-summary">
-      <dt className="rd-summary__label">{label}</dt>
-      <dd className={`rd-summary__value rd-summary__value--${tone}`}>{value}</dd>
-      {trend && (
-        <dd className={`rd-summary__trend rd-summary__trend--${trend.tone}`}>
-          <span aria-hidden="true">{trend.direction === "up" ? <TrendUpIcon /> : <TrendDownIcon />}</span>
-          {trend.text}
-        </dd>
-      )}
-    </dl>
-  );
-}
 
 function closingSentence(totalIncome, totalExpense) {
   const leftover = roundMoney(totalIncome - totalExpense);
@@ -48,13 +37,12 @@ export default function ReceitasDespesas() {
   const business = isBusinessHolder(user);
   usePageTitle(business ? "Fluxo de Caixa" : "Receitas e despesas");
   const { scopeKey, scopeQuery, dataRefreshKey, accountsStatus } = useAccount();
-  const [granularity, setGranularity] = useState("day");
   const [aggregateResult, setAggregateResult] = useState(null);
   const [offset, setOffset] = useState(0);
   const [expandedIncome, setExpandedIncome] = useState(() => new Set());
   const [expandedExpense, setExpandedExpense] = useState(() => new Set());
 
-  const period = PERIODS[business ? granularity : "month"];
+  const period = PERIODS[business ? "day" : "month"];
   const current = useMemo(() => period.current(offset), [period, offset]);
   const comparison = useMemo(() => period.previous(offset), [period, offset]);
   const aggregateKey = `${scopeKey}|${dataRefreshKey}|${period.key}|${offset}`;
@@ -134,16 +122,6 @@ export default function ReceitasDespesas() {
       <header className="receitas-despesas__header">
         <SectionHeading title={business ? "Fluxo de Caixa" : "Receitas e despesas"} level={1} />
         <div className="receitas-despesas__controls">
-          {business && (
-            <div className="rd-granularity" role="group" aria-label="Período de análise">
-              {BUSINESS_PERIOD_OPTIONS.map((option) => (
-                <button key={option.key} type="button" aria-pressed={granularity === option.key}
-                  onClick={() => { setGranularity(option.key); setOffset(0); }}>
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          )}
           <RangePicker
             label={current.label}
             onPrev={() => setOffset((prev) => prev + 1)}
@@ -153,14 +131,28 @@ export default function ReceitasDespesas() {
         </div>
       </header>
 
+      {business && accountsStatus === "ready" && (
+        <CashClosingPanel
+          date={current.range.from}
+          scopeQuery={scopeQuery}
+          scopeKey={scopeKey}
+          refreshKey={dataRefreshKey}
+          onSelectDay={(day) => setOffset(Math.max(0, dayOffsetFrom(day)))}
+        />
+      )}
+
       <div className="receitas-despesas__halves">
         <section className="receitas-despesas__half" aria-label="Receitas">
-          <SummaryMetric
-            label="Receitas"
-            value={loading ? <Skeleton width="7rem" height="1.5rem" /> : formatCurrency(totalIncome)}
-            tone={loading ? "default" : financialTone(totalIncome)}
-            trend={loading ? null : incomeTrend}
-          />
+          {business ? (
+            <h2 className="rd-half__title">Receitas por categoria</h2>
+          ) : (
+            <SummaryMetric
+              label="Receitas"
+              value={loading ? <Skeleton width="7rem" height="1.5rem" /> : formatCurrency(totalIncome)}
+              tone={loading ? "default" : financialTone(totalIncome)}
+              trend={loading ? null : incomeTrend}
+            />
+          )}
 
           {loading ? (
             <Skeleton width="100%" height="12rem" />
@@ -178,12 +170,16 @@ export default function ReceitasDespesas() {
         </section>
 
         <section className="receitas-despesas__half" aria-label="Despesas">
-          <SummaryMetric
-            label="Despesas"
-            value={loading ? <Skeleton width="7rem" height="1.5rem" /> : formatCurrency(totalExpense)}
-            tone={loading ? "default" : transactionTone("Expense", totalExpense)}
-            trend={loading ? null : expenseTrend}
-          />
+          {business ? (
+            <h2 className="rd-half__title">Despesas por categoria</h2>
+          ) : (
+            <SummaryMetric
+              label="Despesas"
+              value={loading ? <Skeleton width="7rem" height="1.5rem" /> : formatCurrency(totalExpense)}
+              tone={loading ? "default" : transactionTone("Expense", totalExpense)}
+              trend={loading ? null : expenseTrend}
+            />
+          )}
 
           {loading ? (
             <Skeleton width="100%" height="12rem" />
@@ -203,7 +199,7 @@ export default function ReceitasDespesas() {
         </section>
       </div>
 
-      <section className="rd-result" aria-labelledby="rd-result-label">
+      {!business && <section className="rd-result" aria-labelledby="rd-result-label">
         <h2 id="rd-result-label" className="rd-result__label">
           Resultado do período
         </h2>
@@ -220,7 +216,11 @@ export default function ReceitasDespesas() {
             <p className="rd-result__text">{closingSentence(totalIncome, totalExpense)}</p>
           </>
         )}
-      </section>
+      </section>}
+
+      {business && accountsStatus === "ready" && <CashAnalysis scopeQuery={scopeQuery} scopeKey={scopeKey} refreshKey={dataRefreshKey} />}
+
+      {!business && <LoanContracts />}
     </div>
   );
 }

@@ -197,7 +197,7 @@ public class PolpController(
                 return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível validar a conexão com o banco." });
             try
             {
-                var recreated = await polp.RecreateConsentAsync(created.Id, ct);
+                var recreated = await polp.RecreateConsentAsync(created.Id, document.Length == 14, ct);
                 if (recreated.Id != created.Id || recreated.InstitutionId != institutionId || recreated.ClientUserId != UserId.ToString())
                     return StatusCode(StatusCodes.Status502BadGateway, new { message = "Não foi possível validar a conexão com o banco." });
                 created = recreated;
@@ -223,7 +223,11 @@ public class PolpController(
                 ExecutionStatus = created.ExecutionStatus,
                 InstitutionName = institutionName,
                 ConsentProductsJson = PolpConsentMetadataService.SerializeProducts(created.Products),
-                UpdatedAt = DateTime.UtcNow
+                UpdatedAt = DateTime.UtcNow,
+                // Decidido aqui, antes de qualquer conta chegar: só um banco iniciado sem nenhum
+                // outro banco com contas pode virar padrão sozinho (DefaultBankAccounts).
+                AutoDefaultPending = documentType == DocumentTypes.Cnpj
+                    && !await db.BankAccounts.AnyAsync(b => b.UserId == UserId && b.PolpIntegrationId != null, ct)
             };
             db.PolpIntegrations.Add(localIntegration);
         }
@@ -305,7 +309,7 @@ public class PolpController(
         // conta continua com sua própria visão de dados, nada é somado entre elas.
         var accounts = await db.BankAccounts
             .Where(b => b.UserId == UserId && b.IsActive)
-            .Select(b => new { b.Id, b.Name, b.Balance, b.BalanceUpdatedAt, b.BankCode, b.PolpIntegrationId, b.PolpAccountId, b.PolpAccountType, b.PolpAccountSubtype, b.Number })
+            .Select(b => new { b.Id, b.Name, b.Balance, b.BalanceUpdatedAt, b.BankCode, b.PolpIntegrationId, b.PolpAccountId, b.PolpAccountType, b.PolpAccountSubtype, b.Number, b.IsDefault })
             .ToListAsync(ct);
 
         // BankAccount.PolpIntegrationId guarda o id do consentimento na Polp, mas o frontend
@@ -345,7 +349,10 @@ public class PolpController(
                 // também é o que separa conta corrente de poupança/investimento em Investimentos.
                 accountType = a.PolpAccountType,
                 accountSubtype = a.PolpAccountSubtype,
-                isCreditCard
+                isCreditCard,
+                // Conexão revogada, expirada ou em desconexão deixa de valer como padrão sem
+                // promover outra conta: a escolha seguinte é sempre do usuário.
+                isDefault = a.IsDefault && !isCreditCard && local?.Status == "AUTHORISED"
             };
         });
 

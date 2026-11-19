@@ -166,6 +166,8 @@ public class AuthService : IAuthService
 
         if (_db.ChangeTracker.HasChanges())
             await _db.SaveChangesAsync();
+        // Antes do token: sem atividade gravada, o login não é concluído.
+        await UserActivity.RecordWithRetryAsync(_db, user.Id, DateTime.UtcNow, CancellationToken.None);
 
         var token = _tokenService.GenerateToken(user);
         return (true, string.Empty, new AuthResult(user, token));

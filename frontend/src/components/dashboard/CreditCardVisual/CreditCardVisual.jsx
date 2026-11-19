@@ -63,7 +63,7 @@ export default function CreditCardVisual({
             </div>
             <div className="credit-card-visual__limit-labels">
               <span>
-                Limite usado: <strong className={overLimit ? "credit-card-visual__used--over" : undefined}>{formatCurrency(card.usedLimit)}</strong> de {formatCurrency(card.creditLimit)}
+                Limite usado: <strong className={overLimit ? "credit-card-visual__used--over" : undefined}>{card.usedLimit != null ? formatCurrency(card.usedLimit) : "—"}</strong> de {formatCurrency(card.creditLimit)}
               </span>
               {usagePercent != null && <span>{formatPercentage(usagePercent)}</span>}
             </div>

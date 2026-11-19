@@ -5,7 +5,7 @@ import usePageTitle from "../../hooks/usePageTitle.js";
 // Descreve o serviço como ele existe hoje. Itens [PENDENTE] dependem de informação que ainda não
 // existe (dados da empresa, condições comerciais). Mudou o texto, muda a versão em legal/versions.js e em
 // backend/Services/LegalDocuments.cs.
-export const TERMS_UPDATED_AT = `14 de novembro de 2026 (versão ${TERMS_VERSION})`;
+export const TERMS_UPDATED_AT = `20 de novembro de 2026 (versão ${TERMS_VERSION})`;
 
 export default function TermosDeUso() {
   usePageTitle("Termos de uso");
@@ -38,6 +38,14 @@ export function TermosDeUsoTexto() {
         <li>O Control Finance <strong>não é participante do Open Finance</strong>: a conexão com bancos é feita por um fornecedor (Polp Tecnologia) que usa uma instituição participante.</li>
         <li>O Control Finance <strong>não faz recomendação nem consultoria de investimentos</strong>. Textos sobre modalidades de investimento são explicativos e genéricos. Projeções de rendimento usam só regras oficiais ou a taxa informada por você e são estimativas, assim como o simulador de financiamento.</li>
       </ul>
+      <p>
+        Em contas CNPJ, a empresa também pode cadastrar funcionários e fornecedores (com formas de pagamento), registrar
+        custos adicionais de cada funcionário, ver quais funcionários tiveram pagamento identificado nas transações do
+        banco, marcar pagamentos manualmente, fechar o caixa do dia e ver pagamentos de tributos identificados no extrato.
+        Esses recursos organizam informações: o Control Finance <strong>não calcula folha, encargos ou tributos, não
+        emite guias, não faz pagamentos e não substitui contabilidade nem obrigações trabalhistas e fiscais</strong>.
+        Pagamento identificado não significa salário, obrigação ou tributo quitado.
+      </p>
 
       <h2>2. Cadastro</h2>
       <ul>
@@ -61,7 +69,51 @@ export function TermosDeUsoTexto() {
         sobrecarregar a infraestrutura.
       </p>
 
-      <h2>5. Planos e pagamento</h2>
+      <h2>5. Dados de funcionários e fornecedores (contas CNPJ)</h2>
+      <p>
+        Esta seção vale quando a empresa cadastra dados pessoais de funcionários, fornecedores pessoas físicas ou de quem
+        recebe pagamentos deles. Nesse tratamento, a empresa é a controladora e o Control Finance é o operador (LGPD, art.
+        5º, VI e VII). Estes Termos são o instrumento que rege esse tratamento entre as partes.
+      </p>
+      <ul>
+        <li>
+          <strong>Instruções:</strong> o Control Finance trata esses dados só para fornecer as funções da plataforma que a
+          empresa usa (cadastro, formas de pagamento, custos, identificação de pagamentos, marcações, exportação e
+          exclusão), conforme as instruções que a empresa dá ao usar essas funções e estes Termos (LGPD, art. 39). Não usa
+          esses dados para finalidades próprias, não os vende e não os compartilha, exceto com o provedor de hospedagem e
+          com autoridades quando houver obrigação legal.
+        </li>
+        <li>
+          <strong>Responsabilidades da empresa:</strong> ter base legal para o tratamento, informar os titulares sobre ele,
+          cadastrar só dados corretos e necessários e atender os pedidos dos titulares, usando as funções de consulta,
+          edição, exportação e exclusão do painel.
+        </li>
+        <li>
+          <strong>Responsabilidades do Control Finance:</strong> manter as medidas de segurança descritas na Política de
+          Privacidade; encaminhar à empresa os pedidos de titulares que receber; e informar a empresa, sem demora
+          injustificada, sobre incidente de segurança que afete esses dados, com as informações disponíveis para que ela
+          avalie e faça as comunicações que lhe cabem à ANPD e aos titulares (LGPD, art. 48).
+        </li>
+        <li>
+          <strong>Suboperadores:</strong> só o provedor de hospedagem indicado na Política de Privacidade. Esses dados não
+          são enviados à Polp, aos bancos nem ao serviço de e-mail.
+        </li>
+        <li>
+          <strong>Informações:</strong> mediante pedido pelo canal de contato, o Control Finance fornece à empresa as
+          informações disponíveis sobre esse tratamento, necessárias para ela demonstrar o cumprimento da LGPD.
+        </li>
+        <li>
+          <strong>Fim do tratamento:</strong> a empresa pode exportar os dados a qualquer momento. Ao excluir a conta, esses
+          dados são apagados dos servidores do Control Finance, com a ressalva das cópias de segurança descrita na Política
+          de Privacidade.
+        </li>
+      </ul>
+      <p>
+        Os códigos derivados do CPF e da conta de quem recebe pagamentos, gerados a partir das transações do banco, são
+        tratados pelo Control Finance como controlador, nos termos da Política de Privacidade.
+      </p>
+
+      <h2>6. Planos e pagamento</h2>
       <p>
         A contratação paga ainda não está disponível pelo site, e nenhuma cobrança é feita hoje. Antes de qualquer cobrança,
         publicaremos as condições comerciais completas: preço, forma de pagamento, renovação, reajuste, teste gratuito,
@@ -69,33 +121,38 @@ export function TermosDeUsoTexto() {
         <strong> [PENDENTE: condições comerciais e gateway de pagamento]</strong>
       </p>
 
-      <h2>6. Responsabilidades</h2>
+      <h2>7. Responsabilidades</h2>
       <ul>
         <li>Respondemos pelo funcionamento do serviço e pela segurança dos dados sob nossa guarda, nos termos do Código de Defesa do Consumidor e da LGPD. Nada nestes Termos afasta direitos que a lei garante a você.</li>
         <li>Como os dados bancários vêm do banco por meio do fornecedor, confira valores importantes também no aplicativo do banco antes de tomar decisões.</li>
         <li>As decisões financeiras que você tomar são suas; o Control Finance organiza e mostra informações, sem recomendar produtos ou operações.</li>
       </ul>
 
-      <h2>7. Encerramento</h2>
+      <h2>8. Encerramento</h2>
       <ul>
         <li>Você pode excluir sua conta a qualquer momento em Privacidade e dados. Os efeitos estão descritos na Política de Privacidade.</li>
         <li>Podemos suspender ou encerrar contas que violem estes Termos, com aviso prévio sempre que possível.</li>
+        <li>
+          Uma conta sem nenhum acesso por 3 anos é excluída, com todos os dados dela, inclusive os cadastros de funcionários e
+          fornecedores em contas CNPJ. Antes, avisamos por e-mail com 90, 30 e 7 dias de antecedência; basta entrar na conta
+          antes da data informada para mantê-la. Se precisar dos dados, exporte-os antes em Privacidade e dados.
+        </li>
       </ul>
 
-      <h2>8. Propriedade intelectual</h2>
+      <h2>9. Propriedade intelectual</h2>
       <p>
         O software, a marca e o conteúdo do Control Finance pertencem a <strong>[PENDENTE: titular]</strong>. Nomes e logotipos
         de bancos exibidos na plataforma pertencem às respectivas instituições e aparecem só para identificar a instituição
         conectada, sem indicar parceria.
       </p>
 
-      <h2>9. Alterações destes Termos</h2>
+      <h2>10. Alterações destes Termos</h2>
       <p>
         Cada versão tem data e número. Mudanças relevantes serão avisadas por e-mail ou no painel antes de valerem. Se você não
         concordar, pode excluir a conta sem custo.
       </p>
 
-      <h2>10. Lei aplicável e foro</h2>
+      <h2>11. Lei aplicável e foro</h2>
       <p>
         Aplica-se a lei brasileira. Se você for consumidor, pode propor ação no foro do seu domicílio (Código de Defesa
         do Consumidor, art. 101, I).

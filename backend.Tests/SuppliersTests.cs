@@ -16,6 +16,12 @@ namespace ControlFinance.API.Tests;
 
 public class SuppliersTests
 {
+    private static PayeePaymentMethodDto PixMethod(string type, string key) => new("Pix", new PayeePixDto(type, key), null, HolderCpf);
+
+    // Titular de quem recebe: obrigatório para TED e Pix sem chave de documento.
+    private const string HolderCpf = "52998224725";
+    private static PayeePaymentMethodDto BankMethod(PayeeBankDto bank) => new("Bank", null, bank, HolderCpf);
+
     private const string Cnpj = "11222333000181";
     private const string Cpf = "52998224725";
     private const string OtherCnpj = "45997418000153";
@@ -43,7 +49,7 @@ public class SuppliersTests
         Assert.Contains(typeof(SuppliersController).GetCustomAttributes(true), a => a is BusinessHolderOnlyAttribute);
 
     [Fact]
-    public async Task Cadastro_aceita_CNPJ_ou_CPF_e_so_devolve_documento_mascarado()
+    public async Task Cadastro_aceita_CNPJ_ou_CPF_e_so_o_CPF_volta_mascarado()
     {
         using var t = Company();
 
@@ -51,12 +57,12 @@ public class SuppliersTests
         var person = await Create(t, Dto(name: "João da Silva", document: Cpf, tradeName: null, category: null));
 
         Assert.Equal("CNPJ", company.DocumentType);
-        Assert.Equal("••.•••.•••/0001-81", company.DocumentMasked);
+        Assert.Equal("11.222.333/0001-81", company.DocumentMasked);
         Assert.Equal("CPF", person.DocumentType);
         Assert.Equal("•••.•••.247-25", person.DocumentMasked);
         Assert.Null(person.TradeName);
-        Assert.Null(person.Pix);
-        Assert.DoesNotContain(Cnpj, Http.Json(new OkObjectResult(company)));
+        Assert.Empty(person.PaymentMethods);
+        Assert.DoesNotContain(Cpf, Http.Json(new OkObjectResult(person)));
 
         await using var connection = t.Db.Database.GetDbConnection();
         await using var cmd = connection.CreateCommand();
@@ -85,11 +91,11 @@ public class SuppliersTests
     {
         using var t = Company();
         var first = await Create(t, Dto());
-        await Controller(t).SetPix(first.Id, new PayeePixDto("Cnpj", Cnpj), default);
+        await Controller(t).AddPaymentMethod(first.Id, PixMethod("Cnpj", Cnpj), default);
         var second = await Create(t, Dto(name: "Laticínios Sul", document: OtherCnpj));
 
         Assert.Equal(400, Http.Status(await Controller(t).Create(Dto(name: "Outro nome"), default)));
-        var samePix = await Controller(t).SetPix(second.Id, new PayeePixDto("Cnpj", "11.222.333/0001-81"), default);
+        var samePix = await Controller(t).AddPaymentMethod(second.Id, PixMethod("Cnpj", "11.222.333/0001-81"), default);
         Assert.Equal(400, Http.Status(samePix));
         Assert.Contains("outro fornecedor", Message(samePix));
 
@@ -110,10 +116,14 @@ public class SuppliersTests
         Assert.Null(edited.TradeName);
         Assert.Equal("Matéria-prima", edited.Category);
 
-        Assert.Equal(400, Http.Status(await Controller(t).SetBankAccount(created.Id, new PayeeBankDto("34", "1", "1", "Corrente"), default)));
-        var withBank = Results.OkValue<SupplierDetailDto>(await Controller(t).SetBankAccount(created.Id, new PayeeBankDto("237", "0123", "45678-9", "Corrente"), default));
-        Assert.Equal("•••• 6789", withBank.Bank!.AccountMasked);
-        Assert.Null(Results.OkValue<SupplierDetailDto>(await Controller(t).RemoveBankAccount(created.Id, default)).Bank);
+        Assert.Equal(400, Http.Status(await Controller(t).AddPaymentMethod(created.Id, BankMethod(new PayeeBankDto("34", "1", "1", "Corrente")), default)));
+        var withBank = Results.OkValue<SupplierDetailDto>(await Controller(t).AddPaymentMethod(created.Id, BankMethod(new PayeeBankDto("237", "0123", "45678-9", "Corrente")), default));
+        Assert.Equal("•••• 6789", withBank.PaymentMethods.Single().Bank!.AccountMasked);
+        var withTwo = Results.OkValue<SupplierDetailDto>(await Controller(t).AddPaymentMethod(created.Id, PixMethod("Email", "financeiro@fornecedor.com"), default));
+        Assert.Equal(["Bank", "Pix"], withTwo.PaymentMethods.Select(m => m.Kind));
+        var bankId = withTwo.PaymentMethods[0].Id;
+        Assert.Contains("este fornecedor", Message(await Controller(t).AddPaymentMethod(created.Id, BankMethod(new PayeeBankDto("237", "0123", "45678-9", "Poupanca")), default)));
+        Assert.Single(Results.OkValue<SupplierDetailDto>(await Controller(t).RemovePaymentMethod(created.Id, bankId, default)).PaymentMethods);
     }
 
     [Fact]
@@ -121,12 +131,11 @@ public class SuppliersTests
     {
         using var t = Company();
         var first = await Create(t, Dto());
-        await Controller(t).SetPix(first.Id, new PayeePixDto("Cnpj", Cnpj), default);
+        await Controller(t).AddPaymentMethod(first.Id, PixMethod("Cnpj", Cnpj), default);
         await Create(t, Dto(name: "Laticínios Sul", document: OtherCnpj));
 
         var summary = Results.OkValue<SupplierSummaryDto>(await Controller(t).Summary(default));
         Assert.Equal(2, summary.TotalCount);
-        Assert.Equal(1, summary.WithPaymentCount);
 
         Assert.Equal(204, Http.Status(await Controller(t).Delete(first.Id, default)));
         Assert.Equal(404, Http.Status(await Controller(t).Get(first.Id, default)));
@@ -134,7 +143,7 @@ public class SuppliersTests
         Assert.Equal(1, Results.OkValue<SupplierSummaryDto>(await Controller(t).Summary(default)).TotalCount);
 
         var again = await Create(t, Dto());
-        Assert.Equal(200, Http.Status(await Controller(t).SetPix(again.Id, new PayeePixDto("Cnpj", Cnpj), default)));
+        Assert.Equal(200, Http.Status(await Controller(t).AddPaymentMethod(again.Id, PixMethod("Cnpj", Cnpj), default)));
     }
 
     [Fact]
@@ -151,10 +160,10 @@ public class SuppliersTests
         Assert.Equal(404, Http.Status(await c.Get(foreign.Id, default)));
         Assert.Equal(404, Http.Status(await c.Update(foreign.Id, Dto(), default)));
         Assert.Equal(404, Http.Status(await c.Delete(foreign.Id, default)));
-        Assert.Equal(404, Http.Status(await c.SetPix(foreign.Id, new PayeePixDto("Email", "a@b.com"), default)));
-        Assert.Equal(404, Http.Status(await c.RemovePix(foreign.Id, default)));
-        Assert.Equal(404, Http.Status(await c.SetBankAccount(foreign.Id, new PayeeBankDto("341", "1", "1", "Corrente"), default)));
-        Assert.Equal(404, Http.Status(await c.RemoveBankAccount(foreign.Id, default)));
+        Assert.Equal(404, Http.Status(await c.AddPaymentMethod(foreign.Id, PixMethod("Email", "a@b.com"), default)));
+        Assert.Equal(404, Http.Status(await c.UpdatePaymentMethod(foreign.Id, Guid.NewGuid(), PixMethod("Email", "a@b.com"), default)));
+        Assert.Equal(404, Http.Status(await c.RemovePaymentMethod(foreign.Id, Guid.NewGuid(), default)));
+        Assert.Equal(404, Http.Status(await c.RevealPixKey(foreign.Id, Guid.NewGuid(), default)));
         Assert.Empty(Results.OkValue<SupplierListDto>(await c.List(null)).Items);
         Assert.Equal(0, Results.OkValue<SupplierSummaryDto>(await c.Summary(default)).TotalCount);
 
@@ -219,5 +228,24 @@ public class SuppliersTests
             digits.Add(r < 2 ? 0 : 11 - r);
         }
         return string.Concat(digits);
+    }
+
+    [Fact]
+    public async Task Ate_dez_metodos_por_fornecedor_e_a_mesma_chave_pode_estar_num_funcionario()
+    {
+        using var t = Company();
+        var created = await Create(t, Dto());
+        for (var i = 0; i < PayeePayment.MaxMethodsPerPayee; i++)
+            Assert.Equal(200, Http.Status(await Controller(t).AddPaymentMethod(created.Id, PixMethod("Email", $"f{i}@fornecedor.com"), default)));
+
+        var over = await Controller(t).AddPaymentMethod(created.Id, PixMethod("Email", "extra@fornecedor.com"), default);
+        Assert.Equal(400, Http.Status(over));
+        Assert.Contains("Limite de 10", Message(over));
+        Assert.Equal(10, t.NewContext().SupplierPaymentMethods.Count());
+
+        var employees = t.Controller(db => new EmployeesController(db, t.Encryption));
+        var employee = Results.OkValue<EmployeeDetailDto>(new OkObjectResult(
+            ((CreatedAtActionResult)await employees.Create(new EmployeeCoreDto("Ana Lima", "52998224725", "Compras", 3000m, new DateOnly(2025, 1, 2)), default)).Value));
+        Assert.Equal(200, Http.Status(await employees.AddPaymentMethod(employee.Id, PixMethod("Email", "f0@fornecedor.com"), default)));
     }
 }

@@ -3,10 +3,10 @@ import { investmentPage, isThrottled } from "../../../api/investments.js";
 import { isAbortError } from "../../../api/client.js";
 
 const KINDS = ["investments", "reserved-balances"];
-const empty = () => ({ data: [], cursor: null, status: "loading", moreError: false, loadingMore: false, pages: 0 });
-const initial = (owner, scope) => ({ owner, scope, ...Object.fromEntries(KINDS.map((kind) => [kind, empty()])) });
-export default function useImportedInvestments(owner, refreshKey, integrationId = null) {
-  const [state, setState] = useState(() => initial(owner, integrationId));
+const empty = (pages = 0) => ({ data: [], cursor: null, status: "loading", moreError: false, loadingMore: false, pages });
+const initial = (owner, scope, pages) => ({ owner, scope, ...Object.fromEntries(KINDS.map((kind) => [kind, empty(Number.isInteger(pages?.[kind]) ? Math.min(pages[kind], 20) : 0)])) });
+export default function useImportedInvestments(owner, refreshKey, integrationId = null, restoredPages = null) {
+  const [state, setState] = useState(() => initial(owner, integrationId, restoredPages));
   const [reload, setReload] = useState(0);
   const generation = useRef(0);
   const controller = useRef(null);

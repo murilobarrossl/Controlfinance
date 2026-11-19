@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
+import PrivacyUpdateNotice from "../../components/dashboard/PrivacyUpdateNotice/PrivacyUpdateNotice.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { AccountProvider, useAccount } from "../../context/AccountContext.jsx";
 import { DashboardHeaderSlotContext } from "../../context/DashboardHeaderContext.jsx";
@@ -17,7 +18,7 @@ import { getNavigation } from "./navigation.js";
 import logo from "../../assets/images/cflogobranco.svg";
 import "./DashboardLayout.css";
 
-const ACCOUNT_SCOPED_PATHS = new Set(["/dashboard", "/dashboard/receitas-despesas", "/dashboard/fluxo-de-caixa", "/dashboard/relatorios", "/dashboard/categorias"]);
+const ACCOUNT_SCOPED_PATHS = new Set(["/dashboard", "/dashboard/receitas-despesas", "/dashboard/fluxo-de-caixa", "/dashboard/relatorios", "/dashboard/categorias", "/dashboard/despesas-recorrentes"]);
 const CARDS_PATH = "/dashboard/cartoes";
 
 export default function DashboardLayout() {
@@ -43,6 +44,8 @@ function DashboardLayoutContent() {
     setSelectedScope,
     disconnectConnection,
     removeManualAccount,
+    changeDefaultAccount,
+    defaultAccountId,
     notice,
     dismissNotice,
   } = useAccount();
@@ -100,7 +103,6 @@ function DashboardLayoutContent() {
         import("../../pages/dashboard/empresa/DashboardEmpresa.jsx");
         import("../../pages/dashboard/empresa/FolhaPagamento.jsx");
         import("../../pages/dashboard/empresa/Fornecedores.jsx");
-        import("../../pages/dashboard/empresa/Patrimonio.jsx");
       }
     };
     if ("requestIdleCallback" in window) {
@@ -268,11 +270,14 @@ function DashboardLayoutContent() {
                 onSelect={setSelectedScope}
                 onDisconnect={disconnectConnection}
                 onRemoveManual={removeManualAccount}
+                onChangeDefault={business ? changeDefaultAccount : undefined}
+                caption={business && defaultAccountId && effectiveScope?.accountId === defaultAccountId ? "Conta de pagamentos" : undefined}
               />
             )}
             {!isInvestmentsTab && <BalanceSyncButton />}
           </div>
         )}
+        <PrivacyUpdateNotice />
         {notice && (
           <div className={`dashboard-notice dashboard-notice--${notice.tone}`} role="status">
             <p>{notice.text}</p>

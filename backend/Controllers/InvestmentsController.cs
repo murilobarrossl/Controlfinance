@@ -17,12 +17,12 @@ namespace ControlFinance.API.Controllers;
 [Route("api/investments")]
 [Authorize]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public class InvestmentsController(AppDbContext db, InvestmentFinancialService financials, TimeProvider clock) : ApiControllerBase
+public class InvestmentsController(AppDbContext db, TimeProvider clock) : ApiControllerBase
 {
     private IQueryable<ImportedInvestment> Owned => db.ImportedInvestments.AsNoTracking().Where(x => x.UserId == UserId
-        && db.PolpIntegrations.Any(p => p.Id == x.IntegrationId && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus));
+        && db.PolpIntegrations.Any(p => p.Id == x.IntegrationId && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus && !PolpAuthorizationEnd.EndedStatuses.Contains(p.Status)));
     private IQueryable<ImportedReservedBalance> OwnedReserves => db.ImportedReservedBalances.AsNoTracking().Where(x => x.UserId == UserId
-        && db.PolpIntegrations.Any(p => p.Id == x.IntegrationId && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus));
+        && db.PolpIntegrations.Any(p => p.Id == x.IntegrationId && p.UserId == UserId && p.Status != PolpDisconnectService.PendingStatus && !PolpAuthorizationEnd.EndedStatuses.Contains(p.Status)));
 
     [HttpGet("connections")]
     public async Task<IActionResult> Connections([FromQuery] string? cursor, CancellationToken ct)
@@ -38,6 +38,12 @@ public class InvestmentsController(AppDbContext db, InvestmentFinancialService f
         var streams = await db.InvestmentSyncStates.AsNoTracking().Where(s => s.UserId == UserId && ids.Contains(s.IntegrationId) && (s.Kind == "list" || s.Kind == "reserved" || s.Kind == "discovery"))
             .Select(s => new { s.IntegrationId, s.SourceConsentId, s.Kind, s.Status, s.Availability, s.LastFullSuccessAt,
                 s.StartedAt, s.LastAttemptAt, s.ErrorCode }).ToListAsync(ct);
+        var withInvestments = (await db.ImportedInvestments.AsNoTracking().Where(x => x.UserId == UserId && ids.Contains(x.IntegrationId))
+            .Select(x => x.IntegrationId).Distinct().ToListAsync(ct)).ToHashSet();
+        var withReserves = (await db.ImportedReservedBalances.AsNoTracking().Where(x => x.UserId == UserId && ids.Contains(x.IntegrationId))
+            .Select(x => x.IntegrationId).Distinct().ToListAsync(ct)).ToHashSet();
+        static bool StillConfirmed(DateTime? lastFullSuccessAt, string availability) =>
+            lastFullSuccessAt != null && availability is "awaiting_sync" or "no_changes";
         var rootKeys = ids.Select(id => id.ToString("D")).ToArray();
         var consentKeys = remoteIds.Select(id => id.ToString("D")).ToArray();
         // Only control jobs belonging to this user's selected connections, never error bodies.
@@ -92,7 +98,8 @@ public class InvestmentsController(AppDbContext db, InvestmentFinancialService f
             else if (catalogs.Any(s => s.Availability == "temporarily_unavailable")) state = "temporarily_unavailable";
             else if (catalogs.Any(s => s.Availability == "resource_unavailable")) state = "resource_unavailable";
             else if (catalogs.Count == PolpInvestmentContracts.Families.Count && catalogs.All(s => s.Status == "Complete" && s.LastFullSuccessAt.HasValue && s.Availability == "none_reported")) state = "none_reported";
-            else if (catalogs.Any(s => s.Availability is "available" or "partially_available")) state = "available";
+            else if (catalogs.Any(s => s.Availability is "available" or "partially_available")
+                || (withInvestments.Contains(p.Id) && catalogs.Any(s => StillConfirmed(s.LastFullSuccessAt, s.Availability)))) state = "available";
             else if (discoveryFailed) state = "temporary_error";
             else if ((catalogs.Count == 0 && p.CreatedAt < staleBefore)
                 || catalogs.Any(s => s.Status != "Complete" && s.ErrorCode != "provider_resource_pending"
@@ -108,7 +115,8 @@ public class InvestmentsController(AppDbContext db, InvestmentFinancialService f
             else if (reserves.Any(s => s.Status == "Error" && s.ErrorCode != "provider_resource_pending")) reservedState = "temporary_error";
             else if (reserves.Any(s => s.Availability == "temporarily_unavailable")) reservedState = "temporarily_unavailable";
             else if (reserves.Any(s => s.Availability == "resource_unavailable")) reservedState = "resource_unavailable";
-            else if (reserves.Any(s => s.Availability == "available")) reservedState = "available";
+            else if (reserves.Any(s => s.Availability == "available")
+                || (withReserves.Contains(p.Id) && reserves.Any(s => StillConfirmed(s.LastFullSuccessAt, s.Availability)))) reservedState = "available";
             else if ((p.SyncedLocally && accountFlags.Count > 0 && accountFlags.All(a => a.HasReservedBalance == false))
                 || (reserves.Count > 0 && reserves.All(s => s.Status == "Complete" && s.Availability == "none_reported")
                     && accountFlags.Count > 0 && accountFlags.All(a => a.HasReservedBalance.HasValue))) reservedState = "none_reported";
@@ -187,16 +195,6 @@ public class InvestmentsController(AppDbContext db, InvestmentFinancialService f
             positionTaxMeaning = asset.Family == "funds" ? "provisions_reported_in_position" : "taxes_reported_in_position_not_proof_of_withholding",
             numericEncoding = "exact-base10-strings"
         });
-    }
-
-    [HttpGet("{id:guid}/financials")]
-    public async Task<IActionResult> Financials(Guid id, [FromQuery] string month, CancellationToken ct)
-    {
-        if (month?.Length != 7 || !DateOnly.TryParseExact(month + "-01", "yyyy-MM-dd",
-            System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var first)
-            || first.Year is < 1901 or > 9998 || first > DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime)) return BadRequest();
-        var result = await financials.MonthAsync(UserId, id, first, ct);
-        return result is null ? NotFound() : Ok(result);
     }
 
     [HttpGet("{id:guid}/positions")]

@@ -15,6 +15,7 @@ public static class PolpCategoryMap
         ("TRANSFER_OUT_ACCOUNT_TRANSFER", TransferDetection.SelfTransferCategoryName),
         ("TRANSFER_", "Transferências"),
         ("LOAN_PAYMENTS_CREDIT_CARD_PAYMENT", TransferDetection.CardBillPaymentCategoryName),
+        ("LOAN_DISBURSEMENTS", TransferDetection.LoanDisbursementCategoryName),
         ("LOAN_", "Empréstimos"),
         ("BANK_FEES", "Tarifas"),
         ("ENTERTAINMENT", "Lazer"),

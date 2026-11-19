@@ -9,6 +9,8 @@ public class TransferDetectionTests
     [InlineData("LOAN_PAYMENTS_CREDIT_CARD_PAYMENT", PolpMovementKind.CardBillPayment)]
     [InlineData("TRANSFER_IN_ACCOUNT_TRANSFER", PolpMovementKind.OwnTransfer)]
     [InlineData("TRANSFER_OUT_ACCOUNT_TRANSFER", PolpMovementKind.OwnTransfer)]
+    [InlineData("LOAN_DISBURSEMENTS", PolpMovementKind.LoanDisbursement)]
+    [InlineData("LOAN_DISBURSEMENTS_PERSONAL", PolpMovementKind.LoanDisbursement)]
     public void Codigos_de_pagamento_de_fatura_e_transferencia_propria_viram_o_tipo_certo(string categoryRef, PolpMovementKind expected)
     {
         Assert.Equal(expected, TransferDetection.ToMovementKind(categoryRef));
@@ -25,6 +27,8 @@ public class TransferDetectionTests
     [InlineData("transfer_out_account_transfer")]
     [InlineData("loan_payments_credit_card_payment")]
     [InlineData("LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT")]
+    [InlineData("TRANSFER_IN_WIRE")]
+    [InlineData("TRANSFER_IN_OTHER_TRANSFER_IN")]
     [InlineData("FOOD_AND_DRINK_GROCERIES")]
     [InlineData("Pagamento de fatura")]
     [InlineData("Transferência mesma titularidade")]

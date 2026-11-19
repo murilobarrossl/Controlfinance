@@ -3,8 +3,8 @@ import { pixKeyTypeLabel } from "../../../utils/employees.js";
 
 const digitsOf = (value) => value.replace(/\D/g, "");
 
-export const EMPTY_PIX = { type: "Cpf", key: "" };
-export const EMPTY_BANK = { bankCode: "", branch: "", account: "", accountType: "Corrente" };
+export const EMPTY_PIX = { type: "Cpf", key: "", holder: "" };
+export const EMPTY_BANK = { bankCode: "", branch: "", account: "", accountType: "Corrente", holder: "" };
 
 export function pixProblem({ type, key }) {
   const value = key.trim();
@@ -26,22 +26,32 @@ export function pixProblem({ type, key }) {
   }
 }
 
-export function bankProblem({ bankCode, branch, account }) {
+// Chave CPF/CNPJ já é o documento de quem recebe; as outras pedem o titular.
+export const needsPixHolder = (type) => type !== "Cpf" && type !== "Cnpj";
+
+function holderProblem(holder) {
+  const digits = digitsOf(holder ?? "");
+  if (!digits) return "Informe o CPF ou CNPJ do titular que recebe.";
+  if (digits.length === 11 ? isValidCpf(digits) : digits.length === 14 && isValidCnpj(digits)) return "";
+  return "CPF ou CNPJ do titular inválido.";
+}
+
+export function bankProblem({ bankCode, branch, account, holder }) {
   if (!/^\d{3}$/.test(bankCode.trim())) return "Informe o código do banco com 3 dígitos.";
   if (!/^\d{1,4}(-[\dX])?$/i.test(branch.trim())) return "Agência inválida.";
   if (!/^\d{1,20}(-[\dX])?$/i.test(account.trim())) return "Número da conta inválido.";
-  return "";
+  return holderProblem(holder);
 }
 
 
 export const PAYMENT_OPTIONS = [
   { value: "later", label: "Depois" },
   { value: "pix", label: "Pix" },
-  { value: "bank", label: "Transferência" },
+  { value: "bank", label: "Transferência (TED)" },
 ];
 
 export function paymentProblem(payment, pix, bank) {
-  if (payment === "pix") return pixProblem(pix);
+  if (payment === "pix") return pixProblem(pix) || (needsPixHolder(pix.type) ? holderProblem(pix.holder) : "");
   if (payment === "bank") return bankProblem(bank);
   return "";
 }
@@ -55,9 +65,26 @@ export const bankPayload = (bank) => ({
   accountType: bank.accountType,
 });
 
-export function savePaymentChoice(payment, { pix, bank }, { savePix, saveBank }) {
-  if (payment === "pix") return savePix(pixPayload(pix));
-  if (payment === "bank") return saveBank(bankPayload(bank));
+export const PAYMENT_METHOD_OPTIONS = PAYMENT_OPTIONS.filter((o) => o.value !== "later");
+
+export const paymentMethodPayload = (payment, { pix, bank }) =>
+  payment === "pix"
+    ? { kind: "Pix", pix: pixPayload(pix), holderDocument: needsPixHolder(pix.type) ? digitsOf(pix.holder) : null }
+    : { kind: "Bank", bank: bankPayload(bank), holderDocument: digitsOf(bank.holder) };
+
+export function paymentMethodRemoval(method, run) {
+  return method.kind === "Pix"
+    ? { title: "Remover chave Pix?", message: `${pixKeyTypeLabel(method.pix?.type)} ${method.pix?.keyMasked ?? ""}`, confirmLabel: "Remover", run }
+    : {
+        title: "Remover conta bancária?",
+        message: `Banco ${method.bank?.bankCode} · Agência ${method.bank?.branch} · Conta ${method.bank?.accountMasked}`,
+        confirmLabel: "Remover",
+        run,
+      };
+}
+
+export function savePaymentChoice(payment, { pix, bank }, save) {
+  if (payment === "pix" || payment === "bank") return save(paymentMethodPayload(payment, { pix, bank }));
   return Promise.resolve(null);
 }
 
@@ -65,21 +92,4 @@ export function paymentFailureMessage(subject, payment, err) {
   return `${subject} cadastrado, mas ${payment === "pix" ? "a chave Pix" : "a conta"} não foi salva: ${
     err.message || "tente de novo."
   } Corrija e salve, ou configure depois no detalhe.`;
-}
-
-export function paymentRemovalConfirmations(payee, { removePix, removeBank }) {
-  return {
-    removePix: {
-      title: "Remover chave Pix?",
-      message: `${pixKeyTypeLabel(payee.pix?.type)} ${payee.pix?.keyMasked ?? ""}`,
-      confirmLabel: "Remover",
-      run: removePix,
-    },
-    removeBank: {
-      title: "Remover conta para transferência?",
-      message: `Banco ${payee.bank?.bankCode} · Agência ${payee.bank?.branch} · Conta ${payee.bank?.accountMasked}`,
-      confirmLabel: "Remover",
-      run: removeBank,
-    },
-  };
 }

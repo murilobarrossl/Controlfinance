@@ -100,6 +100,9 @@ export function buildScopes(accounts, connectors) {
             number,
             kindLabel: getAccountKindLabel(account),
             label: [account.name, number].filter(Boolean).join(" "),
+            isDefault: Boolean(account.isDefault),
+            maskedNumber: account.number ?? null,
+            canBeDefault: Boolean(g.connectionId) && g.status === "AUTHORISED",
           };
         })
         .sort(compareItems);

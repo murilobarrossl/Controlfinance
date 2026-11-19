@@ -19,6 +19,7 @@ export function formatMoney(value) {
   if (!validMoney(value)) return "Não informado";
   return `${value.currency === "BRL" ? "R$" : value.currency} ${formatExact(value.amount, 2)}`;
 }
+export const investmentPath = (item) => `/dashboard/investimentos/${item.reserved ? "caixinhas/" : ""}${encodeURIComponent(item.id)}`;
 export function formatContractNumber(value) {
   const decimal = exactDecimal(value);
   return decimal ? formatExact(value, decimal.scale) : "Não informado";
@@ -90,25 +91,13 @@ export function normalizeInvestment(resource, reserved, connections) {
       && resource.catalogPresence?.status !== "not_reported_in_last_full_scan",
   };
 }
-// Mesma regra de EmergencyReserveNames.IsAuto (backend): caixinha com a palavra "reserva" no nome,
-// aplicação só com o nome exato "Reserva de emergência".
-export function isEmergencyReserveName(name, reservedBalance = false) {
-  if (typeof name !== "string") return false;
-  const words = name.normalize("NFD").replace(/\p{Mn}/gu, "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  return reservedBalance ? words.some((word) => word === "reserva" || word === "reservas") : words.join(" ") === "reserva de emergencia";
-}
 const idsFor = (item, owner) => (item.reserved ? owner?.reservedBalanceIds : owner?.investmentIds) ?? [];
-export function isLinkedReserve(item, reserve) {
-  return idsFor(item, reserve).includes(item.id);
-}
 export function goalOf(item, goals) {
   return (goals ?? []).find((goal) => idsFor(item, goal).includes(item.id)) ?? null;
 }
-// Caixinha chamada "Reserva de emergência" entra sozinha, a menos que o usuário a tenha tirado da
-// reserva ou vinculado a uma meta.
-export function isReserve(item, reserve, goals) {
-  if (isLinkedReserve(item, reserve)) return true;
-  return isEmergencyReserveName(item.name, item.reserved) && !(reserve?.excludedAutoIds ?? []).includes(item.id) && !goalOf(item, goals);
+// A reserva é identificada pelo servidor (caixinha com nome de reserva); a tela só consulta.
+export function isReserve(item, reserve) {
+  return item.reserved && (reserve?.reservedBalanceIds ?? []).includes(item.id);
 }
 export function sumMoney(values) {
   const totals = new Map();

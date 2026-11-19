@@ -383,3 +383,54 @@
     transition: none;
   }
 }
+
+.form-dialog--closable {
+  position: relative;
+}
+
+.form-dialog--closable .form-dialog__header {
+  padding-right: 2rem;
+}
+
+.form-dialog__close {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.form-dialog--close-start .form-dialog__close {
+  right: auto;
+  left: 0.85rem;
+}
+
+.form-dialog--close-start .form-dialog__header {
+  padding-right: 0;
+  padding-top: 1.75rem;
+}
+
+.form-dialog__close svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.form-dialog__close:hover:not(:disabled) {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.form-dialog__close:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}

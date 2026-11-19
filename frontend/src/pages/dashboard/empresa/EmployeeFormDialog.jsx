@@ -1,7 +1,7 @@
 import { useState } from "react";
 import FormDialog from "../../../components/ui/FormDialog/FormDialog.jsx";
 import { DateField, MoneyField, TextField } from "../../../components/ui/FormDialog/FormField.jsx";
-import { createEmployee, setEmployeeBankAccount, setEmployeePix, updateEmployee } from "../../../api/employees.js";
+import { addEmployeePaymentMethod, createEmployee, updateEmployee } from "../../../api/employees.js";
 import { isValidCpf } from "../../../utils/authRules.js";
 import { applyMask, CPF_MASK } from "../../../utils/masks.js";
 import { PaymentChoice } from "./PaymentFields.jsx";
@@ -91,10 +91,7 @@ export default function EmployeeFormDialog({ employee, onClose, onSaved }) {
     }
 
     try {
-      const withPayment = await savePaymentChoice(payment, { pix, bank }, {
-        savePix: (payload) => setEmployeePix(saved.id, payload),
-        saveBank: (payload) => setEmployeeBankAccount(saved.id, payload),
-      });
+      const withPayment = await savePaymentChoice(payment, { pix, bank }, (payload) => addEmployeePaymentMethod(saved.id, payload));
       onSaved(withPayment ?? saved);
     } catch (err) {
       setCreated(saved);

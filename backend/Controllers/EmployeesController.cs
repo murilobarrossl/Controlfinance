@@ -29,12 +29,14 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
         [FromQuery] string? search,
         [FromQuery] string? status,
         [FromQuery] string? department,
+        [FromQuery] string? payment,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25,
         CancellationToken ct = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
+        if (!PayeePaymentStatus.IsValidFilter(payment)) return BadRequest(new { message = "Filtro de pagamento inválido." });
 
         var query = db.Employees.AsNoTracking().Where(e => e.UserId == UserId);
         if (!string.IsNullOrWhiteSpace(status))
@@ -53,15 +55,21 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
             .Select(e => new
             {
                 e.Id, e.FullName, e.Role, e.Department, e.AdmissionDate, e.EmploymentType, e.GrossSalary,
-                e.Status, e.TerminationDate, HasPix = e.PixKeyHash != null, HasBank = e.PayeeBankCode != null
+                e.Status, e.TerminationDate,
+                HasPix = e.PaymentMethods.Any(m => m.Kind == PayeePaymentKind.Pix),
+                HasBank = e.PaymentMethods.Any(m => m.Kind == PayeePaymentKind.Bank)
             })
-            .ToListAsync(ct))
-            .Select(e => new EmployeeListItemDto(e.Id, e.FullName, e.Role, e.Department, e.AdmissionDate, e.EmploymentType?.ToString(),
-                e.GrossSalary, e.Status.ToString(), e.TerminationDate, e.HasPix, e.HasBank));
+            .ToListAsync(ct));
 
-        IEnumerable<EmployeeListItemDto> filtered = rows;
+        var payments = await PayeePaymentStatus.EmployeesAsync(db, encryption, UserId, await UserTodayAsync(db, ct), ct);
+
+        IEnumerable<EmployeeListItemDto> filtered = rows
+            .Select(e => new EmployeeListItemDto(e.Id, e.FullName, e.Role, e.Department, e.AdmissionDate, e.EmploymentType?.ToString(),
+                e.GrossSalary, e.Status.ToString(), e.TerminationDate, e.HasPix, e.HasBank, PayeePaymentStatus.Label(payments.States, e.Id), payments.BankTotal(e.Id)));
         if (!string.IsNullOrWhiteSpace(search))
             filtered = filtered.Where(e => TextSearch.Matches(e.FullName, search));
+        if (payment is not null)
+            filtered = filtered.Where(e => PayeePaymentStatus.Passes(payment, e.PaymentStatus));
 
         // Ordem estável entre páginas: nome (pt-BR, sem diferenciar maiúsculas) e, no empate, o id.
         var ordered = filtered
@@ -90,8 +98,41 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
-        var employee = await db.Employees.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id && e.UserId == UserId, ct);
+        var employee = await db.Employees.AsNoTracking().Include(e => e.PaymentMethods)
+            .FirstOrDefaultAsync(e => e.Id == id && e.UserId == UserId, ct);
         return employee is null ? NotFound() : Ok(ToDetail(employee));
+    }
+
+    [HttpGet("{id:guid}/payment-month")]
+    public async Task<IActionResult> GetPaymentMonth(Guid id, CancellationToken ct)
+    {
+        if (!await db.Employees.AnyAsync(e => e.Id == id && e.UserId == UserId, ct)) return NotFound();
+        return Ok(await PaymentMonthAsync(id, await UserTodayAsync(db, ct), ct));
+    }
+
+    [HttpPut("{id:guid}/payment-month")]
+    public async Task<IActionResult> SetPaymentMonth(Guid id, [FromBody] PayeePaymentMarkDto dto, CancellationToken ct)
+    {
+        if (!await db.Employees.AnyAsync(e => e.Id == id && e.UserId == UserId, ct)) return NotFound();
+        var today = await UserTodayAsync(db, ct);
+        var month = PayeePaymentStatus.ReferenceMonth(today);
+        if (!PayeePaymentStatus.IsCurrentMonth(dto.ReferenceMonth, month))
+            return Conflict(new { message = "O mês mudou. Atualize a página para marcar o pagamento do mês atual." });
+
+        // Pagamentos bancários do momento vão para o evento de auditoria; a resposta é relida depois da
+        // gravação para refletir também uma alteração concorrente.
+        var before = await PayeePaymentStatus.EmployeesAsync(db, encryption, UserId, today, ct);
+        await PayeePaymentStatus.SaveMarkAsync(db,
+            () => db.EmployeePaymentMarks.FirstOrDefaultAsync(m => m.UserId == UserId && m.EmployeeId == id && m.ReferenceMonth == month, ct),
+            () => new EmployeePaymentMark { UserId = UserId, EmployeeId = id, ReferenceMonth = month },
+            PayeeKind.Employee, UserId, id, month, dto.Paid, before.Bank.GetValueOrDefault(id), ct);
+        return Ok(await PaymentMonthAsync(id, today, ct));
+    }
+
+    private async Task<PayeePaymentMonthDto> PaymentMonthAsync(Guid id, DateTime today, CancellationToken ct)
+    {
+        var status = await PayeePaymentStatus.EmployeesAsync(db, encryption, UserId, today, ct);
+        return PayeePaymentStatus.Describe(status, id, PayeePaymentStatus.ReferenceMonth(today));
     }
 
     // Cadastro rápido: só os dados principais. Departamento, vínculo e pagamento ficam para o
@@ -107,6 +148,7 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
         if (error is not null) return BadRequest(new { message = error });
 
         db.Employees.Add(employee);
+        EmployeeCostDefaults.Seed(db, employee);
         var conflict = await SaveAsync(ct);
         if (conflict is not null) return Conflict(new { message = conflict });
 
@@ -137,59 +179,61 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
             return Task.FromResult<string?>(null);
         }, ct);
 
-    // Chave Pix para reconhecer pagamentos no futuro. Formato válido não prova de quem é a chave.
-    [HttpPut("{id:guid}/pix")]
-    public Task<IActionResult> SetPix(Guid id, [FromBody] PayeePixDto dto, CancellationToken ct) =>
+    // Pix ou conta para TED, para reconhecer pagamentos no futuro. Formato válido não prova de quem é
+    // a chave ou a conta. Cada método é independente: incluir um nunca sobrescreve os outros.
+    [HttpPost("{id:guid}/payment-methods")]
+    public Task<IActionResult> AddPaymentMethod(Guid id, [FromBody] PayeePaymentMethodDto dto, CancellationToken ct) =>
         ChangeAsync(id, async (employee) =>
         {
-            var error = PayeePayment.ParsePix(dto, out var type, out var key);
-            if (error is not null) return error;
-            var candidates = encryption.ComputeLookupHashCandidates(EmployeeKeys.PixLookupInput(UserId, type, key));
-            if (await db.Employees.AnyAsync(e => e.UserId == UserId && e.Id != employee.Id && e.PixKeyHash != null && candidates.Contains(e.PixKeyHash), ct))
-                return "Esta chave Pix já está cadastrada para outro funcionário.";
-
-            employee.PixKeyType = type;
-            employee.PixKey = key;
-            employee.PixKeyHash = encryption.ComputeLookupHash(EmployeeKeys.PixLookupInput(UserId, type, key));
-            return null;
+            if (employee.PaymentMethods.Count >= PayeePayment.MaxMethodsPerPayee)
+                return $"Limite de {PayeePayment.MaxMethodsPerPayee} métodos de pagamento por funcionário.";
+            var method = new EmployeePaymentMethod { UserId = UserId, EmployeeId = employee.Id };
+            var error = await ApplyPaymentMethodAsync(employee, method, dto, ct);
+            // Add explícito: com o Id já preenchido, entrar só pela coleção faria o EF tratar o método
+            // como existente (UPDATE em vez de INSERT).
+            if (error is null)
+            {
+                employee.PaymentMethods.Add(method);
+                db.EmployeePaymentMethods.Add(method);
+            }
+            return error;
         }, ct);
 
-    [HttpDelete("{id:guid}/pix")]
-    public Task<IActionResult> RemovePix(Guid id, CancellationToken ct) =>
-        ChangeAsync(id, (employee) =>
+    [HttpPut("{id:guid}/payment-methods/{methodId:guid}")]
+    public async Task<IActionResult> UpdatePaymentMethod(Guid id, Guid methodId, [FromBody] PayeePaymentMethodDto dto, CancellationToken ct)
+    {
+        if (!await PaymentMethodExistsAsync(id, methodId, ct)) return NotFound();
+        return await ChangeAsync(id, (employee) =>
+            ApplyPaymentMethodAsync(employee, employee.PaymentMethods.Single(m => m.Id == methodId), dto, ct), ct);
+    }
+
+    [HttpDelete("{id:guid}/payment-methods/{methodId:guid}")]
+    public async Task<IActionResult> RemovePaymentMethod(Guid id, Guid methodId, CancellationToken ct)
+    {
+        if (!await PaymentMethodExistsAsync(id, methodId, ct)) return NotFound();
+        return await ChangeAsync(id, (employee) =>
         {
-            employee.PixKeyType = null;
-            employee.PixKey = null;
-            employee.PixKeyHash = null;
+            var method = employee.PaymentMethods.Single(m => m.Id == methodId);
+            employee.PaymentMethods.Remove(method);
+            db.EmployeePaymentMethods.Remove(method);
             return Task.FromResult<string?>(null);
         }, ct);
+    }
 
-    [HttpPut("{id:guid}/bank-account")]
-    public Task<IActionResult> SetBankAccount(Guid id, [FromBody] PayeeBankDto dto, CancellationToken ct) =>
-        ChangeAsync(id, (employee) =>
-        {
-            var error = PayeePayment.ParseBank(dto, out var bank);
-            if (error is not null) return Task.FromResult<string?>(error);
+    // A chave completa sai só por esta rota, usada pelo detalhe do funcionário; listagem e
+    // exportação de outras telas seguem mascaradas.
+    [HttpGet("{id:guid}/payment-methods/{methodId:guid}/pix-key")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> RevealPixKey(Guid id, Guid methodId, CancellationToken ct)
+    {
+        var pix = await db.EmployeePaymentMethods.AsNoTracking()
+            .Where(m => m.Id == methodId && m.EmployeeId == id && m.UserId == UserId && m.Kind == PayeePaymentKind.Pix)
+            .Select(m => new { m.PixKeyType, m.PixKey })
+            .FirstOrDefaultAsync(ct);
+        if (pix?.PixKeyType is not { } type || pix.PixKey is not { } key) return NotFound();
+        return Ok(new { type = type.ToString(), key });
+    }
 
-            employee.PayeeBankCode = bank!.BankCode;
-            employee.PayeeBranch = bank.Branch;
-            employee.PayeeAccount = bank.Account;
-            employee.PayeeAccountType = bank.AccountType;
-            return Task.FromResult<string?>(null);
-        }, ct);
-
-    [HttpDelete("{id:guid}/bank-account")]
-    public Task<IActionResult> RemoveBankAccount(Guid id, CancellationToken ct) =>
-        ChangeAsync(id, (employee) =>
-        {
-            employee.PayeeBankCode = null;
-            employee.PayeeBranch = null;
-            employee.PayeeAccount = null;
-            employee.PayeeAccountType = null;
-            return Task.FromResult<string?>(null);
-        }, ct);
-
-    // Desligar não apaga: dados, salário e métodos de pagamento ficam para o histórico.
     [HttpPost("{id:guid}/termination")]
     public async Task<IActionResult> Terminate(Guid id, [FromBody] EmployeeTerminationDto dto, CancellationToken ct)
     {
@@ -246,7 +290,8 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
     // tocar na entidade: um erro nunca deixa metade do cadastro alterada.
     private async Task<IActionResult> ChangeAsync(Guid id, Func<Employee, Task<string?>> change, CancellationToken ct)
     {
-        var employee = await db.Employees.FirstOrDefaultAsync(e => e.Id == id && e.UserId == UserId, ct);
+        var employee = await db.Employees.Include(e => e.PaymentMethods)
+            .FirstOrDefaultAsync(e => e.Id == id && e.UserId == UserId, ct);
         if (employee is null) return NotFound();
 
         var error = await change(employee);
@@ -255,6 +300,36 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
         employee.UpdatedAt = DateTime.UtcNow;
         var conflict = await SaveAsync(ct);
         return conflict is not null ? Conflict(new { message = conflict }) : Ok(ToDetail(employee));
+    }
+
+    private Task<bool> PaymentMethodExistsAsync(Guid employeeId, Guid methodId, CancellationToken ct) =>
+        db.EmployeePaymentMethods.AnyAsync(m => m.Id == methodId && m.EmployeeId == employeeId && m.UserId == UserId, ct);
+
+    // Valida tudo antes de tocar no método: um erro nunca deixa o método pela metade.
+    private async Task<string?> ApplyPaymentMethodAsync(Employee employee, EmployeePaymentMethod method, PayeePaymentMethodDto dto, CancellationToken ct)
+    {
+        var error = PayeePayment.ParseMethod(dto, out var parsed);
+        if (error is not null) return error;
+
+        string? hash = null;
+        if (parsed!.Kind == PayeePaymentKind.Pix)
+        {
+            var candidates = encryption.ComputeLookupHashCandidates(EmployeeKeys.PixLookupInput(UserId, parsed.PixType, parsed.PixKey));
+            var owner = await db.EmployeePaymentMethods
+                .Where(m => m.UserId == UserId && m.Id != method.Id && m.PixKeyHash != null && candidates.Contains(m.PixKeyHash))
+                .Select(m => (Guid?)m.EmployeeId)
+                .FirstOrDefaultAsync(ct);
+            if (owner is { } other)
+                return other == employee.Id
+                    ? "Esta chave Pix já está cadastrada para este funcionário."
+                    : "Esta chave Pix já está cadastrada para outro funcionário.";
+            hash = encryption.ComputeLookupHash(EmployeeKeys.PixLookupInput(UserId, parsed.PixType, parsed.PixKey));
+        }
+        else if (employee.PaymentMethods.Any(m => m.Id != method.Id && PayeePayment.SameAccount(m, parsed.Bank!)))
+            return "Esta conta já está cadastrada para este funcionário.";
+
+        PayeePayment.Assign(method, parsed, hash);
+        return null;
     }
 
     private async Task<string?> ApplyCoreAsync(Employee employee, EmployeeCoreDto dto, bool isNew, CancellationToken ct)
@@ -319,7 +394,6 @@ public class EmployeesController(AppDbContext db, IEncryptionService encryption)
     private static EmployeeDetailDto ToDetail(Employee e) => new(
         e.Id, e.FullName, PayeeKeys.MaskCpf(e.Cpf), e.Role, e.Department, e.AdmissionDate,
         e.EmploymentType?.ToString(), e.GrossSalary, e.Status.ToString(), e.TerminationDate,
-        PayeePayment.PixView(e.PixKeyType, e.PixKey),
-        PayeePayment.BankView(e.PayeeBankCode, e.PayeeBranch, e.PayeeAccount, e.PayeeAccountType),
+        PayeePayment.Views(e.PaymentMethods),
         e.CreatedAt, e.UpdatedAt);
 }

@@ -29,10 +29,30 @@ public class ConsentRecord
     public DateTime AcceptedAt { get; set; } = DateTime.UtcNow;
 }
 
+// O Kind diz a natureza jurídica da manifestação (Manifestation). Registros antigos nunca são
+// reescritos: um novo tipo só vale para registros novos.
 public static class ConsentKinds
 {
+    /// <summary>Aceite contratual dos Termos de Uso, no cadastro.</summary>
     public const string Terms = "terms";
+    /// <summary>Ciência da Política de Privacidade dada no cadastro (a política informa; não é a
+    /// base legal de consentimento).</summary>
     public const string Privacy = "privacy";
+    /// <summary>Ciência de uma versão atualizada da Política de Privacidade (botão "Entendi").</summary>
+    public const string PrivacyNotice = "privacy_notice";
+    /// <summary>Ciência do aviso de conexão bancária (a autorização em si é dada no banco).</summary>
     public const string BankConnection = "bank_connection";
     public const string AdultDeclaration = "adult_declaration";
+    /// <summary>Consentimento específico (LGPD art. 8º, § 4º), sempre com a finalidade em Reference.
+    /// Nunca é registrado pelo aviso de ciência.</summary>
+    public const string SpecificConsent = "consent";
+
+    public static string Manifestation(string kind) => kind switch
+    {
+        Terms => "aceite_contratual",
+        Privacy or PrivacyNotice or BankConnection => "ciencia",
+        AdultDeclaration => "declaracao",
+        SpecificConsent => "consentimento",
+        _ => "desconhecido",
+    };
 }

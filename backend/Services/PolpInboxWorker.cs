@@ -32,12 +32,14 @@ public sealed class PolpInboxWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var consecutiveFailures = 0;
         while (!stoppingToken.IsCancellationRequested)
         {
             TimeSpan? delay = null;
             try
             {
                 if (!await ProcessNextAsync(stoppingToken)) delay = PollInterval;
+                consecutiveFailures = 0;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -46,7 +48,9 @@ public sealed class PolpInboxWorker(
             catch (Exception ex)
             {
                 logger.LogError("Falha no worker da inbox da Polp ({ErrorType})", ex.GetType().Name);
-                delay = ErrorDelay;
+                consecutiveFailures = Math.Min(consecutiveFailures + 1, 5);
+                delay = TimeSpan.FromSeconds(ErrorDelay.TotalSeconds * Math.Pow(2, consecutiveFailures - 1)
+                    + Random.Shared.NextDouble() * 5);
             }
 
             if (delay is { } wait)
@@ -100,6 +104,9 @@ public sealed class PolpInboxWorker(
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await FinishAsync(db, claim, lockedUntil, failure, stoppingToken);
         }
+
+        if (failure is not null && DatabaseFailure.IsTransient(failure))
+            throw new InvalidOperationException("Banco indisponível durante o processamento da inbox.", failure);
 
         return true;
     }

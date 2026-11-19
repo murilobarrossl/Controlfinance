@@ -83,7 +83,7 @@ public class RecurrencesController(AppDbContext db, IEncryptionService encryptio
             assumedFrequency = frequency;
         }
 
-        var accountExists = await db.BankAccounts.AnyAsync(b => b.Id == dto.BankAccountId && b.UserId == UserId);
+        var accountExists = await db.BankAccounts.AnyAsync(b => b.Id == dto.BankAccountId && b.UserId == UserId && b.IsActive);
         if (!accountExists) return BadRequest(new { message = "Conta bancária inválida." });
 
         var normalizedName = RecurrenceDetection.Normalize(dto.Name);

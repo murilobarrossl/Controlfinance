@@ -94,8 +94,7 @@ public class InvestmentSyncRecoveryTests
         t.Db.PolpWebhookEvents.Add(new PolpWebhookEvent { Event = PolpInternalEvents.InvestmentDiscovery,
             ResourceId = parent.Id.ToString(), Status = PolpWebhookEventStatus.Dead, ReceivedAt = t.Clock.GetUtcNow().UtcDateTime });
         await t.Db.SaveChangesAsync();
-        var config = new ConfigurationBuilder().Build();
-        var controller = t.Controller(db => new InvestmentsController(db, new InvestmentFinancialService(db, config, t.Clock), t.Clock));
+        var controller = t.Controller(db => new InvestmentsController(db, t.Clock));
 
         var result = Assert.IsType<OkObjectResult>(await controller.Connections(null, default));
         var connection = JsonSerializer.SerializeToElement(result.Value).GetProperty("data")[0];

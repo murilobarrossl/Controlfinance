@@ -3,6 +3,22 @@
   display: inline-block;
 }
 
+.account-switcher--captioned {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem 0.6rem;
+  max-width: 100%;
+}
+
+.account-switcher__caption {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .account-switcher__trigger {
   display: inline-flex;
   align-items: center;
@@ -270,4 +286,206 @@
   .account-switcher__name {
     max-width: 140px;
   }
+}
+
+.account-switcher__default-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.2rem 0 0.15rem;
+}
+
+.account-switcher__default-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 28px;
+  padding: 0 0.2rem 0 0.6rem;
+}
+
+.account-switcher__default-change {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.2rem 0.4rem;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.account-switcher__default-change:hover:not(:disabled) {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.account-switcher__default-change:focus-visible,
+.account-switcher__default-add:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.account-switcher__default-change:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.account-switcher__row--active .account-switcher__default-bank {
+  font-weight: 600;
+}
+
+.account-switcher__default-bank {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+  font-size: 0.85rem;
+}
+
+.account-switcher__default-account {
+  flex-shrink: 0;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+
+.account-switcher__default-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  width: 28px;
+  height: 28px;
+  margin-left: 0.6rem;
+  background: none;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.account-switcher__default-add:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.account-switcher__default-add:hover:not(:disabled) {
+  border-color: var(--color-text-tertiary);
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.account-switcher__default-header .account-switcher__group-label {
+  white-space: normal;
+}
+
+
+.account-switcher__default-change[aria-expanded="true"],
+.account-switcher__default-add[aria-expanded="true"] {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.default-account-dialog__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.default-account-dialog__option {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.default-account-dialog__option:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.default-account-dialog__option:has(input:checked) {
+  border-color: var(--color-border-strong);
+  background-color: var(--color-surface-hover);
+}
+
+.default-account-dialog__option:has(input:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.default-account-dialog__option input {
+  flex-shrink: 0;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.default-account-dialog__list:disabled .default-account-dialog__option {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.default-account-dialog__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.default-account-dialog__bank {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+  font-size: 0.85rem;
+}
+
+.default-account-dialog__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.default-account-dialog__text {
+  flex: 1;
+}
+
+.default-account-dialog__option--current,
+.default-account-dialog__option--current:hover,
+.default-account-dialog__option--current:has(input:checked) {
+  border-color: color-mix(in srgb, var(--color-border) 60%, transparent);
+  background-color: transparent;
+}
+
+.default-account-dialog__option--current .default-account-dialog__bank,
+.default-account-dialog__option--current .default-account-dialog__meta {
+  color: var(--color-text-tertiary);
+}
+
+.default-account-dialog__option--current .account-switcher__dot {
+  opacity: 0.55;
+}
+
+.default-account-dialog__current-tag {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  font-size: 0.72rem;
+  white-space: nowrap;
 }

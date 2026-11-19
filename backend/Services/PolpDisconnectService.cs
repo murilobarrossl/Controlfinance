@@ -80,6 +80,40 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
         }
     }
 
+    public async Task PurgeEndedConnectionsAsync(TimeSpan retention, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        await PolpAuthorizationEnd.SuspendAsync(db, now, ct);
+        var cutoff = now - retention;
+        var due = await db.PolpIntegrations
+            .Where(p => PolpAuthorizationEnd.EndedStatuses.Contains(p.Status) && p.AuthorizationEndedAt <= cutoff)
+            .ToListAsync(ct);
+        foreach (var local in due)
+        {
+            string? remoteStatus;
+            try
+            {
+                remoteStatus = (await polp.GetConsentAsync(local.PolpIntegrationId, ct)).Status;
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                remoteStatus = null;
+            }
+            catch (Exception ex) when (PolpFailure.IsProviderFailure(ex, ct))
+            {
+                continue;
+            }
+            // Só elimina com o encerramento confirmado pela Polp agora: DisconnectAsync também pede a
+            // exclusão do consentimento, e isso nunca pode atingir uma autorização viva.
+            if (remoteStatus is not null && !PolpAuthorizationEnd.IsEnded(remoteStatus))
+            {
+                logger.LogWarning("Conexão encerrada localmente, mas ativa na Polp ({Status}): eliminação adiada.", remoteStatus);
+                continue;
+            }
+            await DisconnectAsync(local, ct);
+        }
+    }
+
     private Task<List<Guid>> DeleteConnectionDataLockedAsync(PolpIntegration local, CancellationToken ct) =>
         integrationLock.RunAsync(db, local.Id, async () =>
         {
@@ -88,6 +122,7 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
             await db.InvestmentSyncSchedules.Where(x => x.UserId == local.UserId && x.IntegrationId == local.Id).ExecuteDeleteAsync(ct);
             await db.ImportedInvestments.Where(x => x.UserId == local.UserId && x.IntegrationId == local.Id).ExecuteDeleteAsync(ct);
             await db.ImportedReservedBalances.Where(x => x.UserId == local.UserId && x.IntegrationId == local.Id).ExecuteDeleteAsync(ct);
+            await db.LoanContracts.Where(x => x.UserId == local.UserId && x.IntegrationId == local.Id).ExecuteDeleteAsync(ct);
             await DeleteConnectionDataAsync(local.UserId, local.PolpIntegrationId, ct);
             return authorizationIds;
         }, ct);
@@ -271,6 +306,49 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
     /// BankAccount (não cascade), então apagar só a conta deixaria o extrato inteiro órfão no
     /// banco — por isso cada tabela é apagada explicitamente, numa transação só.
     /// </summary>
+    // Um fechamento é a foto dos dados de cada conta naquele dia. Se uma das contas sai, a foto passa a ter
+    // valores sem origem e o acerto "fechamento + diferenças = atual" quebra; por isso sai inteira. Fechamentos
+    // que nunca usaram a conta ficam. Antes de apagar transações e leituras: é por elas que se sabe quais
+    // fechamentos as usaram. Um dia de folga cobre o fuso do usuário (Day é local, ObservedAt é UTC).
+    private static async Task DeleteAffectedCashClosingsAsync(AppDbContext db, Guid userId, List<Guid> accountIds, CancellationToken ct)
+    {
+        var removedTransactions = db.Transactions
+            .Where(t => t.UserId == userId && t.BankAccountId != null && accountIds.Contains(t.BankAccountId.Value))
+            .Select(t => t.Id);
+        var firstReading = await db.BankBalanceObservations
+            .Where(o => o.UserId == userId && accountIds.Contains(o.BankAccountId))
+            .MinAsync(o => (DateTime?)o.ObservedAt, ct);
+        var balancesFrom = firstReading.HasValue ? DateOnly.FromDateTime(firstReading.Value.AddDays(-1)) : DateOnly.MaxValue;
+
+        await db.CashClosings
+            .Where(c => c.UserId == userId
+                && (accountIds.Contains(c.ScopeAccountId)
+                    || c.Items.Any(i => removedTransactions.Contains(i.TransactionId))
+                    || (c.ScopeAccountId == Guid.Empty && c.Day >= balancesFrom
+                        && (c.OpeningBalance != null || c.ClosingBalance != null))))
+            .ExecuteDeleteAsync(ct);
+    }
+
+    // O evento registra a decisão da empresa e fica. O valor guardado nele é a soma do mês vinda dos bancos e não
+    // dá para separar por banco, então sai de todo mês em que a conta removida tinha transações (um dia de folga
+    // para o fuso, como acima).
+    private static async Task ClearBankAmountsInMarkHistoryAsync(AppDbContext db, Guid userId, List<Guid> accountIds, CancellationToken ct)
+    {
+        var range = await db.Transactions
+            .Where(t => t.UserId == userId && t.BankAccountId != null && accountIds.Contains(t.BankAccountId.Value))
+            .GroupBy(_ => 1)
+            .Select(g => new { First = g.Min(t => t.DueDate), Last = g.Max(t => t.DueDate) })
+            .FirstOrDefaultAsync(ct);
+        if (range is null) return;
+        var first = range.First.AddDays(-1);
+        var from = new DateOnly(first.Year, first.Month, 1);
+        var to = DateOnly.FromDateTime(range.Last.AddDays(1));
+
+        await db.PayeePaymentMarkEvents
+            .Where(e => e.UserId == userId && e.BankPaidAmount != null && e.ReferenceMonth >= from && e.ReferenceMonth <= to)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.BankPaidAmount, (decimal?)null), ct);
+    }
+
     public static async Task DeleteAccountsDataAsync(AppDbContext db, Guid userId, List<Guid> accountIds, CancellationToken ct)
     {
         if (accountIds.Count == 0) return;
@@ -286,6 +364,8 @@ public class PolpDisconnectService(AppDbContext db, IPolpService polp, IIntegrat
         await db.RecurrenceDecisions
             .Where(r => r.UserId == userId && accountIds.Contains(r.BankAccountId))
             .ExecuteDeleteAsync(ct);
+        await DeleteAffectedCashClosingsAsync(db, userId, accountIds, ct);
+        await ClearBankAmountsInMarkHistoryAsync(db, userId, accountIds, ct);
         await db.Transactions
             .Where(t => t.UserId == userId && t.BankAccountId != null && accountIds.Contains(t.BankAccountId.Value))
             .ExecuteDeleteAsync(ct);
@@ -319,6 +399,7 @@ public class PendingDisconnectRetryService(IServiceScopeFactory scopeFactory, IJ
                     using var scope = scopeFactory.CreateScope();
                     var service = scope.ServiceProvider.GetRequiredService<PolpDisconnectService>();
                     await service.RetryPendingAsync(stoppingToken);
+                    await service.PurgeEndedConnectionsAsync(PolpAuthorizationEnd.Retention, stoppingToken);
                 }, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

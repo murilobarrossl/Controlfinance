@@ -17,6 +17,7 @@ public class BankAccount
     public DateTime? BalanceUpdatedAt { get; set; }
     public bool? HasReservedBalance { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsDefault { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>ID da conta (account) ou do cartão (credit-card) na Polp, usado para buscar
@@ -44,6 +45,11 @@ public class BankAccount
     /// (ver AccountNumberMask).</summary>
     public string? Number { get; set; }
 
+    // Snapshot de recorrências calculadas pela Polp para cartões de CPF e CNPJ. JSON cifrado;
+    // null = recurso indisponível/ainda não consultado; [] = consulta sem recorrências.
+    public string? PolpRecurringsJson { get; set; }
+    public DateTime? PolpRecurringsSyncedAt { get; set; }
+
     /// <summary>Só fazem sentido quando esta conta é reconhecida como cartão de crédito
     /// (CreditCardAccountDetector). Vêm de PolpService.GetCreditCardsAsync/GetBillsAsync quando a
     /// Polp expõe esses dados pra esse banco; nulos até lá (a UI de Cartões pede pra completar só
@@ -56,6 +62,7 @@ public class BankAccount
     public string? PolpOriginalName { get; set; }
     public decimal? CreditLimit { get; set; }
     public decimal? UsedLimit { get; set; }
+    public decimal? AvailableLimit { get; set; }
     public int? ClosingDay { get; set; }
     public int? DueDay { get; set; }
     public decimal? CurrentInvoiceAmount { get; set; }

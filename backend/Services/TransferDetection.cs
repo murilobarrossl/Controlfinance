@@ -12,7 +12,12 @@ public static class TransferDetection
 
     public const string CardBillPaymentCategoryName = "Pagamento de fatura";
 
+    public const string LoanDisbursementCategoryName = "Empréstimos recebidos";
+
     private const string CardBillPaymentRef = "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT";
+    // Principal de empréstimo recebido não é receita: a taxonomia oficial da Polp separa
+    // LOAN_DISBURSEMENTS (crédito liberado) de TRANSFER_IN e INCOME.
+    private const string LoanDisbursementsPrefix = "LOAN_DISBURSEMENTS";
     private const string SelfTransferInRef = "TRANSFER_IN_ACCOUNT_TRANSFER";
     private const string SelfTransferOutRef = "TRANSFER_OUT_ACCOUNT_TRANSFER";
 
@@ -23,6 +28,8 @@ public static class TransferDetection
         if (string.Equals(categoryRef, SelfTransferInRef, StringComparison.Ordinal)
             || string.Equals(categoryRef, SelfTransferOutRef, StringComparison.Ordinal))
             return PolpMovementKind.OwnTransfer;
+        if (categoryRef?.StartsWith(LoanDisbursementsPrefix, StringComparison.Ordinal) == true)
+            return PolpMovementKind.LoanDisbursement;
         return PolpMovementKind.None;
     }
 

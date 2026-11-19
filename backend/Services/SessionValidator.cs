@@ -8,7 +8,7 @@ namespace ControlFinance.API.Services;
 // emitido na versão de sessão atual (User.TokenVersion). É o que faz "sair de todos os
 // dispositivos" e "excluir conta" derrubarem sessões abertas em outros aparelhos, em vez de
 // elas continuarem válidas até o JWT expirar.
-public class SessionValidator(AppDbContext db, IMemoryCache cache)
+public class SessionValidator(AppDbContext db, IMemoryCache cache, IServiceScopeFactory? scopes = null)
 {
     // Cache curto só pra leituras: requisições que alteram dados ou exportam a conta pedem
     // bypassCache e sempre consultam o banco. Assim, depois de "sair de todos os aparelhos" ou de
@@ -16,35 +16,43 @@ public class SessionValidator(AppDbContext db, IMemoryCache cache)
     // em outras instâncias podem passar por até 10 s (antes, 30 s para tudo).
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(10);
 
+    private static readonly SharedDbLoad<Guid, SessionState?> Loads = new();
+
     private static string Key(Guid userId) => $"session-state:{userId}";
 
-    public async Task<bool> IsValidAsync(Guid userId, int tokenVersion, bool bypassCache = false)
+    public async Task<bool> IsValidAsync(Guid userId, int tokenVersion, bool bypassCache = false, CancellationToken ct = default)
     {
         SessionState? state;
         if (bypassCache)
         {
-            state = await LoadAsync(userId);
+            state = await LoadAsync(userId, ct);
             cache.Set(Key(userId), state, CacheTtl);
         }
-        else
+        else if (!cache.TryGetValue(Key(userId), out state))
         {
-            state = await cache.GetOrCreateAsync(Key(userId), async entry =>
-            {
-                entry.AbsoluteExpirationRelativeToNow = CacheTtl;
-                return await LoadAsync(userId);
-            });
+            state = scopes is null
+                ? await LoadAsync(userId, ct)
+                : await Loads.GetAsync(userId, scopes, shared => Load(shared, userId, CancellationToken.None),
+                    loaded => cache.Set(Key(userId), loaded, CacheTtl), ct);
+            if (scopes is null) cache.Set(Key(userId), state, CacheTtl);
         }
 
         return state is { IsActive: true } && state.TokenVersion == tokenVersion;
     }
 
-    public void Invalidate(Guid userId) => cache.Remove(Key(userId));
+    public void Invalidate(Guid userId)
+    {
+        Loads.Forget(userId);
+        cache.Remove(Key(userId));
+    }
 
-    private Task<SessionState?> LoadAsync(Guid userId) =>
+    private Task<SessionState?> LoadAsync(Guid userId, CancellationToken ct) => Load(db, userId, ct);
+
+    private static Task<SessionState?> Load(AppDbContext db, Guid userId, CancellationToken ct) =>
         db.Users
             .Where(u => u.Id == userId)
             .Select(u => new SessionState(u.IsActive, u.TokenVersion))
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(ct);
 
-    private record SessionState(bool IsActive, int TokenVersion);
+    public sealed record SessionState(bool IsActive, int TokenVersion);
 }

@@ -45,6 +45,15 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<PlanningAllocation> PlanningAllocations => Set<PlanningAllocation>();
     public DbSet<InvestmentRateProfile> InvestmentRateProfiles => Set<InvestmentRateProfile>();
+    public DbSet<LoanContract> LoanContracts => Set<LoanContract>();
+    public DbSet<EmployeePaymentMethod> EmployeePaymentMethods => Set<EmployeePaymentMethod>();
+    public DbSet<SupplierPaymentMethod> SupplierPaymentMethods => Set<SupplierPaymentMethod>();
+    public DbSet<EmployeePaymentMark> EmployeePaymentMarks => Set<EmployeePaymentMark>();
+    public DbSet<PayeePaymentMarkEvent> PayeePaymentMarkEvents => Set<PayeePaymentMarkEvent>();
+    public DbSet<PayrollObligation> PayrollObligations => Set<PayrollObligation>();
+    public DbSet<PayrollObligationEvent> PayrollObligationEvents => Set<PayrollObligationEvent>();
+    public DbSet<CashClosing> CashClosings => Set<CashClosing>();
+    public DbSet<CashClosingItem> CashClosingItems => Set<CashClosingItem>();
     public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -79,6 +88,8 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(u => u.Name).IsRequired().HasMaxLength(100);
             e.Property(u => u.Email).IsRequired().HasMaxLength(150);
             e.HasIndex(u => u.Email).IsUnique();
+            // A rotina diária de inatividade busca só quem está perto dos 3 anos, sem varrer Users.
+            e.HasIndex(u => u.LastActivityAt);
             // Document (legado) é o CPF/CNPJ cifrado de forma recuperável. Não é mais gravado
             // (ver User.Document); fica nulável só até PrivacyBackfill zerar as linhas antigas e
             // a coluna ser removida. Busca/unicidade sempre usaram DocumentHash.
@@ -99,17 +110,20 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(b => b.Balance).HasConversion(nullableDecimalConverter).HasColumnName("BalanceEncrypted");
             e.HasIndex(b => b.UserId);
             e.HasIndex(b => new { b.UserId, b.IsActive });
+            e.HasIndex(b => b.UserId, "IX_BankAccounts_UserId_Default").IsUnique().HasFilter("\"IsDefault\"");
             e.Property(b => b.Ownership).HasConversion<string>();
             // Number é dado sensível (mesmo nível de CPF/CNPJ), criptografado com o mesmo
             // conversor de User.Document. PolpAccountType/Subtype são só rótulos categóricos
             // ("BANK", "CREDIT"), ficam em texto puro, mesmo tratamento de BankCode.
             e.Property(b => b.Number).HasConversion(nullableTextConverter).HasColumnName("NumberEncrypted");
             e.Property(b => b.PolpOriginalName).HasConversion(nullableTextConverter).HasColumnName("PolpOriginalNameEncrypted");
+            e.Property(b => b.PolpRecurringsJson).HasConversion(nullableTextConverter).HasColumnName("PolpRecurringsEncrypted");
             // Campos de cartão (só preenchidos quando esta conta é reconhecida como cartão de
             // crédito): CreditLimit/UsedLimit/CurrentInvoiceAmount são valor monetário, mesmo
             // tratamento de Balance. ClosingDay/DueDay/InvoiceDueDate não são segredo, texto puro.
             e.Property(b => b.CreditLimit).HasConversion(nullableDecimalConverter).HasColumnName("CreditLimitEncrypted");
             e.Property(b => b.UsedLimit).HasConversion(nullableDecimalConverter).HasColumnName("UsedLimitEncrypted");
+            e.Property(b => b.AvailableLimit).HasConversion(nullableDecimalConverter).HasColumnName("AvailableLimitEncrypted");
             e.Property(b => b.CurrentInvoiceAmount).HasConversion(nullableDecimalConverter).HasColumnName("CurrentInvoiceAmountEncrypted");
             e.HasOne(b => b.User)
              .WithMany()
@@ -166,10 +180,13 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(t => t.CounterpartyAlias).HasConversion(nullableTextConverter).HasColumnName("CounterpartyAliasEncrypted");
             e.Property(t => t.CounterpartyCnpj).HasConversion(nullableTextConverter).HasColumnName("CounterpartyCnpjEncrypted");
             e.Property(t => t.CounterpartyPersonType).HasMaxLength(20);
+            e.Property(t => t.CounterpartyCpfHash).HasMaxLength(120);
+            e.Property(t => t.CounterpartyAccountHash).HasMaxLength(120);
             e.Property(t => t.CounterpartyAccount).HasConversion(nullableTextConverter).HasColumnName("CounterpartyAccountEncrypted");
             e.Property(t => t.CardNumber).HasConversion(nullableTextConverter).HasColumnName("CardNumberEncrypted");
             e.Property(t => t.OriginalAmount).HasConversion(nullableDecimalConverter).HasColumnName("OriginalAmountEncrypted");
             e.Property(t => t.BankOperationType).HasMaxLength(40);
+            e.Property(t => t.TaxAuthority).HasMaxLength(10);
             e.Property(t => t.CounterpartyBankCode).HasMaxLength(8);
             e.Property(t => t.OriginalCurrency).HasMaxLength(3);
             e.Property(t => t.BillMonth).HasMaxLength(7);
@@ -249,9 +266,8 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         {
             e.HasKey(x => x.Id);
             // Unicidade por empresa calculada sobre hashes: CPF e chave Pix ficam cifrados e não dá
-            // pra comparar o valor no banco. O índice parcial deixa vários funcionários sem Pix.
+            // pra comparar o valor no banco.
             e.HasIndex(x => new { x.UserId, x.CpfHash }).IsUnique();
-            e.HasIndex(x => new { x.UserId, x.PixKeyHash }).IsUnique().HasFilter("\"PixKeyHash\" IS NOT NULL");
             e.HasIndex(x => new { x.UserId, x.Status, x.Department });
             e.Property(x => x.FullName).HasConversion(textConverter).HasColumnName("FullNameEncrypted");
             e.Property(x => x.Cpf).HasConversion(textConverter).HasColumnName("CpfEncrypted");
@@ -261,35 +277,101 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(x => x.EmploymentType).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.GrossSalary).HasConversion(decimalConverter).HasColumnName("GrossSalaryEncrypted");
-            e.Property(x => x.PixKeyType).HasConversion<string>().HasMaxLength(20);
-            e.Property(x => x.PixKey).HasConversion(nullableTextConverter).HasColumnName("PixKeyEncrypted");
-            e.Property(x => x.PixKeyHash).HasMaxLength(120);
-            e.Property(x => x.PayeeBankCode).HasMaxLength(3);
-            e.Property(x => x.PayeeBranch).HasConversion(nullableTextConverter).HasColumnName("PayeeBranchEncrypted");
-            e.Property(x => x.PayeeAccount).HasConversion(nullableTextConverter).HasColumnName("PayeeAccountEncrypted");
-            e.Property(x => x.PayeeAccountType).HasConversion<string>().HasMaxLength(20);
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            // FK composta com UserId: um método nunca aponta para funcionário de outra empresa.
+            e.HasMany(x => x.PaymentMethods).WithOne().HasForeignKey(x => new { x.UserId, x.EmployeeId })
+                .HasPrincipalKey(x => new { x.UserId, x.Id }).OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_EmployeePaymentMethod_Employee");
         });
 
         modelBuilder.Entity<Supplier>(e =>
         {
             e.HasKey(x => x.Id);
             e.HasIndex(x => new { x.UserId, x.DocumentHash }).IsUnique();
-            e.HasIndex(x => new { x.UserId, x.PixKeyHash }).IsUnique().HasFilter("\"PixKeyHash\" IS NOT NULL");
             e.Property(x => x.LegalName).HasConversion(textConverter).HasColumnName("LegalNameEncrypted");
             e.Property(x => x.TradeName).HasConversion(nullableTextConverter).HasColumnName("TradeNameEncrypted");
             e.Property(x => x.DocumentType).HasMaxLength(4);
             e.Property(x => x.Document).HasConversion(textConverter).HasColumnName("DocumentEncrypted");
             e.Property(x => x.DocumentHash).HasMaxLength(120);
             e.Property(x => x.Category).HasMaxLength(60);
-            e.Property(x => x.PixKeyType).HasConversion<string>().HasMaxLength(20);
-            e.Property(x => x.PixKey).HasConversion(nullableTextConverter).HasColumnName("PixKeyEncrypted");
-            e.Property(x => x.PixKeyHash).HasMaxLength(120);
-            e.Property(x => x.PayeeBankCode).HasMaxLength(3);
-            e.Property(x => x.PayeeBranch).HasConversion(nullableTextConverter).HasColumnName("PayeeBranchEncrypted");
-            e.Property(x => x.PayeeAccount).HasConversion(nullableTextConverter).HasColumnName("PayeeAccountEncrypted");
-            e.Property(x => x.PayeeAccountType).HasConversion<string>().HasMaxLength(20);
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.PaymentMethods).WithOne().HasForeignKey(x => new { x.UserId, x.SupplierId })
+                .HasPrincipalKey(x => new { x.UserId, x.Id }).OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_SupplierPaymentMethod_Supplier");
+        });
+
+        // Índice único por cadastro e mês: duas gravações simultâneas nunca criam duas decisões para
+        // o mesmo mês. FK composta com UserId: a marcação nunca aponta para cadastro de outra empresa.
+        modelBuilder.Entity<EmployeePaymentMark>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.UserId, x.EmployeeId, x.ReferenceMonth }).IsUnique();
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => new { x.UserId, x.ReferenceMonth });
+            e.HasOne<Employee>().WithMany().HasForeignKey(x => new { x.UserId, x.EmployeeId })
+                .HasPrincipalKey(x => new { x.UserId, x.Id }).OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_EmployeePaymentMark_Employee");
+        });
+
+        // FK composta com UserId: o custo nunca aponta para funcionário de outra empresa.
+        modelBuilder.Entity<PayrollObligation>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Amount).HasConversion(nullableDecimalConverter).HasColumnName("AmountEncrypted");
+            e.Property(x => x.Description).HasConversion(nullableTextConverter).HasColumnName("DescriptionEncrypted");
+            e.HasIndex(x => new { x.UserId, x.EmployeeId });
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Employee>().WithMany().HasForeignKey(x => new { x.UserId, x.EmployeeId })
+                .HasPrincipalKey(x => new { x.UserId, x.Id }).OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_PayrollObligation_Employee");
+        });
+
+        modelBuilder.Entity<PayrollObligationEvent>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Action).HasMaxLength(20);
+            e.Property(x => x.Description).HasConversion(nullableTextConverter).HasColumnName("DescriptionEncrypted");
+            e.Property(x => x.Amount).HasConversion(nullableDecimalConverter).HasColumnName("AmountEncrypted");
+            e.Property(x => x.PaymentAmount).HasConversion(nullableDecimalConverter).HasColumnName("PaymentAmountEncrypted");
+            e.HasIndex(x => new { x.UserId, x.ObligationId, x.OccurredAt });
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PayeePaymentMarkEvent>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // Uma versão por cadastro e mês: dois eventos nunca disputam a mesma posição no histórico.
+            e.HasIndex(x => new { x.UserId, x.PayeeKind, x.PayeeId, x.ReferenceMonth, x.Version }).IsUnique();
+            e.Property(x => x.PayeeKind).HasConversion<string>().HasMaxLength(10);
+            e.Property(x => x.PreviousStatus).HasMaxLength(20);
+            e.Property(x => x.NewStatus).HasMaxLength(20);
+            e.Property(x => x.BankPaidAmount).HasConversion(nullableDecimalConverter).HasColumnName("BankPaidAmountEncrypted");
+            e.Property(x => x.PreviousManualAmount).HasConversion(nullableDecimalConverter).HasColumnName("PreviousManualAmountEncrypted");
+            e.Property(x => x.NewManualAmount).HasConversion(nullableDecimalConverter).HasColumnName("NewManualAmountEncrypted");
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Um fechamento vigente por dia e escopo: dois cliques simultâneos esbarram no índice, não
+        // em uma checagem prévia sujeita a corrida.
+        modelBuilder.Entity<CashClosing>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.UserId, x.Day, x.ScopeAccountId }).IsUnique().HasFilter("\"ReopenedAt\" IS NULL");
+            e.HasIndex(x => new { x.UserId, x.Day });
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.Property(x => x.OpeningBalance).HasConversion(nullableDecimalConverter).HasColumnName("OpeningBalanceEncrypted");
+            e.Property(x => x.Income).HasConversion(decimalConverter).HasColumnName("IncomeEncrypted");
+            e.Property(x => x.Expense).HasConversion(decimalConverter).HasColumnName("ExpenseEncrypted");
+            e.Property(x => x.ClosingBalance).HasConversion(nullableDecimalConverter).HasColumnName("ClosingBalanceEncrypted");
+            e.HasMany(x => x.Items).WithOne().HasForeignKey(x => x.ClosingId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CashClosingItem>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.ClosingId, x.TransactionId }).IsUnique();
+            e.Property(x => x.Type).HasConversion<string>().HasMaxLength(10);
+            e.Property(x => x.MovementKind).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Amount).HasConversion(decimalConverter).HasColumnName("AmountEncrypted");
         });
 
         modelBuilder.Entity<SavingsGoal>(e =>
@@ -332,6 +414,45 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasAlternateKey(p => new { p.UserId, p.Id });
         });
         InvestmentModelConfiguration.Configure(modelBuilder, textConverter, nullableTextConverter);
+
+        // A mesma chave Pix não se repete na empresa (nem no mesmo funcionário); o índice parcial
+        // deixa as contas para TED, que não têm hash.
+        // Mesmas colunas para funcionário e fornecedor (base não mapeada).
+        void ConfigurePaymentMethod<T>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<T> e) where T : PayeePaymentMethod
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.UserId, x.PixKeyHash }).IsUnique().HasFilter("\"PixKeyHash\" IS NOT NULL");
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(10);
+            e.Property(x => x.PixKeyType).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.PixKey).HasConversion(nullableTextConverter).HasColumnName("PixKeyEncrypted");
+            e.Property(x => x.PixKeyHash).HasMaxLength(120);
+            e.Property(x => x.BankCode).HasMaxLength(3);
+            e.Property(x => x.Branch).HasConversion(nullableTextConverter).HasColumnName("BranchEncrypted");
+            e.Property(x => x.Account).HasConversion(nullableTextConverter).HasColumnName("AccountEncrypted");
+            e.Property(x => x.AccountType).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.HolderDocumentType).HasMaxLength(4);
+            e.Property(x => x.HolderDocument).HasConversion(nullableTextConverter).HasColumnName("HolderDocumentEncrypted");
+        }
+        modelBuilder.Entity<EmployeePaymentMethod>(e =>
+        {
+            ConfigurePaymentMethod(e);
+            e.HasIndex(x => new { x.EmployeeId, x.CreatedAt });
+        });
+        modelBuilder.Entity<SupplierPaymentMethod>(e =>
+        {
+            ConfigurePaymentMethod(e);
+            e.HasIndex(x => new { x.SupplierId, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<LoanContract>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasOne<PolpIntegration>().WithMany().HasForeignKey(x => new { x.UserId, x.IntegrationId })
+                .HasPrincipalKey(x => new { x.UserId, x.Id }).OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_Loan_Integration");
+            e.HasIndex(x => new { x.IntegrationId, x.PolpLoanId }).IsUnique();
+            e.HasIndex(x => new { x.UserId, x.IntegrationId });
+            e.Property(x => x.ValuesJson).HasConversion(textConverter).HasColumnName("ValuesEncrypted");
+        });
         modelBuilder.Entity<PolpApiCooldown>(e =>
         {
             e.HasKey(x => x.ClientKey);

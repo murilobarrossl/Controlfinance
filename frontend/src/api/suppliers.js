@@ -21,11 +21,16 @@ export const updateSupplier = async (id, payload) => apiFetch(supplierPath(id), 
 
 export const deleteSupplier = async (id) => apiFetch(supplierPath(id), { method: "DELETE" });
 
-export const setSupplierPix = async (id, payload) => apiFetch(supplierPath(id, "/pix"), { method: "PUT", body: JSON.stringify(payload) });
+// Métodos de pagamento (Pix ou conta para TED); payload = { kind: "Pix" | "Bank", pix | bank }.
+const methodPath = (id, methodId = "", suffix = "") =>
+  supplierPath(id, `/payment-methods${methodId ? `/${encodeURIComponent(methodId)}` : ""}${suffix}`);
 
-export const removeSupplierPix = async (id) => apiFetch(supplierPath(id, "/pix"), { method: "DELETE" });
+export const addSupplierPaymentMethod = async (id, payload) =>
+  apiFetch(methodPath(id), { method: "POST", body: JSON.stringify(payload) });
 
-export const setSupplierBankAccount = async (id, payload) =>
-  apiFetch(supplierPath(id, "/bank-account"), { method: "PUT", body: JSON.stringify(payload) });
+export const updateSupplierPaymentMethod = async (id, methodId, payload) =>
+  apiFetch(methodPath(id, methodId), { method: "PUT", body: JSON.stringify(payload) });
 
-export const removeSupplierBankAccount = async (id) => apiFetch(supplierPath(id, "/bank-account"), { method: "DELETE" });
+export const removeSupplierPaymentMethod = async (id, methodId) => apiFetch(methodPath(id, methodId), { method: "DELETE" });
+
+export const revealSupplierPixKey = async (id, methodId) => apiFetch(methodPath(id, methodId, "/pix-key"));

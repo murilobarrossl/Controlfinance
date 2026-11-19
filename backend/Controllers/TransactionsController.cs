@@ -217,6 +217,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
 
         var today = await UserTodayAsync(db, ct);
         var rows = FilteredQuery(bankAccountId, null, null, today)
+            .WithoutSelfTransfers()
             .Where(t => t.DueDate >= start && t.DueDate < end)
             .OrderByDescending(t => t.DueDate)
             .ThenBy(t => t.Id)
@@ -533,7 +534,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         var transaction = await db.Transactions
             .Include(t => t.Category)
             .Include(t => t.BankAccount)
-            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId);
+            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId && (t.BankAccount == null || t.BankAccount.IsActive));
         if (transaction is null) return NotFound();
 
         transaction.IsFixed = dto.IsFixed;
@@ -549,7 +550,7 @@ public class TransactionsController(AppDbContext db) : ApiControllerBase
         var transaction = await db.Transactions
             .Include(t => t.Category)
             .Include(t => t.BankAccount)
-            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId);
+            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId && (t.BankAccount == null || t.BankAccount.IsActive));
         if (transaction is null) return NotFound();
 
         if (dto.CategoryId.HasValue && !await db.Categories.AnyAsync(c => c.Id == dto.CategoryId && c.UserId == UserId))

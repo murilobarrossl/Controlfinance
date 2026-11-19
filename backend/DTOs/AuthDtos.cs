@@ -76,6 +76,14 @@ public class UserInfoDto
     public string? DocumentType { get; set; }
     public bool DueRemindersEnabled { get; set; }
     public bool MonthlySummaryEnabled { get; set; }
+    /// <summary>Versão vigente da Política de Privacidade quando o usuário ainda não registrou ciência
+    /// dela (null = nada pendente). O frontend mostra o aviso até o POST de ciência.</summary>
+    public string? PendingPrivacyVersion { get; set; }
+}
+
+public class PrivacyAcknowledgementDto
+{
+    public string? Version { get; set; }
 }
 
 public class NotificationPreferencesDto

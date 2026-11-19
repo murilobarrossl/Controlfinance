@@ -37,6 +37,22 @@ public class User
     /// </summary>
     public int TokenVersion { get; set; }
 
+    /// <summary>Última atividade autenticada do próprio usuário (login ou sessão em uso), em UTC e com
+    /// granularidade de horas (UserActivity). Processos automáticos nunca gravam aqui.</summary>
+    public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Avisos de exclusão por inatividade já enviados (0 a 3), ou 4 quando a exclusão já começou
+    /// (InactiveAccountService.DeletionStartedStage), para o LastActivityAt guardado em
+    /// InactivityNoticeEpoch; outra atividade invalida a sequência. InactivityDeletionAt é a data
+    /// informada no último aviso.</summary>
+    public int InactivityNoticeStage { get; set; }
+    public DateTime? InactivityNoticeEpoch { get; set; }
+    public DateTime? InactivityDeletionAt { get; set; }
+
+    /// <summary>Quando a conta foi reservada para exclusão por inatividade (IsActive = false). A exclusão só
+    /// acontece numa rodada posterior, depois da confirmação final sob trava de linha.</summary>
+    public DateTime? InactivityDeletionClaimedAt { get; set; }
+
     /// <summary>Lembrete por e-mail de contas pendentes perto do vencimento (padrão: ligado,
     /// é a funcionalidade anunciada; o usuário pode desligar em Privacidade e dados).</summary>
     public bool DueRemindersEnabled { get; set; } = true;

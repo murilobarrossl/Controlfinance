@@ -17,16 +17,20 @@ const DashboardLayout = lazy(() => import("./layouts/DashboardLayout/DashboardLa
 const DashboardHome = lazy(() => import("./pages/dashboard/DashboardHome/DashboardHome.jsx"));
 const Cartoes = lazy(() => import("./pages/dashboard/Cartoes/Cartoes.jsx"));
 const ReceitasDespesas = lazy(() => import("./pages/dashboard/ReceitasDespesas/ReceitasDespesas.jsx"));
+const CashMonth = lazy(() => import("./pages/dashboard/ReceitasDespesas/CashMonth.jsx"));
 const Relatorios = lazy(() => import("./pages/dashboard/Relatorios/Relatorios.jsx"));
 const TransactionDetail = lazy(() => import("./pages/dashboard/Relatorios/TransactionDetail.jsx"));
 const Categorias = lazy(() => import("./pages/dashboard/Categorias/Categorias.jsx"));
 const Investimentos = lazy(() => import("./pages/dashboard/Investimentos/Investimentos.jsx"));
+const InvestmentDetail = lazy(() => import("./pages/dashboard/Investimentos/InvestmentDetail.jsx"));
 const DashboardEmpresa = lazy(() => import("./pages/dashboard/empresa/DashboardEmpresa.jsx"));
 const FolhaPagamento = lazy(() => import("./pages/dashboard/empresa/FolhaPagamento.jsx"));
 const EmployeeDetail = lazy(() => import("./pages/dashboard/empresa/EmployeeDetail.jsx"));
+const DespesasRecorrentes = lazy(() => import("./pages/dashboard/empresa/DespesasRecorrentes.jsx"));
+const RecurringExpenseDetail = lazy(() => import("./pages/dashboard/empresa/RecurringExpenseDetail.jsx"));
 const Fornecedores = lazy(() => import("./pages/dashboard/empresa/Fornecedores.jsx"));
+const Impostos = lazy(() => import("./pages/dashboard/empresa/Impostos.jsx"));
 const SupplierDetail = lazy(() => import("./pages/dashboard/empresa/SupplierDetail.jsx"));
-const Patrimonio = lazy(() => import("./pages/dashboard/empresa/Patrimonio.jsx"));
 const Privacidade = lazy(() => import("./pages/dashboard/Privacidade/Privacidade.jsx"));
 const TermosDeUso = lazy(() => import("./pages/legal/TermosDeUso.jsx"));
 const PoliticaDePrivacidade = lazy(() => import("./pages/legal/PoliticaDePrivacidade.jsx"));
@@ -75,13 +79,18 @@ function AppRoutes() {
             <Route path="relatorios/:transactionId" element={<TransactionDetail />} />
             <Route path="categorias" element={<PersonalOnlyRoute><Categorias /></PersonalOnlyRoute>} />
             <Route path="investimentos" element={<PersonalOnlyRoute><Investimentos /></PersonalOnlyRoute>} />
+            <Route path="investimentos/:investmentId" element={<PersonalOnlyRoute><InvestmentDetail /></PersonalOnlyRoute>} />
+            <Route path="investimentos/caixinhas/:reserveId" element={<PersonalOnlyRoute><InvestmentDetail /></PersonalOnlyRoute>} />
             <Route path="privacidade" element={<Privacidade />} />
             <Route path="folha-de-pagamento" element={<BusinessOnlyRoute><FolhaPagamento /></BusinessOnlyRoute>} />
             <Route path="folha-de-pagamento/:employeeId" element={<BusinessOnlyRoute><EmployeeDetail /></BusinessOnlyRoute>} />
+            <Route path="despesas-recorrentes" element={<DespesasRecorrentes />} />
+            <Route path="despesas-recorrentes/:recurringId" element={<RecurringExpenseDetail />} />
             <Route path="fornecedores" element={<BusinessOnlyRoute><Fornecedores /></BusinessOnlyRoute>} />
             <Route path="fornecedores/:supplierId" element={<BusinessOnlyRoute><SupplierDetail /></BusinessOnlyRoute>} />
+            <Route path="impostos" element={<BusinessOnlyRoute><Impostos /></BusinessOnlyRoute>} />
             <Route path="fluxo-de-caixa" element={<BusinessOnlyRoute><ReceitasDespesas /></BusinessOnlyRoute>} />
-            <Route path="patrimonio" element={<BusinessOnlyRoute><Patrimonio /></BusinessOnlyRoute>} />
+            <Route path="fluxo-de-caixa/mes/:month" element={<BusinessOnlyRoute><CashMonth /></BusinessOnlyRoute>} />
             <Route path="*" element={<ErrorPage code={404} embedded />} />
           </Route>
           <Route path="/403" element={<ErrorPage code={403} />} />

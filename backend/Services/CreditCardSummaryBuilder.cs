@@ -53,6 +53,7 @@ public static class CreditCardSummaryBuilder
             {
                 IssuerInstitutionId = connection?.InstitutionId,
                 OriginalProductName = account.PolpOriginalName,
+                AvailableLimit = account.AvailableLimit,
             });
         }
 

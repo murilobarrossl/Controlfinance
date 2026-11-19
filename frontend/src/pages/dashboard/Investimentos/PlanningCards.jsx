@@ -1,13 +1,14 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import Button from "../../../components/ui/Button/Button.jsx";
 import CurrencyInput from "../../../components/ui/CurrencyInput/CurrencyInput.jsx";
 import DateInput from "../../../components/ui/DateInput/DateInput.jsx";
 import { InstitutionLogo, InvestmentIcon } from "./InvestmentMarks.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
-import { CloseIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
-import { createGoal, deleteGoal, removeReserveAccount, setGoalResource, setReserveResource } from "../../../api/planning.js";
+import { ChevronDownIcon, CloseIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
+import { createGoal, deleteGoal, setGoalResource } from "../../../api/planning.js";
 import { formatCurrency } from "../../../utils/financeMath.js";
-import { formatMoney, goalOf, isReserve } from "../../../utils/importedInvestments.js";
+import { formatMoney, goalOf, investmentPath, isReserve } from "../../../utils/importedInvestments.js";
 import useSaving from "./useSaving.js";
 import { summarize } from "./planningSummary.js";
 
@@ -25,18 +26,17 @@ const optionLabel = (item) => `${item.name} · ${item.institution.name}${item.ac
 // Só entra no seletor o que ainda não conta para nenhum destino.
 const freeItems = (items, planning) => items.filter((item) => !isReserve(item, planning.reserve, planning.goals) && !goalOf(item, planning.goals));
 
-function ResourceRow({ entry, onRemove, removeLabel, saving }) {
+function ResourceContent({ entry }) {
   const item = entry.item;
   const amounts = (item?.amounts ?? []).filter(Boolean);
   return (
-    <li className="inv-link">
+    <>
       {item ? <InvestmentIcon item={item} /> : <span className="inv-mark" aria-hidden="true" />}
       <span className="inv-link__titles">
         <span className="inv-link__name">{item ? item.name : entry.status === "loading" ? <Skeleton width="8rem" height="0.9rem" /> : entry.status === "error" ? "Não foi possível carregar agora" : "Investimento indisponível"}</span>
         <span className="inv-link__meta">
           {entry.status === "loading" || entry.status === "error" ? null
             : !item ? "Não está mais disponível nesta conexão"
-            : entry.legacy ? "Conta bancária"
             : <><InstitutionLogo institution={item.institution} /><span className="inv-row__institution-text">{item.institution.name}{item.accountNumber ? ` · conta ${item.accountNumber}` : ""}</span></>}
         </span>
       </span>
@@ -46,9 +46,17 @@ function ResourceRow({ entry, onRemove, removeLabel, saving }) {
           : item ? "Não informado" : null}
         {item && amounts.length > 0 && item.currentAmountAvailable === false && <small>Último saldo informado</small>}
       </span>
-      <button type="button" className="inv-link__remove" onClick={onRemove} disabled={saving} aria-label={removeLabel}>
+    </>
+  );
+}
+
+function ResourceRow({ entry, onRemove, removeLabel, saving }) {
+  return (
+    <li className="inv-link">
+      <ResourceContent entry={entry} />
+      {onRemove && <button type="button" className="inv-link__remove" onClick={onRemove} disabled={saving} aria-label={removeLabel}>
         <CloseIcon />
-      </button>
+      </button>}
     </li>
   );
 }
@@ -67,28 +75,29 @@ function AddResource({ id, label, candidates, onAdd, saving }) {
   );
 }
 
-export function EmergencyReserveCard({ planning, items, itemsLoading, entries, summary }) {
-  const { saving, error, run } = useSaving();
-  const candidates = freeItems(items, planning);
-  const remove = (entry) => run(async () => planning.replace(entry.legacy
-    ? await removeReserveAccount()
-    : await setReserveResource({ id: entry.id, reserved: entry.reserved }, false)));
+function ReserveLink({ entry, onOpen }) {
+  if (!entry.item) return <ResourceRow entry={entry} />;
+  return <li className="inv-link-item">
+    <Link to={investmentPath(entry.item)} className="inv-link inv-link--nav" onClick={onOpen}>
+      <ResourceContent entry={entry} />
+      <span className="inv-link__chevron" aria-hidden="true"><ChevronDownIcon /></span>
+    </Link>
+  </li>;
+}
 
+export function EmergencyReserveCard({ itemsLoading, entries, summary, onOpen }) {
   return (
     <section className="inv-plan" aria-labelledby="inv-plan-reserve">
       <h3 id="inv-plan-reserve" className="inv-plan__title">Reserva de emergência</h3>
 
       {entries.length > 0 ? (
         <ul className="inv-links">
-          {entries.map((entry) => (
-            <ResourceRow key={entry.key} entry={entry} saving={saving} onRemove={() => remove(entry)}
-              removeLabel={`Tirar ${entry.item?.name ?? "investimento indisponível"} da reserva`} />
-          ))}
+          {entries.map((entry) => <ReserveLink key={entry.key} entry={entry} onOpen={onOpen} />)}
         </ul>
       ) : itemsLoading ? (
         <Skeleton width="100%" height="3rem" />
       ) : (
-        <p className="investimentos__hint">{candidates.length ? "Nenhum investimento na reserva." : "Nenhum investimento disponível para a reserva."}</p>
+        <p className="investimentos__hint">Nenhuma caixinha de reserva encontrada.</p>
       )}
 
       {entries.length > 1 && (
@@ -100,10 +109,6 @@ export function EmergencyReserveCard({ planning, items, itemsLoading, entries, s
             : "Não informado"}</strong>
         </p>
       )}
-
-      <AddResource id="inv-plan-reserve-add" label="Adicionar à reserva" candidates={candidates} saving={saving}
-        onAdd={(item) => run(async () => planning.replace(await setReserveResource(item, true)))} />
-      {error && <p className="investimentos__error" role="alert">{error}</p>}
     </section>
   );
 }

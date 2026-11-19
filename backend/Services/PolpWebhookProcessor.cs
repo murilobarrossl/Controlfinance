@@ -13,7 +13,8 @@ namespace ControlFinance.API.Services;
 // apagou (RemovedPolpResources) termina sem fazer nada.
 public class PolpWebhookProcessor(
     AppDbContext db, PolpSyncService sync, IPolpService polp, IPolpInbox inbox, ILogger<PolpWebhookProcessor> logger,
-    PolpConsentMetadataService? consentMetadata = null, PolpInvestmentImportService? investmentImports = null)
+    PolpConsentMetadataService? consentMetadata = null, PolpInvestmentImportService? investmentImports = null,
+    PolpLoanImportService? loans = null)
 {
     public async Task ProcessAsync(PolpInboxEvent evt, CancellationToken ct)
     {
@@ -43,6 +44,7 @@ public class PolpWebhookProcessor(
                     await inbox.EnqueueAsync(new(PolpInternalEvents.ConsentMetadata, "consents", local.PolpIntegrationId.ToString(), null), ct);
                 if (local is not null && investmentImports is not null)
                     await EnqueueDiscoveryAsync(local, ct);
+                if (local is not null) await EnqueueLoansAsync(local, ct);
                 break;
             }
 
@@ -73,6 +75,7 @@ public class PolpWebhookProcessor(
                 if (local is not null && investmentImports is not null)
                     await EnqueueDiscoveryAsync(local, ct);
                 if (local is not null) await sync.BackfillAsync(local, ct);
+                if (local is not null) await EnqueueLoansAsync(local, ct);
                 // Discover newly imported accounts even when an earlier catalog scan completed.
                 if (local is not null && investmentImports is not null)
                     await EnqueueDiscoveryAsync(local, ct);
@@ -90,6 +93,7 @@ public class PolpWebhookProcessor(
             {
                 var local = await IntegrationAsync(evt, ct);
                 if (local is not null) await sync.ReconcileAsync(local, ct);
+                if (local is not null) await EnqueueLoansAsync(local, ct);
                 if (local is not null && consentMetadata is not null)
                     await inbox.EnqueueAsync(new(PolpInternalEvents.ConsentMetadata, "consents", local.PolpIntegrationId.ToString(), null), ct);
                 break;
@@ -129,8 +133,49 @@ public class PolpWebhookProcessor(
                 }
                 break;
 
-            // Empréstimos, financiamentos e eventos desconhecidos: fora do escopo.
+            case PolpInternalEvents.Loans:
+            {
+                var local = await IntegrationAsync(evt, ct);
+                if (local is not null && loans is not null) await loans.ImportAsync(local, ct);
+                break;
+            }
+
+            // O aviso pode apontar para o contrato ou para o consentimento; o vínculo com um
+            // consentimento nosso sempre vem do banco local ou da API autenticada, nunca do aviso.
+            case "loans":
+            {
+                if (loans is null) break;
+                var remoteId = ResourceId(evt);
+                if (await IsRemovedAsync(evt, remoteId, ct)) return;
+                EnsureEnabled();
+                var integrationId = await db.LoanContracts.Where(x => x.PolpLoanId == remoteId)
+                    .Select(x => (Guid?)x.IntegrationId).FirstOrDefaultAsync(ct);
+                var local = integrationId is { } known
+                    ? await db.PolpIntegrations.AsNoTracking().FirstOrDefaultAsync(p => p.Id == known, ct)
+                    : await db.PolpIntegrations.AsNoTracking().FirstOrDefaultAsync(p => p.PolpIntegrationId == remoteId, ct);
+                if (local is null)
+                {
+                    var consentId = (await polp.GetLoanAsync(remoteId, ct)).ConsentId;
+                    local = await db.PolpIntegrations.AsNoTracking().FirstOrDefaultAsync(p => p.PolpIntegrationId == consentId, ct);
+                    if (local is null)
+                    {
+                        if (await RemovedPolpResources.IsRemovedAsync(db, consentId, ct)) return;
+                        throw new PolpResourceNotReadyException("Consentimento do empréstimo ainda não existe localmente.");
+                    }
+                }
+                if (local.Status != PolpDisconnectService.PendingStatus) await loans.ImportAsync(local, ct);
+                break;
+            }
+
+            // Financiamentos e eventos desconhecidos: fora do escopo.
         }
+    }
+
+    private async Task EnqueueLoansAsync(PolpIntegration local, CancellationToken ct)
+    {
+        if (loans is not null && PolpLoanImportService.Authorizes(local.ConsentProductsJson)
+            && await InvestmentHolder.AllowsAsync(db, local.UserId, ct))
+            await inbox.EnqueueAsync(new(PolpInternalEvents.Loans, "consents", local.PolpIntegrationId.ToString(), null, PolpInboxPriority.Low), ct);
     }
 
     private async Task EnqueueDiscoveryAsync(PolpIntegration local, CancellationToken ct)

@@ -116,6 +116,10 @@ Auth is **cookie-based**, not bearer-token-in-JS, despite still using JWTs inter
   (`SessionValidator`, `TokenRevocationService`).
 - There is no lawyer or external legal review: legal questions are investigated and decided during
   development; unresolved ones are recorded as open risks in the privacy report.
+- For employee/supplier data the company is controller and Control Finance is operator (Terms section 5, Privacy
+  Policy section 1); counterparty HMACs are Control Finance's own processing under legitimate interest, assessed in
+  `docs/lgpd-legitimo-interesse.md`. Changing the CNPJ modules or the payment matcher means updating the Policy,
+  Terms, Privacidade e dados and that assessment.
 
 ### Domain model (`backend/Models`, `backend/Data/AppDbContext.cs`)
 
@@ -125,9 +129,20 @@ profile/sub-account dimension, so PF/PJ data isolation is plain `UserId` isolati
 accepts that same document (hash check) and refuses an institution whose Polp `type` doesn't serve it
 (`DocumentTypes.InstitutionAccepts`). PF/PJ differences in the UI branch on `frontend/src/utils/holder.js`.
 `BankAccount.Ownership` (Personal/Business/Mixed) is only a user-editable tag, not an isolation boundary.
+`BankAccount.IsDefault` (CNPJ only, `PUT /api/bank-accounts/{id}/default`, `DELETE /api/bank-accounts/default`, set from the
+account switcher menu) marks the company's default account: one per user (partial unique index + user-row lock),
+only a non-card account of an `AUTHORISED` connection; `/polp/integrations` returns `isDefault` only while the
+connection is `AUTHORISED`, never promotes another account, and never changes the selected scope or any total. A CNPJ consent created when the company has no
+bank account gets `PolpIntegration.AutoDefaultPending`; syncs of a flagged consent try `DefaultBankAccounts.AssignPendingAsync`
+(retried until it succeeds, never fails the sync); once any default exists every flag is cleared, so later banks never become
+default automatically. Changing the default refetches only `/polp/integrations`, never `bumpDataRefresh`.
 `PolpIntegration` tracks an open-finance link
 per user/institution. `ConsentRecord` is the append-only log of accepted Terms/Privacy versions and
-bank-connection notices (versions in `LegalDocuments.cs` and `frontend/src/legal/versions.js`,
+bank-connection notices; existing users get `UserInfoDto.PendingPrivacyVersion` from `/auth/me`/login until they
+acknowledge the current version in the dashboard notice (`POST /api/account/privacy-acknowledgement`, same log,
+`Kind = privacy_notice` = ciência, never consent; `ConsentKinds.Manifestation` maps each kind to ciência / aceite
+contratual / consentimento / declaração; a version that needs consent sets `LegalDocuments.PrivacyVersionRequiresConsent`
+and must collect `ConsentKinds.SpecificConsent` per purpose in its own flow) (versions in `LegalDocuments.cs` and `frontend/src/legal/versions.js`,
 must match). `Transaction` → `BankAccount` is `SetNull`, so deleting accounts must go through
 `PolpDisconnectService.DeleteAccountsDataAsync` to avoid orphaned statements. Credit cards come only
 from the bank (no manual cards or installments; migration `RemoveManualCardsAndInstallments`).
@@ -163,13 +178,31 @@ webhook) and only fill name/category that were never edited. `category_ref` maps
 top-level group (`PolpCategoryMap`). `execution_status` `PARTIAL_SUCCESS` never blocks the user. Card
 closing/due day come from bills (`bill_closing_date`/`due_date`), not from the card resource.
 Investments and reserved balances ("caixinhas") are imported (`Services/Investments`, encrypted JSON
-columns, purged by the history retention, included in the export and listed in the privacy policy);
-loans and financings are out of scope. Any new imported data must also be described in the Privacy
+columns, purged by the history retention, included in the export and listed in the privacy policy).
+Loan contracts (CPF only): CPF consents request `CREDIT_OPERATIONS` (`PolpService.ProductsFor`); older consents
+get it only by reconnecting (recreate). `PolpLoanImportService` mirrors `GET /consents/{id}/loans` into
+`LoanContracts` (minimized encrypted JSON) on backfill, reconcile and `loans` webhooks; `GET /api/loans` is
+read-only and contracts never enter totals. Loan proceeds in the statement (`LOAN_DISBURSEMENTS*`) are
+`PolpMovementKind.LoanDisbursement`, out of totals. Migration `LoanContracts` is schema-only (an earlier
+local version wiped every bank connection and was applied only to the dev database); migrations must never
+delete bank data or queue consent revocations.
+Financings are out of scope. Any new imported data must also be described in the Privacy
 Policy and the Privacidade e dados screen (bump `PRIVACY_VERSION` in both places).
 
 Disconnecting (`DELETE /api/polp/integrations/{id}`, `PolpDisconnectService`) deletes local data
 of that connection immediately, marks it `DISCONNECT_PENDING` (ignored by every sync path) and revokes the
 consent (`DELETE /consents/{id}`); failures are retried hourly by `PendingDisconnectRetryService`.
+An authorization ended at the bank (`PolpAuthorizationEnd.EndedStatuses`: REVOKED, EXPIRED, REJECTED, terminal
+locally) is not a disconnect: its accounts get `IsActive = false` (every read of bank data must filter `IsActive`;
+investment/reserve reads exclude ended statuses), `AuthorizationEndedAt` is stamped, and after
+`PolpAuthorizationEnd.Retention` (30 days, written in the connection notice, Privacy Policy and Privacidade e dados)
+`PurgeEndedConnectionsAsync` runs the same `DisconnectAsync`, only after Polp confirms the consent is still ended.
+Employees, suppliers, marks and costs are never deleted by it.
+`DeleteAccountsDataAsync` (every path that removes bank accounts: disconnect, ended-authorization purge, single
+account delete) also deletes the cash closings that used those accounts (scope = the account, an item pointing to
+one of its transactions, or an all-accounts closing with balances from its first balance reading on) and nulls
+`PayeePaymentMarkEvents.BankPaidAmount` in the months its transactions covered; marks and mark events stay. The Open Finance partnership framing
+(RC 1/2020 arts. 36-38, RC 21/2026) is unconfirmed pending Polp/Celcoin (privacy report, section N).
 Account deletion (`POST /api/account/deletion`) asks Polp to revoke every consent of the user (any
 status); inside the deletion transaction it locks the user row and queues every consent Polp did not
 confirm in `PendingProviderDeletion` (technical id only, retried hourly, never dropped). A consent
@@ -184,10 +217,16 @@ reads `User.DocumentType` from the DB on every request (403 for non-CNPJ); every
 creates transactions or payments). Name, CPF, gross salary, Pix key, branch and account are encrypted
 columns; uniqueness uses per-company HMACs (`EmployeeKeys.CpfLookupInput`/`PixLookupInput` include the
 company id, so the same CPF never correlates across companies or with a login's `DocumentHash`). The API
-only returns masks for CPF, Pix key and account. Quick registration (`POST`) and `PUT {id}` take only the five
+only returns masks for CPF, Pix key and account; the full Pix key only via
+`GET {id}/payment-methods/{methodId}/pix-key`, loaded by the employee detail ("Dados de pagamento").
+Employees and suppliers have up to `PayeePayment.MaxMethodsPerPayee` payment methods each
+(`EmployeePaymentMethods`/`SupplierPaymentMethods`, same columns via the unmapped base `PayeePaymentMethod`,
+composite FK `(UserId, EmployeeId|SupplierId)`, Pix hash unique per company), managed by
+`POST/PUT/DELETE {id}/payment-methods` with shared parsing in `PayeePayment.ParseMethod`/`Assign`/`Views`;
+the detail screens show full Pix keys via `{id}/payment-methods/{methodId}/pix-key`. Quick registration (`POST`) and `PUT {id}` take only the five
 core fields (name, CPF, role, gross salary, admission; empty CPF on edit keeps it); department and employment
 type go through `PUT {id}/classification` (`EmploymentType` is nullable: never presumed CLT); payment data
-through `PUT`/`DELETE {id}/pix` and `{id}/bank-account`. Terminating keeps the record (`/termination`,
+through `{id}/payment-methods`. Terminating keeps the record (`/termination`,
 `/reactivation`); `DELETE {id}` permanently removes an employee only when already terminated (409 otherwise). Name search/sort run in memory after the status/department filter
 (names are encrypted), capped at `MaxEmployeesPerCompany`. `GrossSalary` is the informed gross salary,
 never presented as total cost: INSS, FGTS, encargos, 13º, férias and payment matching are not built yet.
@@ -199,11 +238,85 @@ encrypted legal/trade name, document and payment data, per-company HMAC (`Suppli
 CPF/CNPJ or Pix key, no active/inactive status (`DELETE {id}` removes permanently), 25 per page. Payment rules shared
 by both live in `PayeeKeys` (normalization, masks) and `PayeePayment` (Pix/bank parsing and masked views);
 the frontend shares `PaymentFields`, `PaymentDialogs`, `RecordDetailParts`, `useRegistryData` and the
-`registry-*`/`record-detail-*` styles. "Pagamentos reconhecidos" is a placeholder: payments are not matched
-to suppliers yet and must never be matched by name or amount alone.
+`registry-*`/`record-detail-*` styles. Suppliers have **no payment tracking at all** (no paid status, filter,
+counter, marks, amounts or bank matching; migration `RemoveSupplierPaymentStatus` dropped them): they are a registry of
+contacts and payment methods only. Employee payment status (list check, `payment=paid|unpaid` filter, detail) uses
+`PayeePaymentStatus` + `SupplierPaymentMatcher.MatchEmployee` over the month's paid outgoing Polp
+transactions (`PolpMovementKind.None`). Polp v2 sends no Pix key or end-to-end id, only `partie_*` (recipient
+bank, branch, number, check digit, person type, CPF/CNPJ), so matching uses exact bank identifiers only, never names:
+`Transaction.CounterpartyCpfHash` (per-company HMAC = `EmployeeKeys.CpfLookupInput`, computed by the sync from
+`partie_cnpj_cpf` for CNPJ logins only; plain CPF never stored) equal to the employee's CPF or to one of their CPF-type
+Pix keys (a CPF key is the holder's CPF); a present CPF decides alone. Without any document and not `PESSOA_JURIDICA`,
+`CounterpartyAccountHash` equal to a registered TED account. Each payment method also has the CPF/CNPJ of who
+receives (`HolderDocumentType`/`HolderDocument`, encrypted, required for TED and e-mail/phone/random Pix keys, taken
+from the key itself for CPF/CNPJ keys, null in old methods, never presumed): a bank document equal to a method holder
+identifies the employee too, unless the bank also sends an account that differs from that TED method's account. A
+holder CNPJ only counts when the CNPJ came from the bank (`Transaction.CounterpartyCnpjFromBank`, set by the sync,
+details version 5). The Pix key itself is never comparable (Polp does not send it). Ambiguity = nothing. On top of it, the user's manual
+decision for the month (`EmployeePaymentMarks`, one row per employee and `ReferenceMonth` = 1st of
+the month in the user's time zone, unique index, history kept) wins: final paid = mark ?? bank. Marks never touch
+transactions; the source (`Bank` | `ManualPaid` | `ManualUnpaid`) is returned by `GET/PUT {id}/payment-month` and the
+UI never shows a manual mark as bank-confirmed. The PUT carries the month shown and gets 409 after the month turns.
+Filters: `payment=paid|unpaid`; list `paymentStatus` = `Bank` | `Manual` | null.
+Every mark change appends a `PayeePaymentMarkEvents` row (audit only, never updated, previous/new status, bank
+amount at the time encrypted) in the same `SaveChanges`; the mark's `Version` is a concurrency token, so events are
+ordered and "previous" is always the real one. Events have no FK to the payee (survive its deletion), cascade with
+`Users`, are in the export. "Pago no mês" (`BankPaidAmount`, list and `payment-month`) is only the decimal sum of the
+month's bank-identified transactions (`PayeeMonthStatus`). A bank CPF hash wins over a CNPJ on the same row (that CNPJ can only be
+Polp enrichment, since the sync clears the hash when the bank sends a CNPJ), so Pix to e-mail/phone/random keys is
+identified when the bank sends the recipient CPF. The only paid amount is the bank one: the manual mark is status
+only, with no amount (migration `EmployeeMarksWithoutAmount` dropped it; old declared values survive only in
+`PayeePaymentMarkEvents.Previous/NewManualAmount`, never written again). UI: the bank amount is a field in "Dados
+principais"; the manual "Pago este mês" checkbox is a quiet control at the end of the page (`usePaymentMonth` +
+`PaymentMonthToggle`). Card transactions are
+never evidence (their CNPJ comes only from Polp enrichment); the bank's `partie_cnpj_cpf` CNPJ overrides the enriched one.
+Polp v2 exposes no transaction status, refund type or link to an original transaction, so reversals are not netted.
+"Identified bank payment" never means salary fully paid, and its absence is not "overdue".
+Custos adicionais e encargos (`PayrollController`, `api/payroll`, `[BusinessHolderOnly]`): nothing is calculated;
+every amount is typed by the company. One table, `PayrollObligations`: `EmployeeCost` = free-named employee cost
+(`Description` encrypted, `Amount` nullable = not informed, `POST/PUT/DELETE employees/{id}/costs`, max 50 per
+employee); every employee gets "13º salário" and "Férias" once, without amount (`EmployeeCostDefaults.Seed`: on
+creation, or on the first `GET employees/{id}` under the user-row lock for older employees; `Employee.CostsSeeded`
+makes sure a deleted cost never comes back). Migration `EmployeeCosts` discarded the old 13º/férias rows (and their
+links and events) without conversion. Costs are only title + value (modal "Adicionar custo"/edit) and have no bank
+links (migration `RemoveEmployeeCostLinks`). "Total cadastrado" sums only informed amounts. Charges (Inss/Fgts/Irrf/OtherCharge, `EmployeeId` null, paid consolidated, one
+Inss/Fgts/Irrf per competence) keep the "Encargos da folha" page. Bank payments are never assigned automatically:
+only for charges, the user attributes part of a real outgoing (`PayrollObligationPayments.Amount`, sum per transaction
+never above its amount, user-row lock), candidates only from `IdentifiedTaxPayments` to a verified authority
+(INSS/Other: RFB or INSS; IRRF: RFB; FGTS: none). Status `Identified` only when the bank amount covers the typed
+amount. The employee's monthly "pago no mês" is not affected by any of this. Every change appends
+`PayrollObligationEvents` (no FK, name and amounts encrypted). All three tables are in the export.
 Form fields in business modals use `components/ui/FormDialog/FormField.jsx` (`TextField`, `MoneyField`,
 `DateField`): every text input gets a concrete example as placeholder from `utils/fieldExamples.js`
 (`example="role"` or a literal); labels always stay. Pix examples follow the selected key type.
+
+### Fechamento de caixa (Fluxo de caixa, CNPJ only)
+
+`CashClosingsController` (`api/cash-flow/closings`, `[BusinessHolderOnly]`) closes/reopens one day per scope
+(`ScopeAccountId`, `Guid.Empty` = all accounts). A closing is immutable (`CashClosing` + `CashClosingItem` snapshot of every
+Polp transaction of the day: id, type, kind, encrypted amount, no FK to `Transactions`); reopening only stamps
+`ReopenedAt` (`Version` concurrency token) and closing again creates a new row, so history is kept. One active closing per
+day/scope via a partial unique index. Close sends the totals the user saw (409 if a sync changed them); close and reopen only for
+the current day in the user's time zone (past days are read-only); the history stays in the DB/export, not in the UI. Totals follow the aggregates rule (`PolpMovementKind.None` only); opening/closing balances come only from
+`BankBalanceObservation` (last reading of the previous day / of the day, null if any cash account lacks one), never
+rebuilt from transactions. They are point readings (time returned per account), so the day shows a reconciliation:
+balance change vs posted cash-account movements (incl. transfers/bills/loans), leftover shown as an unexplained difference. Late or corrected Polp data never touches the closing: `CashClosingLedger.Adjustments` diffs
+snapshot vs current (`added`/`changed`/`removed`, each with its income/expense delta, so closing + deltas = current).
+Purged with the synced-history retention (which also nulls the bank amount of older mark events) and when an account it
+used is removed (see Polp disconnect), included in the export. The page is day-only; month/year comparison lives
+at the bottom (`CashAnalysis`) and `fluxo-de-caixa/mes/:month` (`CashMonth`) details a month.
+
+### Impostos (CNPJ only)
+
+`TaxesController` (`GET api/taxes?year&month[&bankAccountId]`, `[BusinessHolderOnly]`) lists bank payments identified as
+taxes, one query per year over `TaxPaymentDetection.IdentifiedTaxPayments` (paid account debits, `PolpMovementKind.None`,
+never cards). Always requires `PolpTaxPayment` (`category_ref = GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT`, Polp's AI
+classification, never enough alone) **plus** one bank fact: `Transaction.TaxAuthority` (bank-sent `partie_cnpj_cpf` equal
+to a verified authority CNPJ: Receita Federal, INSS; a CNPJ alone never identifies a tax) or bank type
+`CONVENIO_ARRECADACAO` (also utilities, so never alone). Both flags are written by the sync (details version 6, migration
+`TaxPayments`). Names/descriptions never decide; never add an authority CNPJ without an official source. Polp sends
+no DARF/DAS/GPS revenue code, so the specific tax is never shown, only the authority. Read-only: no totals elsewhere change;
+"identified bank payment" never means the obligation is settled, and its absence never means unpaid.
 
 ### Other backend services
 
@@ -213,7 +326,23 @@ Form fields in business modals use `components/ui/FormDialog/FormField.jsx` (`Te
 - `ScheduledEmailService` / `EmailService`: background hosted service sending transactional email
   (via Resend): one aggregated due-date reminder per user (opt-out) and an opt-in monthly notice,
   both without names or amounts.
-- `AccountController`: data export (JSON), e-mail preferences, account deletion.
+- `AccountController`: data export (JSON), e-mail preferences, account deletion. The deletion itself lives in
+  `AccountDeletionService` (idempotent), shared with the inactivity job.
+- Inactivity: `User.LastActivityAt` is written only by login and by `OnTokenValidated` after a valid session
+  (`UserActivity`, at most every 12 h: memory cache + conditional UPDATE that also resets the notice fields; never
+  from webhooks/jobs). It fails closed: if the write can't be confirmed (one retry on transient errors) the request
+  gets 503 (`ActivityNotRecordedException`, treated as transient by `DatabaseFailure`) and login issues no token, so
+  the app is never used without recorded activity; the cache is set only after the DB confirmed it. `InactiveAccountService` (daily, `JobLockKeys.InactiveAccounts`, index on `LastActivityAt`)
+  e-mails notices 90/30/7 days before `LastActivityAt + 3 years`; a notice counts only after Resend accepts it, a late
+  notice pushes `InactivityDeletionAt` to keep its lead, and no e-mail config means no notices and so no deletion.
+  Deletion is two-phase: a conditional UPDATE claims the account (3 years + 12 h without activity, all three notices
+  for the same `LastActivityAt` via `InactivityNoticeEpoch`, announced date past; sets `IsActive = false`,
+  `TokenVersion + 1`, `InactivityDeletionClaimedAt`); only claims older than 1 h are deleted, after `ConfirmAsync`
+  re-checks everything under a row lock and gives the account back on any mismatch. A successful confirmation sets
+  `InactivityNoticeStage = DeletionStartedStage` (4) in the same transaction, before any destructive step: from then
+  on the account is never given back and `AccountDeletionService` is only resumed (activity no longer resets it).
+  A claim still not started after 7 days (persistent confirmation failure) is undone: account active again, data
+  intact, notice sequence restarted, which also voids the old attempt. Max 50 per round, one scope per account. Access logs survive (no FK); consent records go with the account.
 - `TokenRevocationService`: backs the logout flow described above.
 
 ### Frontend structure (`frontend/src`)
@@ -245,13 +374,17 @@ Form fields in business modals use `components/ui/FormDialog/FormField.jsx` (`Te
   leftover browser copy once via `POST /api/planning/import` (never overwrites server data) and only
   then deletes it locally. `utils/investmentStorage.js`/`emergencyReserveStorage.js` only read that
   legacy copy now.
-- Investimentos: one block per product type (`getInvestmentModality`), each application opens its own
-  projection. Polp sends no rate for investments, so projections only use a real rule: poupança's legal
+- Investimentos: one block per product type, each item opens its own page (`InvestmentDetail.jsx`). The app is a
+  mirror of the bank: it never calculates applied amount, yield, profitability, average price or appreciation (Polp v2
+  sends none of them for any product), only shows bank fields (balances, quantity, unit prices, taxes, contract terms,
+  movements, position history). Any older text below about projections refers to the manual simulators. Polp sends no rate for investments, so projections only use a real rule: poupança's legal
   rule (Selic meta), Tesouro Selic's indexer (Selic efetiva) or the rate the user typed
   (`InvestmentRateProfile`, per `BankAccount`). Official rates come from the Banco Central SGS
   (`ReferenceRatesService`, `GET /api/market/reference-rates`, series 432/1178/4389); if unavailable,
-  no projection, never a hardcoded rate. `EmergencyReserve.BankAccountId` marks one application as the
-  reserve (`SetNull`); the manual reserve amount is kept for when nothing is linked.
+  no projection, never a hardcoded rate. The emergency reserve is automatic only: caixinhas (reserved
+  balances) whose user-given name contains "reserva", "emergência" or "colchão" (`EmergencyReserveNames`, computed in
+  `PlanningController.LoadAsync`); applications never enter, there is no manual marking, and a caixinha already linked
+  to a goal stays in the goal. Migration `AutomaticEmergencyReserve` dropped the old manual links.
 
 ## Conventions
 
@@ -264,6 +397,10 @@ Form fields in business modals use `components/ui/FormDialog/FormField.jsx` (`Te
 - Backend comments are in Portuguese and are used specifically to explain *why* a non-obvious
   security/infra decision was made (cookie flags, CSRF exemptions, forwarded-headers trust, index
   choices): match that style when touching this code rather than describing *what* the code does.
+- Migrations never delete audit trails (`*Events`), user choices or bank data unless the product owner decided it
+  and the decision is recorded here; the existing ones (`RemoveSupplierPaymentStatus`, `EmployeeCosts`,
+  `RemoveEmployeeCostLinks`, `AutomaticEmergencyReserve`, `RemovePayrollCharges`) were such decisions, applied
+  only to the dev database.
 - When adding a new encrypted column, add it via a value converter in `AppDbContext.OnModelCreating`
   (column name suffixed `Encrypted`) and generate a migration; don't encrypt/decrypt manually in
   controllers/services.

@@ -8,7 +8,7 @@ namespace ControlFinance.API.Services;
 public interface ITokenRevocationService
 {
     Task RevokeAsync(string jti, DateTime expiresAt);
-    Task<bool> IsRevokedAsync(string jti, bool bypassCache = false);
+    Task<bool> IsRevokedAsync(string jti, bool bypassCache = false, CancellationToken ct = default);
 }
 
 public class TokenRevocationService : ITokenRevocationService
@@ -18,41 +18,49 @@ public class TokenRevocationService : ITokenRevocationService
     // propagar rápido para outras instâncias, que não recebem o Set direto do RevokeAsync abaixo.
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(10);
 
+    private static readonly SharedDbLoad<string, bool> Loads = new();
+
     private readonly AppDbContext _db;
     private readonly IMemoryCache _cache;
+    private readonly IServiceScopeFactory? _scopes;
 
-    public TokenRevocationService(AppDbContext db, IMemoryCache cache)
+    public TokenRevocationService(AppDbContext db, IMemoryCache cache, IServiceScopeFactory? scopes = null)
     {
         _db = db;
         _cache = cache;
+        _scopes = scopes;
     }
 
     public async Task RevokeAsync(string jti, DateTime expiresAt)
     {
-        // Aproveita a escrita pra descartar entradas já expiradas (evita crescimento indefinido
-        // da tabela); o próprio ValidateLifetime do JWT já rejeitaria esses tokens de qualquer forma.
-        await _db.RevokedTokens.Where(t => t.ExpiresAt < DateTime.UtcNow).ExecuteDeleteAsync();
-
         if (!await _db.RevokedTokens.AnyAsync(t => t.Jti == jti))
             _db.RevokedTokens.Add(new RevokedToken { Jti = jti, ExpiresAt = expiresAt });
 
         await _db.SaveChangesAsync();
 
         // Marca no cache imediatamente: sem isso, um IsRevokedAsync que acabou de cachear
-        // "não revogado" para esse jti continuaria aceitando o token até o cache expirar.
+        // "não revogado" para esse jti continuaria aceitando o token até o cache expirar. A leitura
+        // em voo (anterior ao logout) é descartada para não regravar "não revogado" depois disto.
+        Loads.Forget(jti);
         _cache.Set(CacheKey(jti), true, CacheTtl);
     }
 
     // bypassCache: requisições que alteram dados (ou exportam tudo) consultam o banco direto,
     // então um token revogado em OUTRA instância não consegue escrever nem exportar nada nem
     // durante a janela do cache. Leituras comuns continuam com cache curto.
-    public async Task<bool> IsRevokedAsync(string jti, bool bypassCache = false)
+    public async Task<bool> IsRevokedAsync(string jti, bool bypassCache = false, CancellationToken ct = default)
     {
         if (!bypassCache && _cache.TryGetValue(CacheKey(jti), out bool cached))
             return cached;
 
-        var revoked = await _db.RevokedTokens.AnyAsync(t => t.Jti == jti);
-        _cache.Set(CacheKey(jti), revoked, CacheTtl);
+        if (!bypassCache && _scopes is not null)
+            return await Loads.GetAsync(jti, _scopes, db => db.RevokedTokens.AnyAsync(t => t.Jti == jti, CancellationToken.None),
+                revoked => _cache.Set(CacheKey(jti), revoked, CacheTtl), ct);
+
+        var revoked = await _db.RevokedTokens.AnyAsync(t => t.Jti == jti, ct);
+        // Um "não revogado" lido aqui não pode sobrescrever um logout gravado durante a consulta.
+        if (revoked || !_cache.TryGetValue(CacheKey(jti), out bool marked) || !marked)
+            _cache.Set(CacheKey(jti), revoked, CacheTtl);
         return revoked;
     }
 

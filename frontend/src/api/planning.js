@@ -27,14 +27,8 @@ export const deleteGoal = (id) => apiFetch(`/planning/goals/${id}`, { method: "D
 
 const allocation = (item, enabled) => JSON.stringify({ investmentId: item.reserved ? null : item.id, reservedBalanceId: item.reserved ? item.id : null, enabled });
 
-// As duas respostas trazem o planejamento inteiro: mexer num vínculo pode liberar o item de outro destino.
-export const setReserveResource = (item, enabled) => apiFetch("/planning/reserve/imported", { method: "PUT", body: allocation(item, enabled) });
-
 export const setGoalResource = (goalId, item, enabled) =>
   apiFetch(`/planning/goals/${goalId}/allocations`, { method: "PUT", body: allocation(item, enabled) });
-
-export const removeReserveAccount = () =>
-  apiFetch("/planning/reserve/account", { method: "PUT", body: JSON.stringify({ bankAccountId: null }) });
 
 export const setInvestmentRate = (accountId, { kind, value, incomeTaxExempt }) =>
   apiFetch(`/planning/investments/${accountId}/rate`, {

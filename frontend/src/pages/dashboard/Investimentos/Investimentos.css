@@ -125,21 +125,6 @@
   gap: 0.6rem;
 }
 
-.investimentos__link-button {
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--color-text-secondary);
-  font-family: inherit;
-  font-size: 0.8125rem;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.investimentos__link-button:hover {
-  color: var(--color-text-primary);
-}
-
 @container investimentos (max-width: 52rem) {
   .investimentos__grid {
     grid-template-columns: minmax(0, 1fr);
@@ -408,13 +393,6 @@
 
   .investimentos .btn--sm {
     min-height: 44px;
-  }
-
-  
-
-  .investimentos__link-button {
-    padding-block: 0.75rem;
-    margin-block: -0.75rem;
   }
 }
 
@@ -690,21 +668,13 @@
   color: inherit;
   font: inherit;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
 
 .inv-row__button:hover {
   background-color: var(--color-surface);
-}
-
-/* A linha aberta e o detalhe dividem o mesmo fundo: leem como uma unidade, sem caixa dentro de caixa. */
-.inv-row--open {
-  background-color: var(--color-surface);
-}
-
-.inv-row--open .inv-row__button:hover {
-  background-color: var(--color-surface-alt);
 }
 
 .inv-row__titles {
@@ -773,6 +743,10 @@
 }
 
 .inv-row__balance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
   color: var(--color-text-primary);
   font-size: 1rem;
   font-weight: 600;
@@ -785,58 +759,12 @@
   display: grid;
   place-items: center;
   color: var(--color-text-tertiary);
-  transition: transform 0.2s ease;
+  transform: rotate(-90deg);
 }
 
 .inv-row__chevron svg {
   width: 1rem;
   height: 1rem;
-}
-
-.inv-row--open .inv-row__chevron {
-  transform: rotate(180deg);
-}
-
-.inv-row__detail {
-  padding: 0.5rem 1.5rem 2rem;
-}
-
-/* ── Tela individual da aplicação ── */
-.inv-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-.inv-detail__top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem 1rem;
-}
-
-.inv-detail__updated {
-  margin: 0;
-  color: var(--color-text-tertiary);
-  font-size: 0.8125rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.inv-detail__section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
-  padding-top: 1.75rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.inv-detail__section-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
 }
 
 .inv-detail__title {
@@ -1011,11 +939,6 @@
   .investimentos__segment {
     transition: none;
   }
-}
-
-/* Acompanhamento individual: saldo bancário e resultados separados das estimativas. */
-.inv-detail {
-  min-width: 0;
 }
 
 .inv-result__breakdown dl,
@@ -1196,7 +1119,6 @@
   font-weight: 500;
 }
 
-
 @container investimentos (max-width: 42rem) {
   
 
@@ -1231,164 +1153,12 @@
 }
 .inv-real__heading > .section-heading { margin: 0; }
 .inv-real__amount { display: block; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.inv-real__rows { margin: 0; display: grid; gap: .75rem; font-size: .875rem; line-height: 1.45; }
-.inv-real__rows > div { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
-.inv-real__rows dt { color: var(--color-text-secondary); }
-.inv-real__rows dd { margin: 0; color: var(--color-text-primary); text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; max-width: 65%; }
 .inv-real__prior { display: block; margin-top: .25rem; color: var(--color-text-tertiary); font-size: .75rem; font-weight: 400; }
-.inv-real__select { display: grid; gap: .375rem; color: var(--color-text-secondary); font-size: .8rem; }
-.inv-real__select select,
-.inv-real__select input { min-height: 2.5rem; min-width: 7rem; border: 1px solid var(--color-border-strong); border-radius: .5rem; background: var(--color-surface); color: var(--color-text-primary); padding: .375rem .625rem; color-scheme: dark; }
-.inv-real__operation { padding: .75rem 0; border-bottom: 1px solid var(--color-border); }
-.inv-real__operation > .inv-real__rows { margin-top: .75rem; }
-.inv-real__operation summary { cursor: pointer; }
-.inv-real__reserve-action { display: grid; gap: .5rem; min-width: 0; }
-.inv-real__reserve-action svg { width: 1rem; height: 1rem; flex: 0 0 auto; }
 .inv-real__pagination { display: flex; flex-wrap: wrap; gap: .75rem; }
-
-.inv-real__rows > div,
-.inv-real .inv-detail__section,
-.inv-real .inv-yield { min-width: 0; }
 .inv-row__button:focus-visible,
-.inv-real summary:focus-visible,
-.inv-real__select select:focus-visible,
-.inv-real__select input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.inv-page summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
 @container investimentos (max-width: 520px) {
-  .inv-real__rows > div { flex-direction: column; gap: .25rem; }
-  .inv-real__rows dd { text-align: left; max-width: 100%; }
-  .inv-real .inv-detail__top,
-  .inv-real .inv-detail__section-head { align-items: stretch; flex-wrap: wrap; }
   .inv-real__heading { align-items: flex-start; }
-}
-
-.inv-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.inv-hero__label {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
-  font-weight: 400;
-}
-
-.inv-hero__value {
-  color: var(--color-text-primary);
-  font-size: 2rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.inv-hero__meta {
-  margin: 0;
-  color: var(--color-text-tertiary);
-  font-size: 0.8125rem;
-}
-
-/* Composição e condições lado a lado: são consultas de referência, não precisam da largura toda. */
-.inv-detail__columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
-  gap: 2rem 4rem;
-  align-items: start;
-}
-
-.inv-detail__group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
-  min-width: 0;
-}
-
-.inv-detail__group > .investimentos__fineprint {
-  margin: 0;
-}
-
-.inv-detail__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1.25rem;
-}
-
-.inv-breakdown__rows {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin: 0;
-}
-
-.inv-breakdown__rows[hidden] {
-  display: none;
-}
-
-.inv-breakdown__rows > div {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.5rem 1rem;
-}
-
-.inv-breakdown__rows dt {
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
-}
-
-.inv-breakdown__rows dd {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 0.9375rem;
-  font-weight: 500;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.inv-breakdown__total {
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.inv-breakdown__total dt {
-  color: var(--color-text-primary);
-}
-
-.inv-breakdown__total dd {
-  font-weight: 600;
-}
-
-.inv-area {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.inv-area__value {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.inv-area__value > strong {
-  color: var(--color-text-primary);
-  font-size: 1.375rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.inv-area__value > span {
-  color: var(--color-text-tertiary);
-  font-size: 0.875rem;
 }
 
 .inv-area__tooltip {
@@ -1673,10 +1443,6 @@
   letter-spacing: 0;
 }
 
-.inv-detail__columns--single {
-  grid-template-columns: minmax(0, 40rem);
-}
-
 @media (pointer: coarse) {
   .inv-link__remove {
     width: 44px;
@@ -1775,11 +1541,6 @@
     padding-inline-start: 0;
     border-left: 0;
   }
-
-  .inv-detail__columns {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 2rem;
-  }
 }
 
 @container investimentos (max-width: 30rem) {
@@ -1797,16 +1558,11 @@
     padding-right: 0.25rem;
   }
 
-  .inv-row__detail {
-    padding: 0.5rem 1rem 1.5rem;
-  }
-
   .inv-summary__item + .inv-summary__item {
     padding-left: 1.25rem;
   }
 
-  .fin-sim__stat--main dd,
-  .inv-hero__value {
+  .fin-sim__stat--main dd {
     font-size: 1.75rem;
   }
 }
@@ -1844,9 +1600,392 @@
 
 .inv-financial--income,
 .inv-yield__value > .inv-financial--income,
-.inv-real__rows dd.inv-financial--income,
 .inv-projection__tax-summary dd.inv-financial--income { color: var(--color-income); }
 .inv-financial--expense,
 .inv-yield__value > .inv-financial--expense,
-.inv-real__rows dd.inv-financial--expense,
 .inv-projection__tax-summary dd.inv-financial--expense { color: var(--color-expense); }
+
+.inv-page {
+  container: investimentos / inline-size;
+}
+
+.record-detail.inv-page {
+  gap: 2.25rem;
+}
+
+.inv-page .record-detail__name-row {
+  flex-wrap: nowrap;
+  gap: 0.85rem;
+}
+
+.inv-page__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin: 0;
+}
+
+.inv-page__institution {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.inv-page__actions {
+  align-items: center;
+}
+
+.inv-page__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: -0.75rem;
+}
+
+.inv-page__figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 1.25rem 2.5rem;
+  margin: 0;
+}
+
+.inv-page__figure {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.inv-page__figure dt {
+  color: var(--color-text-tertiary);
+  font-size: 0.8125rem;
+}
+
+.inv-page__figure dd {
+  margin: 0;
+}
+
+.inv-page__figure dd.inv-page__figure-value {
+  color: var(--color-text-primary);
+  font-size: clamp(1.375rem, 1.2rem + 0.7vw, 1.75rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+
+.inv-page__figure dd.inv-page__figure-value--secondary {
+  font-size: clamp(1.125rem, 1rem + 0.5vw, 1.375rem);
+}
+
+.inv-page__figure dd.inv-financial--income {
+  color: var(--color-income);
+}
+
+.inv-page__figure dd.inv-financial--expense {
+  color: var(--color-expense);
+}
+
+.inv-page__figure dd.inv-page__figure--muted {
+  color: var(--color-text-tertiary);
+  font-size: 1.125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.inv-page__figure dd.inv-page__figure-note {
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.inv-page__updated {
+  margin: 0.5rem 0 0;
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.inv-page__notice {
+  margin: 0;
+  color: var(--color-warning);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.inv-page .record-detail__field dd.record-detail__value--income {
+  color: var(--color-income);
+}
+
+.inv-observed {
+  min-width: 0;
+  margin-inline: -0.6rem;
+}
+
+.inv-observed__list {
+  display: flex;
+  flex-direction: column;
+  max-width: 28rem;
+  margin: 0;
+}
+
+.inv-observed__list > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 0.5rem;
+}
+
+.inv-observed__list > div + div {
+  border-top: 1px solid var(--color-border);
+}
+
+.inv-observed__list dt {
+  color: var(--color-text-tertiary);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.inv-observed__list dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.inv-page__disclosure > summary {
+  width: fit-content;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.inv-page__disclosure > summary:hover {
+  color: var(--color-text-primary);
+}
+
+.inv-page__disclosure[open] > summary {
+  margin-bottom: 0.5rem;
+}
+
+.inv-page__movements {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inv-page__movements > li + li {
+  border-top: 1px solid var(--color-border);
+}
+
+.inv-page__movement > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 0.25rem 1.5rem;
+  padding-block: 0.7rem;
+  list-style: none;
+  cursor: pointer;
+}
+
+.inv-page__movement > summary::-webkit-details-marker,
+.inv-page__details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.inv-page__movement-name {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.inv-page__movement > summary:hover .inv-page__movement-name,
+.inv-page__movement[open] .inv-page__movement-name {
+  color: var(--color-text-primary);
+}
+
+.inv-page__movement-date {
+  color: var(--color-text-tertiary);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.inv-page__movement-value {
+  min-width: 7.5rem;
+  color: var(--color-text-primary);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.inv-page__movement-value--muted {
+  color: var(--color-text-tertiary);
+  font-weight: 400;
+}
+
+.inv-page__movement-detail {
+  padding-bottom: 1rem;
+}
+
+.inv-page__details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 2rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+  list-style: none;
+  cursor: pointer;
+}
+
+.inv-page__details > summary h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.inv-page__details-chevron {
+  display: grid;
+  place-items: center;
+  color: var(--color-text-tertiary);
+  transition: transform 0.2s ease, color 0.15s ease;
+}
+
+.inv-page__details-chevron svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.inv-page__details > summary:hover .inv-page__details-chevron {
+  color: var(--color-text-primary);
+}
+
+.inv-page__details[open] .inv-page__details-chevron {
+  transform: rotate(180deg);
+}
+
+.inv-page__groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  padding-top: 1.25rem;
+}
+
+.inv-page__groups > .inv-page__groups-empty:not(:only-child) {
+  display: none;
+}
+
+.inv-page__group h3 {
+  margin: 0 0 0.85rem;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.inv-page__group .record-detail__field dd {
+  font-size: 0.9375rem;
+}
+
+@container investimentos (max-width: 30rem) {
+  .inv-page .record-detail__header-actions {
+    width: 100%;
+  }
+
+  .inv-page__figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem 1.25rem;
+  }
+
+  .inv-page__movement > summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .inv-page__movement-date {
+    grid-row: 2;
+  }
+
+  .inv-page__movement-value {
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inv-page__movement-name,
+  .inv-page__details-chevron {
+    transition: none;
+  }
+}
+
+.inv-observed__note {
+  margin: 0.25rem 0 0;
+  padding-inline: 0.6rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+}
+
+.inv-page__purpose {
+  color: var(--color-text-secondary);
+}
+
+.inv-link-item {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.inv-link--nav {
+  margin-inline: -0.5rem;
+  padding-inline: 0.5rem;
+  border-bottom: 0;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+
+.inv-link--nav:hover {
+  background-color: var(--color-surface);
+}
+
+.inv-link--nav:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.inv-link__chevron {
+  display: grid;
+  place-items: center;
+  color: var(--color-text-tertiary);
+  transform: rotate(-90deg);
+}
+
+.inv-link__chevron svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.inv-link--nav:hover .inv-link__chevron {
+  color: var(--color-text-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inv-link--nav {
+    transition: none;
+  }
+}

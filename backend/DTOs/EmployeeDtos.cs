@@ -29,7 +29,10 @@ public record EmployeeListItemDto(
     string Status,
     DateOnly? TerminationDate,
     bool HasPix,
-    bool HasBankAccount);
+    bool HasBankAccount,
+    string? PaymentStatus,
+    // Soma das saídas identificadas pelo banco no mês; null = nenhuma. Nunca é o salário cadastrado.
+    decimal? BankPaidAmount = null);
 
 public record EmployeeListDto(IReadOnlyList<EmployeeListItemDto> Items, int TotalCount, int Page, int PageSize);
 
@@ -48,7 +51,6 @@ public record EmployeeDetailDto(
     decimal GrossSalary,
     string Status,
     DateOnly? TerminationDate,
-    PayeePixView? Pix,
-    PayeeBankView? Bank,
+    IReadOnlyList<PayeePaymentMethodView> PaymentMethods,
     DateTime CreatedAt,
     DateTime UpdatedAt);

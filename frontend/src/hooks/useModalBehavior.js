@@ -13,8 +13,13 @@ export default function useModalBehavior(open, onClose, focusRef) {
   useEffect(() => {
     if (!open) return;
 
+    const root = document.documentElement;
     const previousOverflow = document.body.style.overflow;
+    const previousGutter = root.style.scrollbarGutter;
     const previouslyFocused = document.activeElement;
+    // Sem a reserva, a barra vertical some com o overflow hidden e a página inteira desliza para o
+    // lado. Só reserva quando a barra existe, para não abrir uma faixa vazia em página sem rolagem.
+    if (window.innerWidth > root.clientWidth) root.style.scrollbarGutter = "stable";
     document.body.style.overflow = "hidden";
     focusRef?.current?.focus();
 
@@ -53,6 +58,7 @@ export default function useModalBehavior(open, onClose, focusRef) {
 
     return () => {
       document.body.style.overflow = previousOverflow;
+      root.style.scrollbarGutter = previousGutter;
       document.removeEventListener("keydown", handleKeyDown);
       if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
         previouslyFocused.focus();

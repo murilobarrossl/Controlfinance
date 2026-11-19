@@ -25,6 +25,18 @@ public class PolpMoney
         decimal.TryParse(Amount, NumberStyles.Number, CultureInfo.InvariantCulture, out var v) ? v : null;
 }
 
+// Schema oficial v2: /credit-cards/{creditCard}/recurrings (campos camelCase).
+// A detecção é derivada pela Polp; não é uma confirmação de assinatura pela instituição.
+public class PolpCardRecurringDto
+{
+    [JsonPropertyName("description")] public string? Description { get; set; }
+    [JsonPropertyName("currency")] public string? Currency { get; set; }
+    [JsonPropertyName("periodMonths")] public int? PeriodMonths { get; set; }
+    [JsonPropertyName("expectedDay")] public int? ExpectedDay { get; set; }
+    [JsonPropertyName("nextExpectedAt")] public DateOnly? NextExpectedAt { get; set; }
+    [JsonPropertyName("occurrences")] public List<Guid> Occurrences { get; set; } = [];
+}
+
 public class PolpListMeta
 {
     [JsonPropertyName("next_cursor")] public string? NextCursor { get; set; }
@@ -100,6 +112,45 @@ public class PolpBalanceDto
     [JsonPropertyName("has_reserved_balance")] public bool? HasReservedBalance { get; set; }
 }
 
+// Só os campos exibidos ao titular. Número do contrato, código IPOC, CNPJ do consignante,
+// garantias e ids de pagamento ficam de fora por minimização.
+public class PolpLoanDto
+{
+    [JsonPropertyName("id")] public Guid Id { get; set; }
+    [JsonPropertyName("consent_id")] public Guid ConsentId { get; set; }
+    [JsonPropertyName("product_type")] public string? ProductType { get; set; }
+    [JsonPropertyName("product_sub_type")] public string? ProductSubType { get; set; }
+    [JsonPropertyName("product_name")] public string? ProductName { get; set; }
+    [JsonPropertyName("contract_date")] public string? ContractDate { get; set; }
+    [JsonPropertyName("contract_amount")] public string? ContractAmount { get; set; }
+    [JsonPropertyName("currency")] public string? Currency { get; set; }
+    [JsonPropertyName("cet")] public string? Cet { get; set; }
+    [JsonPropertyName("instalment_periodicity")] public string? InstalmentPeriodicity { get; set; }
+    [JsonPropertyName("amortization_scheduled")] public string? AmortizationScheduled { get; set; }
+    [JsonPropertyName("first_instalment_due_date")] public string? FirstInstalmentDueDate { get; set; }
+    [JsonPropertyName("due_date")] public string? DueDate { get; set; }
+    [JsonPropertyName("settlement_date")] public string? SettlementDate { get; set; }
+    [JsonPropertyName("next_instalment_amount")] public string? NextInstalmentAmount { get; set; }
+    [JsonPropertyName("scheduled_instalments")] public PolpLoanInstalmentsDto? ScheduledInstalments { get; set; }
+    [JsonPropertyName("payments")] public PolpLoanPaymentsDto? Payments { get; set; }
+    [JsonPropertyName("updated_at")] public DateTime? UpdatedAt { get; set; }
+}
+
+public class PolpLoanInstalmentsDto
+{
+    [JsonPropertyName("total_number_of_instalments")] public int? Total { get; set; }
+    [JsonPropertyName("contract_remaining_number")] public int? Remaining { get; set; }
+    [JsonPropertyName("paid_instalments")] public int? Paid { get; set; }
+    [JsonPropertyName("due_instalments")] public int? Due { get; set; }
+    [JsonPropertyName("past_due_instalments")] public int? PastDue { get; set; }
+}
+
+public class PolpLoanPaymentsDto
+{
+    [JsonPropertyName("contract_outstanding_balance")] public string? OutstandingBalance { get; set; }
+    [JsonPropertyName("total_remaining_amount")] public string? TotalRemainingAmount { get; set; }
+}
+
 public class PolpAccountDto
 {
     [JsonPropertyName("id")] public Guid Id { get; set; }
@@ -172,10 +223,13 @@ public class PolpAccountTransactionDto
     [JsonPropertyName("credit_debit_type")] public string? CreditDebitType { get; set; }
     [JsonPropertyName("transaction_amount")] public PolpMoney? TransactionAmount { get; set; }
     [JsonPropertyName("type")] public string? Type { get; set; }
-    // Agência e CPF/CNPJ da contraparte não são desserializados (minimização).
+    // Agência, CPF e conta completa da contraparte só viram hash por empresa no sync (login CNPJ).
     [JsonPropertyName("partie_compe_code")] public string? PartieCompeCode { get; set; }
     [JsonPropertyName("partie_number")] public string? PartieNumber { get; set; }
     [JsonPropertyName("partie_person_type")] public string? PartiePersonType { get; set; }
+    [JsonPropertyName("partie_cnpj_cpf")] public string? PartieCnpjCpf { get; set; }
+    [JsonPropertyName("partie_branch_code")] public string? PartieBranchCode { get; set; }
+    [JsonPropertyName("partie_check_digit")] public string? PartieCheckDigit { get; set; }
     // Preenchidos depois, de forma assíncrona (webhook accounts.transactions de novo).
     [JsonPropertyName("counterparty")] public PolpCounterpartyDto? Counterparty { get; set; }
     [JsonPropertyName("category_ref")] public string? CategoryRef { get; set; }
@@ -356,12 +410,16 @@ public interface IPolpService
         throw new NotSupportedException();
     Task<List<PolpInstitutionDto>> GetInstitutionsAsync(CancellationToken ct = default);
     Task<PolpConsentDto> CreateConsentAsync(CreatePolpConsentRequest request, CancellationToken ct = default);
-    Task<PolpConsentDto> RecreateConsentAsync(Guid consentId, CancellationToken ct = default) => throw new NotSupportedException();
+    Task<PolpConsentDto> RecreateConsentAsync(Guid consentId, bool business, CancellationToken ct = default) => throw new NotSupportedException();
+    Task<List<PolpLoanDto>> GetLoansAsync(Guid consentId, CancellationToken ct = default) => throw new NotSupportedException();
+    Task<PolpLoanDto> GetLoanAsync(Guid loanId, CancellationToken ct = default) => throw new NotSupportedException();
     Task<PolpConsentDto> GetConsentAsync(Guid consentId, CancellationToken ct = default);
     Task<List<PolpAccountDto>> GetAccountsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default);
     Task<List<PolpCreditCardDto>> GetCreditCardsAsync(Guid consentId, PolpQueryWindow? window = null, CancellationToken ct = default);
     Task<List<PolpBillDto>> GetBillsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default);
     Task<List<PolpAccountTransactionDto>> GetAccountTransactionsAsync(Guid accountId, PolpQueryWindow? window = null, CancellationToken ct = default);
+    Task<List<PolpCardRecurringDto>?> GetCardRecurringsAsync(Guid creditCardId, CancellationToken ct = default) =>
+        Task.FromResult<List<PolpCardRecurringDto>?>(null);
     Task<List<PolpCardTransactionDto>> GetCardTransactionsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default);
 
     /// <summary>Consulta o saldo na instituição na hora (POST /accounts/{id}/balance/sync). Limite
@@ -379,7 +437,12 @@ public class PolpService : IPolpService
     // 25 mil lançamentos; evita um laço indefinido se a Polp devolver um cursor que não termina.
     internal const int MaxPages = 50;
 
-    private static readonly string[] DefaultProducts = ["ACCOUNT", "CREDIT_CARD_ACCOUNT", "INVESTMENTS"];
+    private static readonly string[] BusinessProducts = ["ACCOUNT", "CREDIT_CARD_ACCOUNT", "INVESTMENTS"];
+    // CREDIT_OPERATIONS só para CPF: os contratos de empréstimo só são importados para pessoa física.
+    private static readonly string[] PersonalProducts = [.. BusinessProducts, LoanContractsProduct];
+    public const string LoanContractsProduct = "CREDIT_OPERATIONS";
+
+    public static string[] ProductsFor(bool business) => business ? BusinessProducts : PersonalProducts;
 
     private readonly HttpClient _http;
     private readonly Uri _institutionsUri;
@@ -437,7 +500,7 @@ public class PolpService : IPolpService
             ["institution_id"] = request.InstitutionId,
             // Id interno e opaco do usuário, nunca e-mail: a Polp é um terceiro e o campo é livre.
             ["cliente_user_id"] = request.ClientUserId.ToString(),
-            ["products"] = DefaultProducts,
+            ["products"] = ProductsFor(isCnpj),
             // Reconectar o mesmo CPF consome o teto mensal regulatório de consultas: reaproveita
             // um consentimento ativo da mesma instituição em vez de criar outro.
             // Reusing a consent never expands its permissions. All new bank journeys request
@@ -456,21 +519,34 @@ public class PolpService : IPolpService
         if (!string.IsNullOrWhiteSpace(_redirectUrl)) body["redirectUrl"] = _redirectUrl;
 
         var resp = await _http.PostAsJsonAsync("consents", body, ct);
-        await EnsureSuccess(resp, "criar consentimento");
+        try
+        {
+            await EnsureSuccess(resp, "criar consentimento");
+        }
+        // Banco sem operações de crédito não pode impedir a conexão: só uma recusa que aponta o
+        // campo products tira CREDIT_OPERATIONS, e os contratos simplesmente não são importados.
+        catch (PolpValidationException ex) when (!isCnpj && ex.Fields.Any(f => f.StartsWith("products", StringComparison.Ordinal)))
+        {
+            body["products"] = BusinessProducts;
+            resp = await _http.PostAsJsonAsync("consents", body, ct);
+            await EnsureSuccess(resp, "criar consentimento");
+        }
         return await ReadResourceAsync<PolpConsentDto>(resp, "criar consentimento", ct);
     }
 
-    public async Task<PolpConsentDto> RecreateConsentAsync(Guid consentId, CancellationToken ct = default)
+    public async Task<PolpConsentDto> RecreateConsentAsync(Guid consentId, bool business, CancellationToken ct = default)
     {
-        var body = new Dictionary<string, object?> { ["products"] = DefaultProducts };
+        var body = new Dictionary<string, object?> { ["products"] = ProductsFor(business) };
         if (!string.IsNullOrWhiteSpace(_redirectUrl)) body["redirectUrl"] = _redirectUrl;
         var resp = await _http.PostAsJsonAsync($"consents/{consentId:D}/recreate", body, ct);
         await EnsureSuccess(resp, "recriar consentimento");
         return await ReadResourceAsync<PolpConsentDto>(resp, "recriar consentimento", ct);
     }
 
+    // CREDIT_OPERATIONS fica fora da conferência: o banco pode não oferecer o produto, e recriar
+    // o consentimento a cada reconexão não mudaria isso.
     public static bool HasAllRequestedProducts(IEnumerable<string>? products) =>
-        products is not null && DefaultProducts.All(products.Contains);
+        products is not null && BusinessProducts.All(products.Contains);
 
     public async Task<PolpConsentDto> GetConsentAsync(Guid consentId, CancellationToken ct = default)
     {
@@ -572,6 +648,29 @@ public class PolpService : IPolpService
 
     public Task<List<PolpCardTransactionDto>> GetCardTransactionsAsync(Guid creditCardId, PolpQueryWindow? window = null, CancellationToken ct = default) =>
         GetAllAsync<PolpCardTransactionDto>($"credit-cards/{creditCardId}/transactions", window, "listar transações do cartão", ct);
+
+    public Task<List<PolpLoanDto>> GetLoansAsync(Guid consentId, CancellationToken ct = default) =>
+        GetAllAsync<PolpLoanDto>($"consents/{consentId}/loans", null, "listar empréstimos", ct);
+
+    public async Task<List<PolpCardRecurringDto>?> GetCardRecurringsAsync(Guid creditCardId, CancellationToken ct = default)
+    {
+        try
+        {
+            return await GetAllAsync<PolpCardRecurringDto>($"credit-cards/{creditCardId}/recurrings", null, "listar recorrências do cartão", ct);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden or HttpStatusCode.NotImplemented)
+        {
+            // Ausência/bloqueio do recurso não significa ausência de assinaturas.
+            return null;
+        }
+    }
+
+    public async Task<PolpLoanDto> GetLoanAsync(Guid loanId, CancellationToken ct = default)
+    {
+        var resp = await _http.GetAsync($"loans/{loanId}", ct);
+        await EnsureSuccess(resp, "consultar empréstimo");
+        return await ReadResourceAsync<PolpLoanDto>(resp, "consultar empréstimo", ct);
+    }
 
     public async Task<PolpAccountDto> SyncBalanceAsync(Guid accountId, CancellationToken ct = default)
     {

@@ -42,6 +42,9 @@ public class EmailService
     public Task SendMonthlyNoticeAsync(string toEmail) =>
         SendAsync(toEmail, "Seu mês fechou: veja o resumo no Control Finance", MonthlyNoticeHtml());
 
+    public Task SendInactivityNoticeAsync(string toEmail, DateTime deletionDate) =>
+        SendAsync(toEmail, "Sua conta no Control Finance será excluída por inatividade", InactivityNoticeHtml(deletionDate));
+
     // ──────────────────────────────────────────
     //  CORE
     // ──────────────────────────────────────────
@@ -71,7 +74,7 @@ public class EmailService
     //  TEMPLATES HTML
     // ──────────────────────────────────────────
 
-    private static string BaseHtml(string title, string body) => $"""
+    private static string BaseHtml(string title, string body, bool optional = true) => $"""
         <!DOCTYPE html>
         <html lang="pt-BR">
         <head>
@@ -95,7 +98,7 @@ public class EmailService
                       Por privacidade, este e-mail não traz nomes nem valores. Os detalhes ficam só no painel.
                     </p>
                     <p style="margin:0;color:#999;font-size:12px;">
-                      Você pode desligar os avisos automáticos em Privacidade e dados, no painel.
+                      {(optional ? "Você pode desligar os avisos automáticos em Privacidade e dados, no painel." : "Este aviso é obrigatório e não pode ser desligado.")}
                     </p>
                   </td>
                 </tr>
@@ -105,6 +108,22 @@ public class EmailService
         </body>
         </html>
         """;
+
+    private static string InactivityNoticeHtml(DateTime deletionDate)
+    {
+        var date = deletionDate.ToString("dd/MM/yyyy");
+        return BaseHtml("Exclusão por inatividade", $"""
+            <h2 style="color:#1a1a2e;margin-top:0;">Sua conta está sem uso há quase 3 anos</h2>
+            <p style="color:#444;line-height:1.6;">
+              Contas sem nenhum acesso por 3 anos são excluídas. A sua está prevista para ser excluída em
+              <strong>{date}</strong>, com todos os dados guardados nela.
+            </p>
+            <p style="color:#444;line-height:1.6;">
+              Para manter a conta, basta entrar no Control Finance com seu e-mail ou CPF/CNPJ e senha antes dessa data.
+              Se quiser uma cópia dos dados antes da exclusão, baixe em Privacidade e dados, no painel.
+            </p>
+            """, optional: false);
+    }
 
     private static string WelcomeHtml() => BaseHtml("Conta criada", """
         <h2 style="color:#1a1a2e;margin-top:0;">Olá!</h2>

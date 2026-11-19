@@ -2,11 +2,32 @@ import { applyMask, CNPJ_MASK, CPF_MASK } from "../../../utils/masks.js";
 import { PAYEE_ACCOUNT_TYPES, PIX_KEY_TYPES } from "../../../utils/employees.js";
 import { FIELD_EXAMPLES, PIX_KEY_EXAMPLES } from "../../../utils/fieldExamples.js";
 import { TextField } from "../../../components/ui/FormDialog/FormField.jsx";
-import { PAYMENT_OPTIONS } from "./payeePayment.js";
+import { needsPixHolder, PAYMENT_OPTIONS } from "./payeePayment.js";
 
 const digitsOf = (value) => value.replace(/\D/g, "");
 
-export function PixFields({ value, onChange, idPrefix = "pix", disabled = false }) {
+// CPF ou CNPJ de quem recebe; pode ser diferente do cadastro. A máscara segue o número de dígitos.
+function HolderField({ value, onChange, placeholder, disabled }) {
+  function handle(e) {
+    const digits = digitsOf(e.target.value).slice(0, 14);
+    onChange(digits.length > 11 ? applyMask(digits, CNPJ_MASK) : applyMask(digits, CPF_MASK, digitsOf(value)));
+  }
+  return (
+    <TextField
+      label="CPF ou CNPJ do titular que recebe"
+      example={placeholder ?? "cpfOrCnpj"}
+      inputMode="numeric"
+      value={value}
+      onChange={handle}
+      maxLength={18}
+      disabled={disabled}
+      full
+      required
+    />
+  );
+}
+
+export function PixFields({ value, onChange, idPrefix = "pix", disabled = false, holderPlaceholder }) {
   function handleKey(e) {
     const raw = e.target.value;
     let key = raw;
@@ -23,7 +44,7 @@ export function PixFields({ value, onChange, idPrefix = "pix", disabled = false 
           id={`${idPrefix}-type`}
           value={value.type}
           disabled={disabled}
-          onChange={(e) => onChange({ type: e.target.value, key: "" })}
+          onChange={(e) => onChange({ ...value, type: e.target.value, key: "" })}
         >
           {PIX_KEY_TYPES.map((t) => (
             <option key={t.value} value={t.value}>
@@ -42,11 +63,14 @@ export function PixFields({ value, onChange, idPrefix = "pix", disabled = false 
         disabled={disabled}
         required
       />
+      {needsPixHolder(value.type) && (
+        <HolderField value={value.holder} onChange={(holder) => onChange({ ...value, holder })} placeholder={holderPlaceholder} disabled={disabled} />
+      )}
     </div>
   );
 }
 
-export function BankFields({ value, onChange, accountPlaceholder = FIELD_EXAMPLES.account, disabled = false }) {
+export function BankFields({ value, onChange, accountPlaceholder = FIELD_EXAMPLES.account, disabled = false, holderPlaceholder }) {
   const set = (field) => (e) => onChange({ ...value, [field]: e.target.value });
 
   return (
@@ -90,6 +114,19 @@ export function BankFields({ value, onChange, accountPlaceholder = FIELD_EXAMPLE
         disabled={disabled}
         required
       />
+      <HolderField value={value.holder} onChange={(holder) => onChange({ ...value, holder })} placeholder={holderPlaceholder} disabled={disabled} />
+    </div>
+  );
+}
+
+export function PaymentSegmented({ options, value, onChange }) {
+  return (
+    <div className="form-dialog__segmented" role="radiogroup" aria-label="Forma de pagamento">
+      {options.map((option) => (
+        <button key={option.value} type="button" role="radio" aria-checked={value === option.value} onClick={() => onChange(option.value)}>
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -101,19 +138,7 @@ export function PaymentChoice({ payment, onPaymentChange, pix, onPixChange, bank
         Dados para pagamento <span className="form-dialog__section-note">Opcional</span>
       </legend>
 
-      <div className="form-dialog__segmented" role="radiogroup" aria-label="Forma de pagamento">
-        {PAYMENT_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={payment === option.value}
-            onClick={() => onPaymentChange(option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <PaymentSegmented options={PAYMENT_OPTIONS} value={payment} onChange={onPaymentChange} />
 
       {payment === "pix" && <PixFields value={pix} onChange={onPixChange} idPrefix={idPrefix} />}
       {payment === "bank" && <BankFields value={bank} onChange={onBankChange} />}

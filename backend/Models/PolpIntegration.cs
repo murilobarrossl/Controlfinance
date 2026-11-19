@@ -20,10 +20,13 @@ public class PolpIntegration
     public string? InstitutionName { get; set; }
 
     /// <summary>
-    /// Último status conhecido do consentimento: AWAITING_AUTHORIZATION, AUTHORISED, REJECTED
-    /// ou EXPIRED (mais DISCONNECT_PENDING, que é só local).
+    /// Último status conhecido do consentimento: AWAITING_AUTHORIZATION, AUTHORISED, REJECTED,
+    /// EXPIRED ou REVOKED (mais DISCONNECT_PENDING, que é só local).
     /// </summary>
     public string Status { get; set; } = "AWAITING_AUTHORIZATION";
+
+    /// <summary>Quando o app viu a autorização encerrada (PolpAuthorizationEnd).</summary>
+    public DateTime? AuthorizationEndedAt { get; set; }
 
     /// <summary>AWAITING_RESOURCES, SUCCESS ou PARTIAL_SUCCESS. PARTIAL_SUCCESS não bloqueia
     /// nada: só indica enriquecimento (categoria/counterparty) ainda pendente na Polp.</summary>
@@ -31,6 +34,7 @@ public class PolpIntegration
 
     /// <summary>Marca se as contas/transações já foram sincronizadas localmente.</summary>
     public bool SyncedLocally { get; set; } = false;
+    public bool AutoDefaultPending { get; set; }
 
     /// <summary>Quando os dados foram puxados da Polp pela última vez (backfill ou webhook). Não
     /// reusa UpdatedAt porque esse campo também muda em atualização de status, que não conta

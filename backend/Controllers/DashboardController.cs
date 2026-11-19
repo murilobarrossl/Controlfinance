@@ -17,8 +17,8 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
     public async Task<IActionResult> GetSummary([FromQuery] Guid? bankAccountId, CancellationToken ct)
     {
         var account = bankAccountId.HasValue
-            ? await db.BankAccounts.AsNoTracking().FirstOrDefaultAsync(b => b.Id == bankAccountId && b.UserId == UserId && b.IsActive)
-            : await db.BankAccounts.AsNoTracking().FirstOrDefaultAsync(b => b.UserId == UserId && b.IsActive);
+            ? await db.BankAccounts.AsNoTracking().FirstOrDefaultAsync(b => b.Id == bankAccountId && b.UserId == UserId && b.IsActive, ct)
+            : await db.BankAccounts.AsNoTracking().FirstOrDefaultAsync(b => b.UserId == UserId && b.IsActive, ct);
 
         if (account is null)
             return Ok(new { message = "Nenhum banco conectado ainda." });
@@ -29,21 +29,20 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
 
         var monthlyTransactions = await db.Transactions
             .AsNoTracking()
-            .Include(t => t.Category)
             .Where(t => t.UserId == UserId
                      && t.BankAccountId == account.Id
                      && t.DueDate >= startOfMonth
                      && t.DueDate < endOfMonth)
-            .ToListAsync();
+            .WithoutSelfTransfers()
+            .Select(t => new { t.Type, t.Amount, t.CategoryId, CategoryName = t.Category != null ? t.Category.Name : null })
+            .ToListAsync(ct);
 
         // Transferências entre contas do próprio usuário (Pix/TED pra outro banco seu) entram
         // como receita E despesa ao mesmo tempo na Polp; sem excluir dos totais, "receita" e
         // "despesa" do mês ficam sem sentido (ex.: "% da receita gasta" passando de 100%).
         // Continuam aparecendo no extrato (pendingEntities abaixo não passa por esse filtro), só
         // não entram nas somas/gráfico de categoria.
-        var nonTransferMonthly = monthlyTransactions
-            .Where(t => !TransferDetection.IsSelfTransfer(t.PolpMovementKind))
-            .ToList();
+        var nonTransferMonthly = monthlyTransactions;
 
         var totalIncome = nonTransferMonthly
             .Where(t => t.Type == TransactionType.Income)
@@ -63,7 +62,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
                      && (t.Status == TransactionStatus.Pending || t.Status == TransactionStatus.Overdue))
             .OrderBy(t => t.DueDate)
             .Take(100)
-            .ToListAsync();
+            .ToListAsync(ct);
 
         foreach (var t in pendingEntities)
             t.BankAccount = account;
@@ -74,7 +73,7 @@ public class DashboardController(AppDbContext db) : ApiControllerBase
             .GroupBy(t => t.CategoryId)
             .Select(g => new
             {
-                Name = g.First().Category?.Name,
+                Name = g.First().CategoryName,
                 Amount = g.Sum(t => t.Amount)
             })
             .ToList();

@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getIntegrations, getConnectors, getBankConnections, disconnectIntegration } from "../api/polp.js";
-import { deleteBankAccount } from "../api/bankAccounts.js";
+import { deleteBankAccount, setDefaultBankAccount, clearDefaultBankAccount } from "../api/bankAccounts.js";
 import { isAbortError } from "../api/client.js";
 import { getCurrentUserId } from "../utils/authToken.js";
 import { buildScopes, resolveScope } from "../utils/accountScopes.js";
@@ -48,6 +48,9 @@ function OwnedAccountProvider({ children }) {
   // Resultado da última desconexão/remoção, mostrado num aviso no topo do dashboard (o menu do
   // seletor fecha ao confirmar, então o resultado não pode ficar só lá dentro).
   const [notice, setNotice] = useState(null);
+  // Leitura de contas iniciada antes de uma troca da conta padrão terminar pode trazer a padrão
+  // antiga; ela é descartada e a confirmação da própria troca vale.
+  const defaultWriteSeq = useRef(0);
 
   const setSelectedScope = useCallback((key) => {
     setSelectedScopeKeyState(key);
@@ -68,6 +71,7 @@ function OwnedAccountProvider({ children }) {
       if (signal.aborted || inFlight) return;
       inFlight = true;
       setConnectionsRefreshing(true);
+      const defaultSeqAtStart = defaultWriteSeq.current;
       const accountRead = Promise.all([
         getIntegrations({ signal }),
         getConnectors({ signal }).catch((err) => {
@@ -77,7 +81,7 @@ function OwnedAccountProvider({ children }) {
       ])
       .then(([accountsData, connectorsData]) => {
         if (signal.aborted) return;
-        setAccounts(accountsData);
+        if (defaultSeqAtStart === defaultWriteSeq.current) setAccounts(accountsData);
         setConnectors(connectorsData);
         setAccountsStatus("ready");
       })
@@ -153,6 +157,27 @@ function OwnedAccountProvider({ children }) {
     bumpDataRefresh();
   }, [selectedScopeKey, setSelectedScope, bumpDataRefresh]);
 
+  const changeDefaultAccount = useCallback(async (accountId) => {
+    defaultWriteSeq.current += 1;
+    let saved = false;
+    try {
+      if (accountId) await setDefaultBankAccount(accountId);
+      else await clearDefaultBankAccount();
+      saved = true;
+    } catch (err) {
+      setNotice({ tone: "error", text: err.message || "Não foi possível alterar a conta padrão." });
+    }
+    const seq = ++defaultWriteSeq.current;
+    if (saved) setAccounts((prev) => prev.map((account) => ({ ...account, isDefault: account.id === accountId })));
+    try {
+      const fresh = await getIntegrations();
+      if (seq === defaultWriteSeq.current) setAccounts(fresh);
+    } catch {
+      return saved;
+    }
+    return saved;
+  }, []);
+
   const dismissNotice = useCallback(() => setNotice(null), []);
 
   // Toda tela filtra pelo mesmo item que o seletor mostra como ativo. Sem um escopo explícito os
@@ -166,6 +191,7 @@ function OwnedAccountProvider({ children }) {
   }, [scopes, selectedScopeKey, connections, connectionsStatus]);
   const scopeKey = effectiveScope?.key ?? "";
   const scopeAccountId = effectiveScope?.accountId ?? null;
+  const defaultAccountId = useMemo(() => scopes.find((s) => s.isDefault)?.accountId ?? null, [scopes]);
   const scopeQuery = useMemo(() => (scopeAccountId ? { bankAccountId: scopeAccountId } : {}), [scopeAccountId]);
 
   // Account tabs retain their account scope. Investment products belong to a connection,
@@ -223,10 +249,12 @@ function OwnedAccountProvider({ children }) {
       bumpDataRefresh,
       disconnectConnection,
       removeManualAccount,
+      defaultAccountId,
+      changeDefaultAccount,
       notice,
       dismissNotice,
     }),
-    [accounts, connections, connectionsStatus, connectionsRefreshing, effectiveConnectionId, effectiveConnectionScope, connectionScopeGroups, setSelectedConnection, connectors, accountsStatus, scopeGroups, effectiveScope, scopeKey, scopeQuery, setSelectedScope, dataRefreshKey, bumpDataRefresh, disconnectConnection, removeManualAccount, notice, dismissNotice],
+    [accounts, connections, connectionsStatus, connectionsRefreshing, effectiveConnectionId, effectiveConnectionScope, connectionScopeGroups, setSelectedConnection, connectors, accountsStatus, scopeGroups, effectiveScope, scopeKey, scopeQuery, setSelectedScope, dataRefreshKey, bumpDataRefresh, disconnectConnection, removeManualAccount, defaultAccountId, changeDefaultAccount, notice, dismissNotice],
   );
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;

@@ -10,6 +10,45 @@ public enum PixKeyType { Cpf, Cnpj, Email, Phone, Random }
 
 public enum PayeeAccountType { Corrente, Poupanca, Pagamento, Salario }
 
+public enum PayeePaymentKind { Pix, Bank }
+
+// Método de pagamento cadastrado (Pix ou conta para TED), para reconhecer pagamentos no futuro.
+// Não prova titularidade e não dispara transferência nenhuma. Funcionário e fornecedor podem ter
+// vários; cada um tem a própria tabela (base não mapeada, colunas iguais).
+public abstract class PayeePaymentMethod
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public PayeePaymentKind Kind { get; set; }
+
+    public PixKeyType? PixKeyType { get; set; }
+    public string? PixKey { get; set; }
+    public string? PixKeyHash { get; set; }
+
+    public string? BankCode { get; set; }
+    public string? Branch { get; set; }
+    public string? Account { get; set; }
+    public PayeeAccountType? AccountType { get; set; }
+
+    /// <summary>CPF ou CNPJ de quem recebe nesse método (declarado pela empresa; pode não ser o do
+    /// cadastro). Só para TED e chaves Pix e-mail, celular ou aleatória: chave CPF/CNPJ já é o documento
+    /// do titular. Cifrado. Nulo em métodos antigos, que nunca recebem documento presumido.</summary>
+    public string? HolderDocumentType { get; set; }
+    public string? HolderDocument { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class EmployeePaymentMethod : PayeePaymentMethod
+{
+    public Guid EmployeeId { get; set; }
+}
+
+public class SupplierPaymentMethod : PayeePaymentMethod
+{
+    public Guid SupplierId { get; set; }
+}
+
 /// <summary>
 /// Funcionário de uma empresa (usuário CNPJ). Cadastro administrativo digitado pela empresa: não
 /// gera movimentação financeira (essas continuam vindo só da Polp). Desligar não apaga: o
@@ -42,16 +81,10 @@ public class Employee
     public EmployeeStatus Status { get; set; } = EmployeeStatus.Active;
     public DateOnly? TerminationDate { get; set; }
 
-    // Método de pagamento, para reconhecer pagamentos no futuro. Não prova titularidade e não
-    // dispara transferência nenhuma.
-    public PixKeyType? PixKeyType { get; set; }
-    public string? PixKey { get; set; }
-    public string? PixKeyHash { get; set; }
+    public List<EmployeePaymentMethod> PaymentMethods { get; set; } = [];
 
-    public string? PayeeBankCode { get; set; }
-    public string? PayeeBranch { get; set; }
-    public string? PayeeAccount { get; set; }
-    public PayeeAccountType? PayeeAccountType { get; set; }
+    /// <summary>Gastos iniciais (13º salário e Férias) já criados: um gasto excluído nunca volta.</summary>
+    public bool CostsSeeded { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

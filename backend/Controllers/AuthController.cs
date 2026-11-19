@@ -54,7 +54,7 @@ public class AuthController : ApiControllerBase
         }
 
         await _accessLog.RecordAsync(data!.User.Id, "register", ipAddress);
-        return StatusCode(StatusCodes.Status201Created, StartSession(data!));
+        return StatusCode(StatusCodes.Status201Created, await StartSessionAsync(data!));
     }
 
     /// <summary>
@@ -73,7 +73,7 @@ public class AuthController : ApiControllerBase
             return Unauthorized(new { message = error });
 
         await _accessLog.RecordAsync(data!.User.Id, "login", ipAddress);
-        return Ok(StartSession(data!));
+        return Ok(await StartSessionAsync(data!));
     }
 
     /// <summary>
@@ -89,9 +89,11 @@ public class AuthController : ApiControllerBase
         var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == UserId, ct);
         if (user is null) return NotFound();
 
+        var info = AuthService.ToUserInfo(user);
+        info.PendingPrivacyVersion = await PendingPrivacyVersionAsync(user.Id);
         return Ok(new AuthResponseDto
         {
-            User = AuthService.ToUserInfo(user),
+            User = info,
             CsrfToken = User.FindFirstValue(SessionClaims.Csrf) ?? string.Empty,
         });
     }
@@ -136,13 +138,21 @@ public class AuthController : ApiControllerBase
         return NoContent();
     }
 
-    private AuthResponseDto StartSession(AuthResult result)
+    private async Task<AuthResponseDto> StartSessionAsync(AuthResult result)
     {
         SessionCookie.Append(HttpContext, _config, result.Token.Jwt, result.Token.ExpiresAt);
+        var info = AuthService.ToUserInfo(result.User);
+        info.PendingPrivacyVersion = await PendingPrivacyVersionAsync(result.User.Id);
         return new AuthResponseDto
         {
-            User = AuthService.ToUserInfo(result.User),
+            User = info,
             CsrfToken = result.Token.CsrfToken,
         };
     }
+
+    // Aviso pendente até existir ciência (privacy_notice) ou o registro do cadastro da versão vigente.
+    private async Task<string?> PendingPrivacyVersionAsync(Guid userId) =>
+        await LegalDocuments.HasCurrentPrivacyRecordAsync(_db, userId, LegalDocuments.PrivacyVersion, HttpContext.RequestAborted)
+            ? null
+            : LegalDocuments.PrivacyVersion;
 }

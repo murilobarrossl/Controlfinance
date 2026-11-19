@@ -2,7 +2,6 @@ import { useState } from "react";
 import { financialTone } from "../../../utils/financialTone.js";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer } from "recharts";
 import { formatCurrency } from "../../../utils/financeMath.js";
-import ObservedInvestmentChart from "./ObservedInvestmentChart.jsx";
 
 function YieldTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
@@ -22,7 +21,6 @@ function YieldTooltip({ active, payload }) {
 
 // Apenas projeções: o saldo atual não é usado para reconstruir rendimentos passados.
 export default function InvestmentYieldChart(props) {
-  if (props.kind === "historical") return <ObservedInvestmentChart points={props.points} idPrefix={props.idPrefix} />;
   return <ProjectedYieldChart {...props} />;
 }
 function ProjectedYieldChart({ data, series, view, onViewChange, idPrefix, narrow }) {

@@ -44,6 +44,7 @@ public class PolpConsentMetadataService(AppDbContext db, IPolpService polp,
         try
         {
             await RefreshSnapshotAsync(local, snapshot, now, ct);
+            await PolpAuthorizationEnd.SuspendAsync(db, now, ct, local.Id);
         }
         catch
         {

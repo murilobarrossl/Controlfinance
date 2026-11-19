@@ -681,3 +681,88 @@ Continuam **sem** ser guardados: `partie_cnpj_cpf`, `partie_branch_code`, `code_
 A reserva de emergência e as metas deixaram de aceitar valores digitados. A migração `PlanningAllocationsFromImportedBalances` apagou as colunas `CurrentAmountEncrypted` de `EmergencyReserves` e `SavingsGoals` (valor anotado da reserva e "já guardado" das metas), por decisão do responsável pelo produto; o valor anotado que ainda estivesse no `localStorage` é apagado na próxima carga e não vai para o servidor. Os vínculos explícitos de reserva já existentes foram copiados para a nova tabela `PlanningAllocations`, que guarda só ids técnicos (meta, investimento ou caixinha), sem nome nem valor, e sai junto com a conexão (cascata dos investimentos), a meta ou a conta. Cada investimento conta para um único destino (índice único), para que reserva e metas nunca somem o mesmo dinheiro. A exportação passou a trazer os vínculos e não traz mais os valores apagados. Política de Privacidade e tela Privacidade e dados atualizadas (versão `2026-11-14`): é redução de dados guardados mais um vínculo técnico, sem nova finalidade, então a conclusão da seção L sobre consentimento vale também aqui.
 
 Complemento (14/11/2026): a reserva automática passou a incluir toda caixinha com a palavra "reserva" no nome (aplicações continuam só com o nome exato "Reserva de emergência"), e a migração `ResetAutoReserveExclusions` zerou uma vez as exclusões antigas. Nenhum dado novo é guardado: a regra só lê o nome já importado.
+
+## N. Open Finance: autorização encerrada e enquadramento (C3, 18/11/2026)
+
+**Implementado.** Autorização encerrada no banco (`EXPIRED`, `REVOKED` ou `REJECTED`, status terminais no app) é diferente de desconexão voluntária:
+
+- Desconexão voluntária: apaga na hora e pede a exclusão à Polp (sem mudança).
+- Autorização encerrada: a sincronização já parava; agora as contas daquela conexão ficam com `IsActive = false` assim que o status chega (aviso de consentimento ou sync) ou, no máximo, na rodada horária de `PendingDisconnectRetryService`. Com isso saem do painel, relatórios, totais, impostos, fechamento de caixa, identificação de pagamentos a funcionários, recorrências e e-mails. Investimentos, caixinhas e reserva automática da conexão também saem (filtro por status). Os dados continuam na exportação.
+- Após 30 dias (`PolpAuthorizationEnd.Retention`, `PolpIntegration.AuthorizationEndedAt`, migration `PolpAuthorizationEnded`), o mesmo `DisconnectAsync` da desconexão voluntária apaga os dados vindos do banco e pede a exclusão à Polp. Antes disso, o status é relido na Polp: só segue com 404 ou status encerrado; autorização ativa ou aguardando adia e gera log; falha da Polp tenta de novo na próxima hora.
+- Não são apagados: cadastros de funcionários e fornecedores, formas de pagamento, marcações e eventos de pagamento, custos, fechamentos de caixa e metas (mesmo conjunto da desconexão voluntária).
+- Aviso de conexão (versão `2026-11-20`), Política (versão `2026-11-20`) e Privacidade e dados passaram a dizer isso e a listar as finalidades de CNPJ: painel da empresa, fechamento de caixa, identificação de pagamentos aos funcionários cadastrados e de pagamentos de tributos.
+
+**Fundamento:** Res. Conjunta 1/2020, art. 36, § 7º (redação da Res. Conjunta 21/2026): tratamento só pelo tempo da finalidade do consentimento e eliminação ao final; LGPD art. 6º, I e III, e art. 15. Os 30 dias são decisão de produto (permitir exportação e evitar perda por status incorreto), não prazo normativo. Nenhuma obrigação legal de guarda recai sobre o espelho do extrato mantido pelo app: a guarda contábil é da empresa e o registro original é do banco.
+
+**Risco aberto (depende da Polp/Celcoin, sem solução implementável no código):**
+
+1. Papel da Polp perante a Celcoin (entidade parceira ou operadora exclusiva, art. 36, § 11) e, portanto, se o Control Finance precisa de contrato de parceria com a Celcoin (arts. 36 a 38), avaliação atestada por auditor registrado na CVM (art. 37, §§ 5º e 6º) e consentimento expresso por parceira no ambiente da integradora (art. 36, §§ 8º e 9º).
+2. Finalidade e prazo registrados no consentimento criado por `POST /consents` (o app não envia finalidade; a da tela da Celcoin precisa cobrir as finalidades de CNPJ acima).
+3. Inclusão na relação do art. 52-A (prazo 01/12/2026) e cronograma de adequação.
+4. Nome "Control Finance" diante do art. 36, § 5º, IV (termos do sistema financeiro, inclusive em idioma estrangeiro).
+5. Prazo de exclusão na Polp e em backups dela (já pendente em E.2).
+
+Enquanto esses pontos não forem respondidos por escrito, o enquadramento Open Finance **não** está confirmado.
+
+## O. Documentos jurídicos dos módulos CNPJ (A1, A2, A3, A4, A6; 18/11/2026)
+
+**Implementado** (Política `2026-11-20`, Termos `2026-11-20`, tela Privacidade e dados):
+
+- A1: a Política (seções 2, 3, 4, 7, 8 e 9), a tela e os Termos (seção 1) descrevem funcionários, fornecedores, formas de pagamento, custos adicionais, marcações e históricos, fechamentos de caixa, impostos e conta padrão, com o que é cifrado e por quanto tempo fica guardado. Fechamentos de caixa e o histórico de marcações não são apagados na desconexão nem no fim da autorização: o texto agora diz isso (a regra em si é o achado M1, não alterado).
+- A2: a identificação de pagamentos foi descrita como o código faz (`SupplierPaymentMatcher.MatchEmployee`): só funcionários, só saídas pagas de contas (sem cartão), só CPF/CNPJ do banco ou conta completa, nunca nome, um único nível e a marcação manual prevalece. A entrada da versão de 19/11 foi corrigida.
+- A3: a empresa é controladora dos dados de funcionários e fornecedores e o Control Finance é operador (Política, seção 1; Termos, seção 5, com instruções, responsabilidades, suboperadores, aviso de incidente, informações e fim do tratamento). Os códigos HMAC de contrapartes continuam com o Control Finance como controlador, por legítimo interesse.
+- A4: o controlador continua `[PENDENTE]` (a empresa não foi constituída, ver `PRODUCT.md`). O texto agora indica a alternativa do agente de pequeno porte (Res. CD/ANPD 2/2022, art. 11) e que, desde agosto de 2025, a transferência baseada em cláusulas exige as cláusulas-padrão da ANPD (Res. CD/ANPD 19/2024, art. 2º, parágrafo único).
+- A6: avaliação de legítimo interesse registrada em `docs/lgpd-legitimo-interesse.md` (três fases do guia da ANPD de 2024), indicada na Política, seção 3, como disponível a pedido.
+
+**Pendências externas:**
+
+1. Razão social, CNPJ e endereço do controlador (Política, seção 1; Termos; rodapé).
+2. Encarregado: indicar uma pessoa ou confirmar o enquadramento como agente de pequeno porte. O enquadramento depende do porte, do grupo econômico e de não haver tratamento de alto risco (Res. CD/ANPD 2/2022, arts. 3º e 4º). A escala e o CPF de terceiros (item 3 do registro de legítimo interesse) precisam ser avaliados nesse enquadramento.
+3. Transferência internacional: contrato com a Resend com as cláusulas-padrão da ANPD ou outro fundamento do art. 33; o mecanismo dos subprocessadores da Polp; o provedor e a região da hospedagem de produção (o banco de desenvolvimento está em `aws-1-us-east-2`, Estados Unidos).
+4. Os Termos novos só são aceitos no cadastro: não existe fluxo para usuários atuais aceitarem nova versão dos Termos (há apenas o aviso de ciência da Política). A seção 10 dos Termos promete avisar as mudanças: o aviso aos usuários CNPJ atuais precisa ser feito antes da publicação.
+5. Política interna de acesso administrativo e prazo de backups (já `[PENDENTE]` nas seções 6 e 7).
+6. Decisões do registro de legítimo interesse: limitar o cálculo do HMAC de contrapartes e elaborar o RIPD.
+
+## P. Desconexão, retenção e históricos (M1, M2, M8, M21; 19/11/2026)
+
+**M1 (confirmado e corrigido).** Toda remoção de contas bancárias passa por `PolpDisconnectService.DeleteAccountsDataAsync`: desconexão voluntária, eliminação 30 dias após o fim da autorização e exclusão de conta avulsa. Antes, fechamentos de caixa e itens sobreviviam com valores e ids de transações apagadas, e o histórico de marcações guardava a soma vinda do banco. Agora, nessa mesma transação:
+- São apagados os fechamentos que usaram as contas removidas: escopo na conta, item apontando para uma transação dela, ou fechamento de todas as contas com saldo calculado a partir da primeira leitura de saldo dela, com um dia de folga por causa do fuso. Fechamentos que nunca usaram a conta ficam intactos, e o acerto "fechamento + diferenças = atual" continua válido neles.
+- Nos eventos de marcação, `BankPaidAmount` vira nulo nos meses cobertos pelas transações removidas. A soma é do mês e não pode ser separada por banco. O evento (decisão da empresa, situação anterior e nova) fica.
+- Ficam: funcionários, fornecedores, formas de pagamento, custos, marcações e eventos (registros administrativos da empresa).
+
+**M2 (obsoleto).** `PayrollObligationPayments` foi removida pela migration `RemovePayrollCharges`, e nenhum código grava `TransactionId`/`PaymentAmount` em `PayrollObligationEvents`. No banco de dev não há evento com esses campos preenchidos.
+
+**M8 (parcialmente corrigido).** Retenção efetiva:
+- Dados bancários: enquanto a autorização estiver ativa; apagados na hora na desconexão; 30 dias após o fim da autorização; na exclusão da conta.
+- `DataRetention:SyncedHistoryMonths`, quando configurado, apaga também fechamentos e, agora, o valor do banco em eventos de meses inteiros anteriores ao corte.
+- Registros administrativos da empresa (CNPJ): até a empresa excluir ou excluir a conta. O Control Finance é operador e não impõe prazo: a guarda trabalhista e fiscal é obrigação da empresa.
+- Registros de acesso: prazo legal (Marco Civil). Aceites: até a exclusão da conta.
+
+**Pendências de decisão:**
+- Um prazo padrão para `SyncedHistoryMonths` (hoje nulo).
+- Uma política para contas inativas por longo período (hoje mantidas até o usuário excluir).
+- Se o registro de aceites deve sobreviver à exclusão da conta pelo prazo de prescrição.
+
+Nenhum prazo foi fixado sem essa decisão.
+
+**M21 (sem risco real presente).** Os `DELETE`/`UPDATE` de `RemoveSupplierPaymentStatus`, `EmployeeCosts`, `RemoveEmployeeCostLinks`, `AutomaticEmergencyReserve` e `RemovePayrollCharges` foram decisões registradas no CLAUDE.md. Todas estão aplicadas no banco de dev (único ambiente com dados) e nunca foram commitadas, então nenhum outro ambiente as aplicou sobre dados reais. Num banco novo, rodam sobre tabelas vazias. As trilhas apagadas no dev não são recuperáveis e não foram alteradas. Fica registrada no CLAUDE.md a regra de que migrations não apagam trilhas, escolhas ou dados bancários sem decisão registrada.
+
+## Q. Exclusão por inatividade e registros de aceite (M8; 19/11/2026)
+
+**Implementado:** exclusão automática de contas sem atividade por 3 anos (`UserActivity`, `InactiveAccountService`, `AccountDeletionService`, migration `UserInactivity`).
+- Atividade conta só em login e em requisições com sessão válida; processos automáticos não contam.
+- Antes da exclusão, três avisos por e-mail (90, 30 e 7 dias), sem nomes nem valores, com a data prevista.
+- Sem e-mail entregue ao provedor não há exclusão.
+- A exclusão usa o mesmo processo da exclusão pedida pelo usuário.
+- Ficam só os registros de acesso (Marco Civil, art. 15), que não têm vínculo com a conta e já tinham prazo próprio.
+- Contas existentes começam a contar da aplicação da migration.
+
+**Mantido:** sem limite genérico para o histórico de conexões ativas; regra de 30 dias para autorização encerrada e desconexão imediata, sem mudança. Nenhum prazo isolado para funcionários, fornecedores ou registros trabalhistas: saem só com a conta (por pedido ou inatividade), e a guarda legal desses dados é obrigação da empresa controladora.
+
+**Registros de aceite (pendência jurídica, comportamento mantido):** hoje saem junto com a conta.
+- A LGPD (art. 16) só autoriza conservar dados após o fim do tratamento para cumprimento de obrigação legal ou regulatória, estudo por órgão de pesquisa, transferência a terceiro ou uso exclusivo do controlador com dados anonimizados.
+- Defender direitos em processo (art. 7º, VI) não está entre essas hipóteses. Nenhuma norma identificada obriga guardar a prova do aceite após a exclusão, nem define prazo para isso.
+- Prazos de prescrição, como os 5 anos do CDC (art. 27), indicam o risco, mas não criam obrigação de guarda.
+- Sem fundamento e prazo definidos, nada foi retido. Decidir com orientação jurídica se haverá retenção mínima (ex.: hash do e-mail, versões e datas) e por quanto tempo.
+
+**Limite técnico:** "entregue" significa aceito pela API do Resend. O app não recebe confirmação de chegada à caixa do destinatário (não há webhook de entrega configurado).

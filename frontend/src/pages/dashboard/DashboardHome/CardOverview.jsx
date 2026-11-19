@@ -132,7 +132,7 @@ export default function CardOverview({ card, cardholderName, onOpenCards, refres
           {syncedAt && <span className="card-overview__note">Banco sincronizado em {syncedAt}</span>}
         </header>
         <RecentTransactions card={card} refreshKey={refreshKey} />
-        <Link to="/dashboard/cartoes" className="card-overview__link">
+        <Link to="/dashboard/cartoes" state={{ cardId: card.id }} className="card-overview__link">
           Ver extrato completo
         </Link>
       </section>

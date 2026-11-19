@@ -1,24 +1,17 @@
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
-using ControlFinance.API.Models;
 
 namespace ControlFinance.API.Services;
 
-// Mesma regra de utils/importedInvestments.js (isEmergencyReserveName). O banco não informa a
-// finalidade de uma caixinha, então o nome é o único sinal: caixinha com a palavra "reserva" entra na
-// reserva sozinha; aplicação (CDB, fundo...) só com o nome exato, porque "reserva" ali é ambíguo.
+// A Polp não informa a finalidade de uma caixinha: o único sinal é o nome que o próprio usuário deu a ela.
+// Só caixinhas (saldos reservados) entram; CDB, fundo, ação e Tesouro nunca, nem com liquidez diária.
 public static class EmergencyReserveNames
 {
-    private const string Target = "reserva de emergencia";
+    private static readonly HashSet<string> Words = ["reserva", "reservas", "emergencia", "emergencias", "colchao"];
 
-    public static bool IsAuto(string? name, bool reservedBalance)
-    {
-        var words = Words(name);
-        return reservedBalance ? words.Any(w => w is "reserva" or "reservas") : string.Join(' ', words) == Target;
-    }
+    public static bool IsAuto(string? name, bool reservedBalance) => reservedBalance && Split(name).Any(Words.Contains);
 
-    private static string[] Words(string? name)
+    private static string[] Split(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return [];
         var plain = new StringBuilder();
@@ -29,19 +22,5 @@ public static class EmergencyReserveNames
             plain.Append(char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : ' ');
         }
         return plain.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-    }
-
-    public static List<Guid> Excluded(EmergencyReserve reserve)
-    {
-        try { return JsonSerializer.Deserialize<List<Guid>>(reserve.ExcludedAutoReserveIdsJson) ?? []; }
-        catch (JsonException) { return []; }
-    }
-
-    public static void SetExcluded(EmergencyReserve reserve, Guid id, bool excluded)
-    {
-        var ids = Excluded(reserve);
-        if (excluded) { if (!ids.Contains(id)) ids.Add(id); }
-        else ids.Remove(id);
-        reserve.ExcludedAutoReserveIdsJson = JsonSerializer.Serialize(ids);
     }
 }

@@ -22,7 +22,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem 1.5rem;
-  margin-top: -1.25rem;
+  margin-top: -1.75rem;
 }
 
 .record-detail__identity {
@@ -42,16 +42,17 @@
 .record-detail__name-row h1 {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: 1.5rem;
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
+  font-size: clamp(1.5rem, 1.2rem + 1vw, 1.85rem);
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
 }
 
 .record-detail__meta {
-  color: var(--color-text-secondary);
-  font-size: 0.85rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.88rem;
+  line-height: 1.4;
 }
 
 .record-detail__header-actions {
@@ -76,7 +77,7 @@
 .record-detail__section {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.1rem;
 }
 
 .record-detail__section-head {
@@ -85,6 +86,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 0.5rem 1rem;
+  min-height: 2rem;
   padding-bottom: 0.6rem;
   border-bottom: 1px solid var(--color-border);
 }
@@ -92,32 +94,84 @@
 .record-detail__section-head h2 {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: 0.95rem;
-  font-weight: 500;
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 
 .record-detail__section-actions,
 .record-detail__method-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.1rem;
+  align-items: center;
+  gap: 0.25rem;
 }
 
+.record-detail__section-head {
+  align-items: center;
+}
+
+/* Ações secundárias: texto discreto que ganha superfície ao passar o mouse, para nunca parecer rótulo. */
 .record-detail__text-button {
-  padding: 0.15rem 0;
+  padding: 0.32rem 0.6rem;
   border: none;
+  border-radius: var(--radius-sm);
   background: none;
   color: var(--color-text-secondary);
   font-family: inherit;
   font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.2;
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.record-detail__section-actions > .record-detail__text-button:last-child,
+.record-detail__method-actions > .record-detail__text-button:last-child {
+  margin-right: -0.6rem;
 }
 
 .record-detail__text-button:hover {
+  background-color: var(--color-surface-hover);
   color: var(--color-text-primary);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+}
+
+.record-detail__text-button--danger:hover {
+  color: var(--color-error);
+}
+
+/* Ação que acrescenta algo à seção: contorno leve e ícone, acima das ações de linha. */
+.record-detail__add-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.38rem 0.75rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.record-detail__add-button svg {
+  flex: none;
+  color: var(--color-text-secondary);
+}
+
+.record-detail__add-button:hover {
+  border-color: var(--color-text-tertiary);
+  background-color: var(--color-surface-hover);
+}
+
+.record-detail__add-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .record-detail__grid {
@@ -130,34 +184,60 @@
 .record-detail__field {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  justify-content: flex-end;
+  gap: 0.35rem;
   min-width: 0;
 }
 
 .record-detail__field dt {
   color: var(--color-text-tertiary);
-  font-size: 0.75rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.01em;
 }
 
 .record-detail__field dd {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: 0.9rem;
+  font-size: 0.98rem;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 
 .record-detail__field dd.record-detail__value--muted {
   color: var(--color-text-tertiary);
+  font-weight: 400;
+}
+
+.record-detail__field dd.record-detail__value--money {
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
 }
 
 .record-detail__methods {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.record-detail__methods > li {
+  padding-block: 0.9rem;
+}
+
+.record-detail__methods > li:first-child {
+  padding-top: 0;
+}
+
+.record-detail__methods > li:last-child {
+  padding-bottom: 0;
+}
+
+.record-detail__methods > li + li {
+  border-top: 1px solid var(--color-border);
 }
 
 .record-detail__method {
@@ -177,12 +257,13 @@
 
 .record-detail__method-label {
   color: var(--color-text-tertiary);
-  font-size: 0.75rem;
+  font-size: 0.76rem;
 }
 
 .record-detail__method-value {
   color: var(--color-text-primary);
-  font-size: 0.9rem;
+  font-size: 0.98rem;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
@@ -205,7 +286,219 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .record-detail__text-button {
+  .record-detail__text-button,
+  .record-detail__add-button {
     transition: none;
+  }
+}
+
+.record-detail__paid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: -0.5rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.record-detail__paid-check {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  width: fit-content;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.record-detail__paid-check:hover {
+  color: var(--color-text-primary);
+}
+
+.record-detail__paid-check input {
+  width: 0.95rem;
+  height: 0.95rem;
+  margin: 0;
+  accent-color: var(--color-positive);
+  cursor: pointer;
+}
+
+.record-detail__paid-check input:disabled {
+  cursor: progress;
+}
+
+.record-detail__paid-check input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.record-detail__paid-month {
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+}
+
+.record-detail__paid-note {
+  margin: 0;
+  padding-inline-start: 1.5rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+}
+
+.record-detail__paid-note--error {
+  color: var(--color-error);
+}
+
+.record-detail__paid-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  max-width: 36rem;
+  margin-top: 0.6rem;
+  padding-inline-start: 1.5rem;
+}
+
+.record-detail__paid-notice p {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.record-detail__notice-close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: -0.15rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.record-detail__notice-close:hover {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.record-detail__notice-close:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .record-detail__notice-close {
+    transition: none;
+  }
+}
+
+.record-detail__text-button:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.record-detail__text-button--danger-strong,
+.record-detail__text-button--danger-strong:hover {
+  color: var(--color-error);
+}
+
+.cost-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Nome | ações | valor: os valores ficam numa coluna à direita, alinhados com o total. */
+.cost {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(7.5rem, auto);
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+  padding-block: 0.8rem;
+}
+
+.cost + .cost {
+  border-top: 1px solid var(--color-border);
+}
+
+.cost:first-child {
+  padding-top: 0.2rem;
+}
+
+.cost__name {
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.cost__amount {
+  color: var(--color-text-primary);
+  font-size: 0.98rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cost__amount--empty {
+  color: var(--color-text-tertiary);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.cost-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.cost-total strong {
+  color: var(--color-text-primary);
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .cost {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name amount"
+      "actions actions";
+    row-gap: 0.25rem;
+  }
+
+  .cost__name {
+    grid-area: name;
+  }
+
+  .cost__amount {
+    grid-area: amount;
+  }
+
+  .cost__actions {
+    grid-area: actions;
+    margin-left: -0.6rem;
+  }
+
+  .cost__actions > .record-detail__text-button:last-child {
+    margin-right: 0;
   }
 }

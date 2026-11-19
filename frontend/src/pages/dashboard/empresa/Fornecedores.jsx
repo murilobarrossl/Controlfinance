@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import BusinessModule, { ModuleSection, ModuleTable } from "./BusinessModule.jsx";
+import BusinessModule from "./BusinessModule.jsx";
 import SupplierFormDialog from "./SupplierFormDialog.jsx";
 import { SummaryItem } from "./RegistryParts.jsx";
+import { openRow } from "./registryRow.js";
 import useRegistryData, { useDebounced } from "./useRegistryData.js";
 import Button from "../../../components/ui/Button/Button.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
@@ -51,9 +52,8 @@ export default function Fornecedores() {
         {summaryError ? (
           <p className="registry__error">{summaryError}</p>
         ) : (
-          <dl className="registry-summary summary-dividers" aria-busy={!summary}>
+          <dl className="registry-summary" aria-busy={!summary}>
             <SummaryItem label="Fornecedores cadastrados" value={summary ? summary.totalCount : <Skeleton width="2.5rem" height="1.6rem" />} />
-            <SummaryItem label="Com dados de pagamento" value={summary ? summary.withPaymentCount : <Skeleton width="2.5rem" height="1.6rem" />} />
           </dl>
         )}
 
@@ -85,7 +85,7 @@ export default function Fornecedores() {
                       <th scope="col">Fornecedor</th>
                       <th scope="col" className="registry__col--optional">Documento</th>
                       <th scope="col" className="registry__col--optional">Categoria</th>
-                      <th scope="col">Pagamento</th>
+                      <th scope="col">Forma de pagamento</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -104,7 +104,11 @@ export default function Fornecedores() {
                           </tr>
                         )
                         : items.map((supplier) => (
-                              <tr key={supplier.id}>
+                              <tr
+                                key={supplier.id}
+                                className="registry__row"
+                                onClick={(e) => openRow(e, navigate, `/dashboard/fornecedores/${supplier.id}`)}
+                              >
                                 <td>
                                   <Link className="registry__name" to={`/dashboard/fornecedores/${supplier.id}`}>
                                     {supplier.legalName}
@@ -133,18 +137,6 @@ export default function Fornecedores() {
               />
             )}
           </section>
-
-        <ModuleSection title="Pagamentos reconhecidos">
-          <ModuleTable
-            columns={[
-              { label: "Data" },
-              { label: "Fornecedor" },
-              { label: "Descrição no extrato" },
-              { label: "Conta" },
-              { label: "Valor", numeric: true },
-            ]}
-          />
-        </ModuleSection>
       </div>
 
       {formOpen && <SupplierFormDialog categories={summary?.categories ?? []} onClose={() => setFormOpen(false)} onSaved={handleSaved} />}

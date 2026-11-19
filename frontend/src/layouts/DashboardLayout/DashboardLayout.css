@@ -486,6 +486,19 @@
   cursor: pointer;
 }
 
+.dashboard-notice .dashboard-notice__ack {
+  width: auto;
+  padding-inline: 0.9rem;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.dashboard-notice .dashboard-notice__ack:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 /* Apenas estrutura de página; espaçamentos internos dos componentes são preservados. */
 .dashboard-content > :is(.dashboard-home, .cartoes, .receitas-despesas, .relatorios, .categorias, .privacidade),
 .dashboard-content .investimentos__header,

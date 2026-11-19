@@ -1,25 +1,27 @@
 .registry {
+  --registry-control-height: 2.5rem;
   container: registry / inline-size;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 2.25rem;
 }
 
 .registry-summary {
-  padding-block: 1.25rem;
+  padding-block: 1.5rem;
   border-block: 1px solid var(--color-border);
 }
 
 .registry-summary__item {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.5rem;
   min-width: 12rem;
 }
 
 .registry-summary dt {
   color: var(--color-text-secondary);
-  font-size: 0.82rem;
+  font-size: 0.85rem;
+  line-height: 1.3;
 }
 
 .registry-summary dd {
@@ -35,72 +37,97 @@
 .registry__list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .registry__toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1rem;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.registry__search,
+.registry__select select,
+.registry__segmented {
+  box-sizing: border-box;
+  height: var(--registry-control-height);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-bg);
+  font-family: inherit;
+  font-size: 0.85rem;
+  transition: border-color 0.15s ease;
 }
 
 .registry__search {
-  flex: 1;
-  min-width: 14rem;
-  background-color: var(--color-bg);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  padding: 0.55rem 0.8rem;
+  flex: 1 1 18rem;
+  min-width: 0;
+  padding: 0 0.9rem;
   color: var(--color-text-primary);
-  font-family: inherit;
-  font-size: 0.85rem;
 }
 
 .registry__search::placeholder {
   color: var(--color-text-tertiary);
 }
 
+.registry__search:hover,
+.registry__select select:hover {
+  border-color: var(--color-text-tertiary);
+}
+
+.registry__select {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.registry__select select {
+  width: 100%;
+  min-width: 0;
+  padding: 0 2.25rem 0 0.9rem;
+  color: var(--color-text-primary);
+  text-overflow: ellipsis;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' fill='none' stroke='%239b9b9b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.8rem center;
+  background-size: 0.9rem;
+}
+
 .registry__segmented {
   display: inline-flex;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  flex: none;
+  padding: 3px;
+  gap: 3px;
 }
 
 .registry__segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
   background: transparent;
   color: var(--color-text-secondary);
-  padding: 0.5rem 0.9rem;
+  padding: 0 0.85rem;
   font-family: inherit;
-  font-size: 0.82rem;
+  font-size: inherit;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.registry__segment + .registry__segment {
-  border-inline-start: 1px solid var(--color-border-strong);
-}
-
 .registry__segment:hover {
-  background-color: var(--color-surface-hover);
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
 }
 
 .registry__segment--active,
 .registry__segment--active:hover {
-  background-color: var(--color-text-primary);
-  color: var(--color-bg);
-}
-
-.registry__select select {
-  background-color: var(--color-bg);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  padding: 0.5rem 0.75rem;
+  background-color: var(--color-surface-hover);
   color: var(--color-text-primary);
-  font-family: inherit;
-  font-size: 0.82rem;
+  font-weight: 500;
 }
 
 .registry__search:focus-visible,
@@ -115,8 +142,61 @@
   overflow-x: auto;
 }
 
+.registry .biz-table th,
+.registry .biz-table td {
+  padding-inline: 1rem;
+}
+
+.registry .biz-table td {
+  padding-block: 0.85rem;
+  vertical-align: middle;
+}
+
+.registry .biz-table thead th {
+  padding-block: 0 0.7rem;
+  font-size: 0.8rem;
+}
+
+.registry .biz-table th:first-child,
+.registry .biz-table td:first-child {
+  padding-inline-start: 0.875rem;
+}
+
+.registry .biz-table th:last-child,
+.registry .biz-table td:last-child {
+  padding-inline-end: 0.875rem;
+}
+
+.registry .biz-table .biz-table__state td {
+  padding-block: 1.5rem;
+}
+
+.registry > .biz-section {
+  gap: 1.25rem;
+  margin-block-start: 0.75rem;
+}
+
 .registry__table tbody tr {
   transition: background-color 0.15s ease;
+}
+
+.registry__row {
+  cursor: pointer;
+}
+
+.registry__paid {
+  flex: none;
+  margin-left: 0.4rem;
+  vertical-align: -2px;
+}
+
+.registry__paid {
+  color: var(--color-success);
+}
+
+.registry__row:hover .registry__name {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .registry__table tbody tr:not(.biz-table__state):not(.registry__placeholder):hover {
@@ -142,7 +222,7 @@
 
 .registry__secondary {
   display: block;
-  margin-top: 0.15rem;
+  margin-top: 0.2rem;
   color: var(--color-text-tertiary);
   font-size: 0.78rem;
 }
@@ -155,8 +235,8 @@
   vertical-align: middle;
 }
 
-.registry__placeholder td {
-  padding-block: 0.8rem;
+.registry .biz-table .registry__placeholder td {
+  padding-block: 0.95rem;
 }
 
 .registry__error {
@@ -164,14 +244,39 @@
   font-size: 0.9rem;
 }
 
-.registry-summary__item dd.registry-summary__value--expense,
-.registry__table td.registry__amount--expense {
-  color: var(--color-expense);
+.registry__table td.registry__amount {
+  color: var(--color-text-secondary);
+}
+
+.registry__table td.registry__paid-amount {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.registry__table td.registry__paid-amount--unmarked {
+  color: var(--color-text-tertiary);
+  font-weight: 400;
+}
+
+.registry__table td.registry__paid-amount--unconfirmed {
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+  font-weight: 400;
 }
 
 @container registry (max-width: 44rem) {
   .registry__col--optional {
     display: none;
+  }
+
+  .registry__search,
+  .registry__select,
+  .registry__segmented {
+    flex: 1 1 100%;
+  }
+
+  .registry__segment {
+    flex: 1;
   }
 
   .registry-summary {
@@ -192,6 +297,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .registry__segment,
+  .registry__search,
+  .registry__select select,
   .registry__table tbody tr,
   .registry__table--refreshing tbody {
     transition: none;

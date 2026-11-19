@@ -138,7 +138,6 @@ public class UserIsolationRecurrencesAndPlanningTests
         });
         t.Db.SaveChanges();
 
-        Assert.Equal(400, Http.Status(await Planning(t).SetReserveAccount(new SetReserveAccountDto(other.Account.Id), default)));
         Assert.Equal(404, Http.Status(await Planning(t).SetInvestmentRate(other.ManualAccount.Id,
             new SetInvestmentRateDto(InvestmentRateKinds.CdiPercent, 110m, false), default)));
         await Planning(t).DeleteInvestmentRate(other.ManualAccount.Id, default);

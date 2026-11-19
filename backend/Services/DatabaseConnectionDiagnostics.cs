@@ -22,8 +22,11 @@ internal sealed class DatabaseConnectionDiagnostics(ILogger<DatabaseConnectionDi
         return Task.CompletedTask;
     }
 
+    // Abertura cancelada a pedido (cliente abortou a requisição) não é falha do banco: fica em Debug.
+    // Timeout, socket, TLS e erro do Postgres continuam como aviso.
     private void LogFailure(Exception error, bool cancellationRequested) =>
-        logger.LogWarning("Diagnóstico da conexão PostgreSQL: {Failure}. Cancelamento solicitado: {CancellationRequested}",
+        logger.Log(cancellationRequested && error is OperationCanceledException ? LogLevel.Debug : LogLevel.Warning,
+            "Diagnóstico da conexão PostgreSQL: {Failure}. Cancelamento solicitado: {CancellationRequested}",
             Describe(error), cancellationRequested);
 
     internal static string Describe(Exception error)

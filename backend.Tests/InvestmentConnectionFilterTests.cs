@@ -4,14 +4,13 @@ using ControlFinance.API.Models;
 using ControlFinance.API.Services.Investments;
 using ControlFinance.API.Tests.Support;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
 
 namespace ControlFinance.API.Tests;
 
 public class InvestmentConnectionFilterTests
 {
     private static InvestmentsController Controller(TestDb t) => t.Controller(db => new InvestmentsController(db,
-        new InvestmentFinancialService(db, new ConfigurationBuilder().Build(), t.Clock), t.Clock));
+        t.Clock));
 
     [Fact]
     public async Task Connection_filter_rejects_other_users_in_both_catalogs()

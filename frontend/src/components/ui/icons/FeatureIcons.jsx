@@ -161,6 +161,14 @@ export function MenuIcon() {
   );
 }
 
+export function PlusIcon() {
+  return (
+    <svg {...BASE_PROPS} width="14" height="14" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
 export function CloseIcon() {
   return (
     <svg {...BASE_PROPS}>
@@ -276,6 +284,17 @@ export function CashFlowIcon() {
     <svg {...BASE_PROPS}>
       <path d="M8 20V5M4.5 8.5 8 5l3.5 3.5" />
       <path d="M16 4v15M12.5 15.5 16 19l3.5-3.5" />
+    </svg>
+  );
+}
+
+export function TaxIcon() {
+  return (
+    <svg {...BASE_PROPS}>
+      <path d="M6 3.5h12v17l-2.5-1.5-2 1.5-1.5-1.5-1.5 1.5-2-1.5L6 20.5z" />
+      <path d="M9.5 14.5l5-5" />
+      <circle cx="10" cy="10" r="0.9" />
+      <circle cx="14" cy="14" r="0.9" />
     </svg>
   );
 }

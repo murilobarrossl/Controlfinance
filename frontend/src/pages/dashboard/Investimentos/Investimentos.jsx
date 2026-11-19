@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
 import Button from "../../../components/ui/Button/Button.jsx";
 import SectionHeading from "../../../components/ui/SectionHeading/SectionHeading.jsx";
@@ -7,18 +8,22 @@ import NoBankAccount from "../../../components/dashboard/NoBankAccount/NoBankAcc
 import { ChevronDownIcon, InfoIcon, CloseIcon } from "../../../components/ui/icons/FeatureIcons.jsx";
 import { useAccount } from "../../../context/AccountContext.jsx";
 import { useAuth } from "../../../context/AuthContext.jsx";
-import { formatMoney, isReserve, MODALITIES, normalizeInvestment } from "../../../utils/importedInvestments.js";
+import { formatExact, formatMoney, investmentPath, MODALITIES, normalizeInvestment } from "../../../utils/importedInvestments.js";
 import { requestInvestmentsRefresh } from "../../../api/investments.js";
 import usePlanning from "./usePlanning.js";
 import useLinkedResources from "./useLinkedResources.js";
-import { legacyAccountEntry, summarize, summaryNote } from "./planningSummary.js";
+import { summarize, summaryNote } from "./planningSummary.js";
 import useImportedInvestments from "./useImportedInvestments.js";
-import ImportedInvestmentDetail from "./ImportedInvestmentDetail.jsx";
 import { EmergencyReserveCard, GoalsCard } from "./PlanningCards.jsx";
 import FinancingSimulator from "./FinancingSimulator.jsx";
 import usePageTitle from "../../../hooks/usePageTitle.js";
 import "./Investimentos.css";
 
+function equitySummary(item) {
+  if (item.family !== "variable-incomes") return {};
+  const quantity = item.document?.availability?.quantity === "available" ? formatExact(item.document.values?.quantity) : null;
+  return { quantity: quantity && quantity !== "Não informado" ? `${quantity} ${quantity === "1" ? "ação" : "ações"}` : null };
+}
 function Amounts({ item }) {
   if (!item.amounts.length) return "Não informado";
   return item.amounts.map((money, index) => <span className="inv-real__amount" key={index}>{formatMoney(money)}</span>);
@@ -33,25 +38,34 @@ function readDismissed(owner) {
     return Array.isArray(ids) ? ids : [];
   } catch { return []; }
 }
-function ProductGroup({ modality, items, selected, setSelected, planning, owner }) {
-  const [collapsed, setCollapsed] = useState(false);
+const listStateKey = (owner) => `investmentsListState:${owner}`;
+function readListState(owner, scope) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(listStateKey(owner)) ?? "null");
+    return saved && saved.scope === (scope ?? null) ? saved : null;
+  } catch { return null; }
+}
+function InvestmentRow({ item, onOpen }) {
+  const equity = equitySummary(item);
+  return <Link to={investmentPath(item)} className="inv-row__button" onClick={onOpen}>
+    <InvestmentIcon item={item} />
+    <span className="inv-row__titles"><span className="inv-row__name">{item.name}</span><span className="inv-row__institution"><InstitutionLogo institution={item.institution} /><span className="inv-row__institution-text">{item.institution.name}{item.accountNumber && <> · conta <span className="inv-row__account">{item.accountNumber}</span></>}{equity.quantity && <> · <span className="inv-row__account">{equity.quantity}</span></>}</span></span>
+      {item.catalogPresence?.status === "not_reported_in_last_full_scan" && <span className="inv-row__flag">Não informado na última atualização · último saldo conhecido</span>}</span>
+    <span className="inv-row__balance"><Amounts item={item} /></span>
+    <span className="inv-row__chevron" aria-hidden="true"><ChevronDownIcon /></span>
+  </Link>;
+}
+function ProductGroup({ modality, items, collapsed, onToggle, onOpen }) {
   return <section className={`inv-group${collapsed ? " inv-group--collapsed" : ""}`} aria-labelledby={`group-${modality.key}`}>
     <h3 id={`group-${modality.key}`} className="inv-group__header">
-      <button type="button" className="inv-group__toggle" aria-expanded={!collapsed} aria-controls={`group-${modality.key}-list`} onClick={() => setCollapsed((value) => !value)}>
+      <button type="button" className="inv-group__toggle" aria-expanded={!collapsed} aria-controls={`group-${modality.key}-list`} onClick={onToggle}>
         <span className="inv-group__title">{modality.groupLabel}</span>
         <span className="inv-group__count">{items.length} {items.length === 1 ? "produto" : "produtos"}</span>
         <span className="inv-group__chevron" aria-hidden="true"><ChevronDownIcon /></span>
       </button>
     </h3>
-    <ul id={`group-${modality.key}-list`} className="inv-list" hidden={collapsed}>{items.map((item) => <li key={item.key} className={`inv-row${selected === item.key ? " inv-row--open" : ""}`}>
-      <button type="button" className="inv-row__button" aria-expanded={selected === item.key} aria-controls={`detail-${item.key}`} onClick={(event) => setSelected(selected === item.key ? null : item.key, event.currentTarget)}>
-        <InvestmentIcon item={item} />
-        <span className="inv-row__titles"><span className="inv-row__name">{item.name}</span><span className="inv-row__institution"><InstitutionLogo institution={item.institution} /><span className="inv-row__institution-text">{item.institution.name}{item.accountNumber && <> · conta <span className="inv-row__account">{item.accountNumber}</span></>}</span></span>
-          {item.catalogPresence?.status === "not_reported_in_last_full_scan" && <span className="inv-row__flag">Não informado na última atualização · último saldo conhecido</span>}</span>
-        <span className="inv-row__balance"><Amounts item={item} /></span>
-        <span className="inv-row__chevron" aria-hidden="true"><ChevronDownIcon /></span>
-      </button>
-      {selected === item.key && <div id={`detail-${item.key}`} className="inv-row__detail"><ImportedInvestmentDetail item={item} planning={planning} owner={owner} /></div>}
+    <ul id={`group-${modality.key}-list`} className="inv-list" hidden={collapsed}>{items.map((item) => <li key={item.key} className="inv-row">
+      <InvestmentRow item={item} onOpen={onOpen} />
     </li>)}</ul>
   </section>;
 }
@@ -63,20 +77,21 @@ export default function Investimentos() {
   const allConnections = useMemo(() => rawConnections.map((connection) => ({ ...connection,
     institutionLogoUrl: connectors.find((connector) => connector.id === connection.institutionId)?.logoUrl ?? null })), [rawConnections, connectors]);
   const planning = usePlanning();
-  const catalog = useImportedInvestments(owner, dataRefreshKey, effectiveConnectionId);
-  const [selected, setSelectedKey] = useState(null);
-  const scrollAnchor = useRef(null);
-  const setSelected = (key, element) => {
-    scrollAnchor.current = element ? { element, top: element.getBoundingClientRect().top } : null;
-    setSelectedKey(key);
+  const [restored] = useState(() => readListState(owner, effectiveConnectionId));
+  const catalog = useImportedInvestments(owner, dataRefreshKey, effectiveConnectionId, restored?.pages);
+  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set(restored?.collapsed ?? []));
+  const toggleGroup = (key) => setCollapsedGroups((prev) => {
+    const next = new Set(prev);
+    if (!next.delete(key)) next.add(key);
+    return next;
+  });
+  const pendingScroll = useRef(restored?.scrollY ?? null);
+  const saveListState = () => {
+    try {
+      sessionStorage.setItem(listStateKey(owner), JSON.stringify({ scope: effectiveConnectionId ?? null, scrollY: window.scrollY,
+        collapsed: [...collapsedGroups], pages: { investments: catalog.investments.pages, "reserved-balances": catalog["reserved-balances"].pages } }));
+    } catch { /* indisponível */ }
   };
-  useLayoutEffect(() => {
-    const anchor = scrollAnchor.current;
-    scrollAnchor.current = null;
-    if (!anchor?.element.isConnected) return;
-    const shift = anchor.element.getBoundingClientRect().top - anchor.top;
-    if (shift) window.scrollBy({ top: shift, behavior: "instant" });
-  }, [selected]);
   const [dismissedState, setDismissed] = useState(null);
   // Chave da atualização pedida pelo botão: "concluída" é essa chave já em vigor e nada mais carregando.
   const [refreshRequest, setRefreshRequest] = useState(null);
@@ -120,14 +135,7 @@ export default function Investimentos() {
   }, [investmentData, reservedData, allConnections, accounts]);
   const groups = Object.values(MODALITIES).map((modality) => ({ modality, items: items.filter((item) => item.modality.key === modality.key) })).filter((group) => group.items.length);
   const resolve = useLinkedResources(planning, items, allConnections, `${dataRefreshKey}:${catalog.refreshSequence}`);
-  const legacyAccount = accounts.find((account) => account.id === planning.reserve?.bankAccountId);
-  const linkedReserve = resolve(planning.reserve);
-  const linkedKeys = new Set(linkedReserve.map((entry) => entry.key));
-  const reserveEntries = [
-    ...linkedReserve,
-    ...items.filter((item) => !linkedKeys.has(item.key) && isReserve(item, planning.reserve, planning.goals)).map((item) => ({ key: item.key, id: item.id, reserved: item.reserved, status: "ready", item, auto: true })),
-    ...(legacyAccount ? [legacyAccountEntry(legacyAccount)] : []),
-  ];
+  const reserveEntries = resolve(planning.reserve);
   const goalEntries = Object.fromEntries(planning.goals.map((goal) => [goal.id, resolve(goal)]));
   const reserveSummary = summarize(reserveEntries);
   const datasets = [catalog.investments, catalog["reserved-balances"]];
@@ -147,6 +155,13 @@ export default function Investimentos() {
     const timer = setTimeout(() => setRefreshNotice(null), REFRESH_FEEDBACK_MS);
     return () => clearTimeout(timer);
   }, [refreshNotice]);
+  useEffect(() => {
+    if (pendingScroll.current === null || loading || refreshing) return;
+    const top = pendingScroll.current;
+    pendingScroll.current = null;
+    try { sessionStorage.removeItem(listStateKey(owner)); } catch { /* indisponível */ }
+    window.scrollTo({ top, behavior: "instant" });
+  }, [loading, refreshing, owner]);
   const confirmedEmpty = !loading && !failed && !connectionsRefreshing && !items.length && connections.length > 0
     && datasets.every((dataset) => !dataset.cursor && !dataset.refreshing)
     && connections.every((connection) => connection.status === "none_reported" && connection.reservedStatus === "none_reported");
@@ -188,7 +203,7 @@ export default function Investimentos() {
         {items.length > 0 && <p className="investimentos__lead">Aplicações e caixinhas não são somadas entre si, porque podem se sobrepor.</p>}</div>
       {loading && !items.length && <Skeleton width="100%" height="12rem" />}
       {!loading && !items.length && <div className="investimentos__empty"><p className="investimentos__empty-title">{emptyTitle}</p><p className="investimentos__hint">{emptyText}</p></div>}
-      {items.length > 0 && <div className="inv-groups">{groups.map(({ modality, items: groupItems }) => <ProductGroup key={modality.key} modality={modality} items={groupItems} selected={selected} setSelected={setSelected} planning={planning} owner={owner} />)}</div>}
+      {items.length > 0 && <div className="inv-groups">{groups.map(({ modality, items: groupItems }) => <ProductGroup key={modality.key} modality={modality} items={groupItems} collapsed={collapsedGroups.has(modality.key)} onToggle={() => toggleGroup(modality.key)} onOpen={saveListState} />)}</div>}
       <div className="inv-real__pagination">{[["investments", "investimentos"], ["reserved-balances", "caixinhas e porquinhos"]].map(([kind, label]) => <div key={kind}>
         {catalog[kind].moreError && <p className="investimentos__error" role="alert">Não foi possível carregar mais {label}.</p>}
         {catalog[kind].cursor && <Button as="button" type="button" variant="outline" size="sm" disabled={catalog[kind].loadingMore || catalog[kind].refreshing} onClick={() => catalog.loadMore(kind)}>{catalog[kind].loadingMore || catalog[kind].refreshing ? "Carregando…" : `Carregar mais ${label}`}</Button>}
@@ -197,7 +212,7 @@ export default function Investimentos() {
     <section className="investimentos__section" aria-labelledby="investimentos-plan-title">
       <div className="investimentos__section-head"><h2 id="investimentos-plan-title" className="investimentos__group-title">Seu planejamento</h2></div>
       {planning.status === "loading" ? <Skeleton width="100%" height="12rem" /> : planning.status === "error" ? <div className="investimentos__failure" role="alert"><p>Não foi possível carregar a reserva e as metas.</p><Button as="button" type="button" variant="outline" size="sm" onClick={planning.retry}>Tentar novamente</Button></div>
-        : <div className="investimentos__grid"><EmergencyReserveCard planning={planning} items={items} itemsLoading={loading && !items.length} entries={reserveEntries} summary={reserveSummary} />
+        : <div className="investimentos__grid"><EmergencyReserveCard onOpen={saveListState} itemsLoading={loading && !items.length} entries={reserveEntries} summary={reserveSummary} />
           <GoalsCard planning={planning} items={items} entries={goalEntries} /></div>}
     </section>
     <FinancingSimulator />

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ControlFinance.API.Data;
 using ControlFinance.API.DTOs;
 using ControlFinance.API.Services;
@@ -61,13 +62,17 @@ public class AccountController(
                 lembretesDeVencimento = user.DueRemindersEnabled,
                 avisoMensal = user.MonthlySummaryEnabled,
                 fusoHorario = user.TimeZone,
+                ultimaAtividadeEm = user.LastActivityAt,
+                exclusaoPorInatividadePrevistaPara = user.InactivityNoticeEpoch == user.LastActivityAt ? user.InactivityDeletionAt : null,
             },
-            aceites = await db.ConsentRecords
+            aceites = (await db.ConsentRecords
                 .AsNoTracking()
                 .Where(c => c.UserId == UserId)
                 .OrderBy(c => c.AcceptedAt)
                 .Select(c => new { tipo = c.Kind, versao = c.Version, referencia = c.Reference, aceitoEm = c.AcceptedAt })
-                .ToListAsync(ct),
+                .ToListAsync(ct))
+                .Select(c => new { c.tipo, manifestacao = Models.ConsentKinds.Manifestation(c.tipo), c.versao, c.referencia, registradoEm = c.aceitoEm })
+                .ToList(),
             conexoesBancarias = await db.PolpIntegrations
                 .AsNoTracking()
                 .Where(p => p.UserId == UserId)
@@ -88,6 +93,7 @@ public class AccountController(
                 categoriaCartao = a.ProductType,
                 limite = a.CreditLimit,
                 limiteUsado = a.UsedLimit,
+                limiteDisponivel = a.AvailableLimit,
                 diaFechamento = a.ClosingDay,
                 diaVencimento = a.DueDay,
                 faturaAtual = a.CurrentInvoiceAmount,
@@ -125,6 +131,8 @@ public class AccountController(
                 valorOriginal = t.OriginalAmount,
                 moedaOriginal = t.OriginalCurrency,
                 mesFatura = t.BillMonth,
+                classificadaComoTributoPelaPolp = t.PolpTaxPayment,
+                orgaoArrecadador = t.TaxAuthority,
             }),
             // Registros de acesso só existem se AccessLog:Mode estiver ligado. São dados do
             // titular, então entram na cópia (LGPD art. 18, II).
@@ -147,6 +155,13 @@ public class AccountController(
                 .Select(a => new { destino = a.GoalId == null ? "reserva" : "meta", metaId = a.GoalId,
                     investimentoId = a.ImportedInvestmentId, caixinhaId = a.ImportedReservedBalanceId, criadoEm = a.CreatedAt })
                 .ToListAsync(ct),
+            contratosDeEmprestimo = (await db.LoanContracts
+                .AsNoTracking()
+                .Where(l => l.UserId == UserId)
+                .OrderBy(l => l.FirstObservedAt)
+                .ToListAsync(ct))
+                .Select(l => new { id = l.Id, integracaoId = l.IntegrationId, dados = JsonSerializer.Deserialize<LoanContractValues>(l.ValuesJson),
+                    atualizadoNaInstituicaoEm = l.ProviderUpdatedAt, importadoEm = l.FirstObservedAt }),
             regrasDeRendimento = await db.InvestmentRateProfiles
                 .AsNoTracking()
                 .Where(p => p.UserId == UserId)
@@ -162,6 +177,7 @@ public class AccountController(
             // dos dados da conta para o titular dela.
             funcionarios = (await db.Employees
                 .AsNoTracking()
+                .Include(e => e.PaymentMethods)
                 .Where(e => e.UserId == UserId)
                 .OrderBy(e => e.CreatedAt)
                 .ToListAsync(ct))
@@ -170,12 +186,12 @@ public class AccountController(
                     id = e.Id, nome = e.FullName, cpf = e.Cpf, cargo = e.Role, departamento = e.Department,
                     admissao = e.AdmissionDate, vinculo = e.EmploymentType?.ToString(), salarioBruto = e.GrossSalary,
                     situacao = e.Status.ToString(), desligamento = e.TerminationDate,
-                    pix = e.PixKeyType is null ? null : new { tipo = e.PixKeyType.ToString(), chave = e.PixKey },
-                    contaBancaria = e.PayeeBankCode is null ? null : new { banco = e.PayeeBankCode, agencia = e.PayeeBranch, conta = e.PayeeAccount, tipo = e.PayeeAccountType.ToString() },
+                    metodosDePagamento = ExportPaymentMethods(e.PaymentMethods),
                     criadoEm = e.CreatedAt, atualizadoEm = e.UpdatedAt,
                 }),
             fornecedores = (await db.Suppliers
                 .AsNoTracking()
+                .Include(x => x.PaymentMethods)
                 .Where(x => x.UserId == UserId)
                 .OrderBy(x => x.CreatedAt)
                 .ToListAsync(ct))
@@ -183,9 +199,60 @@ public class AccountController(
                 {
                     id = x.Id, razaoSocial = x.LegalName, nomeFantasia = x.TradeName, tipoDocumento = x.DocumentType,
                     documento = x.Document, categoria = x.Category,
-                    pix = x.PixKeyType is null ? null : new { tipo = x.PixKeyType.ToString(), chave = x.PixKey },
-                    contaBancaria = x.PayeeBankCode is null ? null : new { banco = x.PayeeBankCode, agencia = x.PayeeBranch, conta = x.PayeeAccount, tipo = x.PayeeAccountType.ToString() },
+                    metodosDePagamento = ExportPaymentMethods(x.PaymentMethods),
                     criadoEm = x.CreatedAt, atualizadoEm = x.UpdatedAt,
+                }),
+            marcacoesDePagamentoFuncionarios = await db.EmployeePaymentMarks
+                .AsNoTracking()
+                .Where(m => m.UserId == UserId)
+                .OrderBy(m => m.ReferenceMonth)
+                .Select(m => new { funcionarioId = m.EmployeeId, mes = m.ReferenceMonth, pago = m.Paid, atualizadoEm = m.UpdatedAt })
+                .ToListAsync(ct),
+            obrigacoesDaFolha = (await db.PayrollObligations
+                .AsNoTracking()
+                .Where(o => o.UserId == UserId)
+                .OrderBy(o => o.CreatedAt)
+                .ToListAsync(ct))
+                .Select(o => new
+                {
+                    id = o.Id, tipo = o.Kind.ToString(), funcionarioId = o.EmployeeId,
+                    descricao = o.Description, valorInformado = o.Amount,
+                    criadoEm = o.CreatedAt, atualizadoEm = o.UpdatedAt,
+                }),
+            historicoDaFolha = (await db.PayrollObligationEvents
+                .AsNoTracking()
+                .Where(x => x.UserId == UserId)
+                .OrderBy(x => x.OccurredAt)
+                .ToListAsync(ct))
+                .Select(x => new
+                {
+                    obrigacaoId = x.ObligationId, tipo = x.Kind.ToString(), funcionarioId = x.EmployeeId, acao = x.Action, descricao = x.Description,
+                    valorInformado = x.Amount, vencimento = x.DueDate, transacaoId = x.TransactionId, valorVinculado = x.PaymentAmount,
+                    autorId = x.ActorUserId, registradoEm = x.OccurredAt,
+                }),
+            fechamentosDeCaixa = (await db.CashClosings
+                .AsNoTracking()
+                .Where(c => c.UserId == UserId)
+                .OrderBy(c => c.Day).ThenBy(c => c.ClosedAt)
+                .ToListAsync(ct))
+                .Select(c => new
+                {
+                    dia = c.Day, contaId = c.ScopeAccountId == Guid.Empty ? (Guid?)null : c.ScopeAccountId,
+                    saldoInicial = c.OpeningBalance, entradas = c.Income, saidas = c.Expense, saldoFinal = c.ClosingBalance,
+                    movimentacoes = c.TransactionCount, fechadoEm = c.ClosedAt, reabertoEm = c.ReopenedAt,
+                }),
+            historicoDeMarcacoesDePagamento = (await db.PayeePaymentMarkEvents
+                .AsNoTracking()
+                .Where(x => x.UserId == UserId)
+                .OrderBy(x => x.OccurredAt).ThenBy(x => x.Version)
+                .ToListAsync(ct))
+                .Select(x => new
+                {
+                    funcionarioId = x.PayeeId,
+                    mes = x.ReferenceMonth, versao = x.Version, statusAnterior = x.PreviousStatus, novoStatus = x.NewStatus,
+                    valorInformadoAnterior = x.PreviousManualAmount, novoValorInformado = x.NewManualAmount,
+                    identificadoPeloBanco = x.BankIdentified, valorIdentificadoPeloBanco = x.BankPaidAmount,
+                    autorId = x.ActorUserId, registradoEm = x.OccurredAt,
                 }),
         };
 
@@ -227,6 +294,29 @@ public class AccountController(
         return Ok(AuthService.ToUserInfo(user));
     }
 
+    /// <summary>Registra a ciência (não consentimento nem aceite contratual) da versão vigente da
+    /// Política de Privacidade: append-only, com usuário, versão exata, data e tipo (privacy_notice).
+    /// Versão diferente da vigente é recusada: só se confirma o texto exibido. Versão marcada como
+    /// exigindo consentimento não aceita ciência; precisa de autorização específica.</summary>
+    /// POST /api/account/privacy-acknowledgement
+    [HttpPost("privacy-acknowledgement")]
+    public async Task<IActionResult> AcknowledgePrivacy([FromBody] PrivacyAcknowledgementDto dto, CancellationToken ct)
+    {
+        if (dto.Version != LegalDocuments.PrivacyVersion)
+            return BadRequest(new { message = "A Política de Privacidade foi atualizada. Recarregue a página." });
+        if (LegalDocuments.PrivacyVersionRequiresConsent)
+            return Conflict(new { message = "Esta atualização exige uma autorização específica, que não é dada pelo aviso." });
+        if (!await LegalDocuments.HasCurrentPrivacyRecordAsync(db, UserId, LegalDocuments.PrivacyVersion, ct))
+        {
+            db.ConsentRecords.Add(new Models.ConsentRecord
+            {
+                UserId = UserId, Kind = Models.ConsentKinds.PrivacyNotice, Version = LegalDocuments.PrivacyVersion,
+            });
+            await db.SaveChangesAsync(ct);
+        }
+        return NoContent();
+    }
+
     /// <summary>
     /// Exclui a conta e todos os dados associados, de forma definitiva. Pede a senha de novo
     /// (uma sessão esquecida aberta não deveria bastar pra apagar tudo).
@@ -258,32 +348,8 @@ public class AccountController(
             return BadRequest(new { message = "Senha incorreta." });
         }
 
-        // Depois da senha conferida, a exclusão vai até o fim mesmo se o navegador fechar a conexão:
-        // parar no meio deixaria consentimentos revogados com a conta ainda existindo.
-        var work = CancellationToken.None;
-        var revocation = await disconnectService.RequestProviderDeletionForAccountAsync(UserId, work);
-        int providerPending;
-
-        await using (var tx = await db.Database.BeginTransactionAsync(work))
-        {
-            providerPending = revocation.SupplementalPending
-                + await disconnectService.QueueUnconfirmedProviderDeletionsAsync(UserId, revocation.Confirmed, work);
-            await disconnectService.MarkAccountResourcesRemovedAsync(UserId, work);
-            // Reserva e metas também têm cascade de Users, mas saem explicitamente: são dados que o
-            // usuário digitou, e a exclusão deles não pode depender só da FK existir no banco.
-            await db.PlanningAllocations.Where(a => a.UserId == UserId).ExecuteDeleteAsync(work);
-            await db.SavingsGoals.Where(g => g.UserId == UserId).ExecuteDeleteAsync(work);
-            await db.Employees.Where(e => e.UserId == UserId).ExecuteDeleteAsync(work);
-            await db.Suppliers.Where(x => x.UserId == UserId).ExecuteDeleteAsync(work);
-            await db.InvestmentRateProfiles.Where(p => p.UserId == UserId).ExecuteDeleteAsync(work);
-            await db.EmergencyReserves.Where(r => r.UserId == UserId).ExecuteDeleteAsync(work);
-            // O resto (contas, transações, categorias, cartões, decisões de recorrência,
-            // integrações e registros de aceite) sai pelo cascade de Users no próprio Postgres.
-            await db.Users.Where(u => u.Id == UserId).ExecuteDeleteAsync(work);
-            await tx.CommitAsync(work);
-        }
-
-        sessionValidator.Invalidate(UserId);
+        // Depois da senha conferida, a exclusão vai até o fim mesmo se o navegador fechar a conexão.
+        var providerPending = await new AccountDeletionService(db, disconnectService, sessionValidator).DeleteAsync(UserId);
         SessionCookie.Delete(HttpContext, config);
 
         return Ok(new
@@ -292,4 +358,9 @@ public class AccountController(
             providerDeletion = providerPending == 0 ? "requested" : "pending",
         });
     }
+
+    private static IEnumerable<object> ExportPaymentMethods(IEnumerable<Models.PayeePaymentMethod> methods) =>
+        methods.OrderBy(m => m.CreatedAt).Select(m => m.Kind == Models.PayeePaymentKind.Pix
+            ? (object)new { tipo = "Pix", tipoDeChave = m.PixKeyType.ToString(), chave = m.PixKey, documentoDoTitular = m.HolderDocument, criadoEm = m.CreatedAt }
+            : new { tipo = "Transferencia", banco = m.BankCode, agencia = m.Branch, conta = m.Account, tipoDeConta = m.AccountType.ToString(), documentoDoTitular = m.HolderDocument, criadoEm = m.CreatedAt });
 }

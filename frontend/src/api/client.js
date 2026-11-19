@@ -6,8 +6,13 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5080/api";
 // nunca em localStorage/sessionStorage. Some ao recarregar a página e é recuperado por
 // GET /auth/me, que o AuthContext chama na abertura.
 let csrfToken = null;
+// Share only concurrent reads, never completed financial responses. Session transitions
+// abort outstanding reads so a request cannot be reused by the next signed-in user.
+const pendingReads = new Map();
 
 export function setCsrfToken(token) {
+  for (const entry of pendingReads.values()) entry.controller.abort();
+  pendingReads.clear();
   csrfToken = token || null;
 }
 
@@ -26,7 +31,7 @@ const NO_REDIRECT_ENDPOINTS = ["/auth/login", "/auth/register", "/auth/me"];
 
 // A sessão vive num cookie httpOnly que o JavaScript não lê: `credentials: "include"` faz o
 // navegador mandá-lo sozinho. Nenhum token é guardado no navegador por este código.
-export async function apiRequest(endpoint, options = {}) {
+async function performRequest(endpoint, options = {}) {
   const method = (options.method || "GET").toUpperCase();
 
   try {
@@ -47,6 +52,51 @@ export async function apiRequest(endpoint, options = {}) {
     error.kind = "network";
     throw error;
   }
+}
+
+export async function apiRequest(endpoint, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  // Custom headers/options can change response semantics: coalesce plain GETs only.
+  if (method !== "GET" || Object.keys(options).some((key) => !["method", "signal"].includes(key)))
+    return performRequest(endpoint, options);
+  const { signal } = options;
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  let entry = pendingReads.get(endpoint);
+  if (!entry) {
+    const controller = new AbortController();
+    entry = { controller, consumers: 0, promise: null };
+    entry.promise = performRequest(endpoint, { signal: controller.signal }).then(async (response) => {
+      // Keep cancellation effective until the body has arrived, before sharing it.
+      const body = await response.arrayBuffer();
+      return new Response([204, 205, 304].includes(response.status) ? null : body, {
+        status: response.status, statusText: response.statusText, headers: response.headers,
+      });
+    }).finally(() => {
+      if (pendingReads.get(endpoint) === entry) pendingReads.delete(endpoint);
+    });
+    pendingReads.set(endpoint, entry);
+  }
+  entry.consumers += 1;
+  return new Promise((resolve, reject) => {
+    let finished = false;
+    const finish = (callback, value) => {
+      if (finished) return;
+      finished = true;
+      signal?.removeEventListener("abort", abort);
+      entry.consumers -= 1;
+      if (entry.consumers === 0) {
+        if (signal?.aborted) entry.controller.abort();
+        if (pendingReads.get(endpoint) === entry) pendingReads.delete(endpoint);
+      }
+      callback(value);
+    };
+    const abort = () => finish(reject, new DOMException("Aborted", "AbortError"));
+    signal?.addEventListener("abort", abort, { once: true });
+    entry.promise.then(
+      (response) => { if (!finished) finish(resolve, response.clone()); },
+      (error) => finish(reject, error),
+    );
+  });
 }
 
 export async function readError(response) {

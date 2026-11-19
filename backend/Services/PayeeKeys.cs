@@ -11,6 +11,20 @@ public static partial class PayeeKeys
 
     public static string Digits(string? value) => new((value ?? string.Empty).Where(char.IsDigit).ToArray());
 
+    // Conta completa do destinatário (banco + agência sem dígito + número com dígito verificador), na
+    // mesma forma dos dois lados: cadastro ("45678-9") e banco (partie_number + partie_check_digit).
+    // Zeros à esquerda não diferenciam contas. Qualquer parte ausente ou inválida = sem identidade.
+    public static string? AccountLookupInput(Guid companyId, string? bankCode, string? branch, string? accountWithDigit)
+    {
+        var bank = Digits(bankCode).TrimStart('0');
+        var agency = Digits((branch ?? string.Empty).Split('-')[0]).TrimStart('0');
+        var account = new string((accountWithDigit ?? string.Empty).ToUpperInvariant()
+            .Where(c => char.IsAsciiDigit(c) || c == 'X').ToArray()).TrimStart('0');
+        if (bank.Length is 0 or > 3 || agency.Length is 0 or > 5 || account.Length < 2 || account.Length > 21) return null;
+        if (account[..^1].Contains('X')) return null;
+        return LookupInput("payee-account", companyId, $"{bank}|{agency}|{account}");
+    }
+
     /// <summary>Chave no formato canônico do Pix, ou nulo se não for uma chave válida desse tipo.
     /// Formato válido não prova que a chave existe nem de quem ela é.</summary>
     public static string? NormalizePixKey(PixKeyType type, string? raw)
@@ -45,6 +59,11 @@ public static partial class PayeeKeys
         cnpj.Length == 14 ? $"••.•••.•••/{cnpj[8..12]}-{cnpj[12..]}" : "••.•••.•••/••••-••";
 
     public static string MaskDocument(string digits) => digits.Length == 14 ? MaskCnpj(digits) : MaskCpf(digits);
+
+    // Documento do fornecedor na tela: CNPJ é cadastro público de empresa e aparece inteiro; CPF de
+    // fornecedor pessoa física continua mascarado. O valor guardado segue cifrado.
+    public static string SupplierDocumentView(string digits) =>
+        digits.Length == 14 ? $"{digits[..2]}.{digits[2..5]}.{digits[5..8]}/{digits[8..12]}-{digits[12..]}" : MaskCpf(digits);
 
     public static string MaskCpf(string cpf) =>
         cpf.Length == 11 ? $"•••.•••.{cpf[6..9]}-{cpf[9..]}" : "•••.•••.•••-••";

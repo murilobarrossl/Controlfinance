@@ -173,16 +173,20 @@ export default function Privacidade() {
       <PrivacySection id="data" active={activeSection === "data"} title="O que guardamos sobre você">
         <ul className="privacidade__list">
           <li><strong>Cadastro:</strong> nome, e-mail, senha (só em forma irreversível), fuso horário e o tipo de documento. O número do CPF/CNPJ não fica guardado, só um código de verificação gerado a partir dele.</li>
-          <li><strong>Bancos conectados:</strong> contas, saldos, extrato (com horário, tipo da operação e, quando o banco informa, nome, banco e 4 últimos dígitos da conta da outra parte), dados de cartão, investimentos, caixinhas e os 4 últimos dígitos do número da conta, cifrados, enquanto a conexão existir.{isBusinessHolder(user) && " Inclui observações de saldo disponível com data do banco, sujeitas ao mesmo prazo do histórico bancário."}</li>
+          <li><strong>Bancos conectados:</strong> contas, saldos, extrato (com horário, tipo da operação e, quando o banco informa, nome, banco e 4 últimos dígitos da conta da outra parte), dados de cartão, investimentos, caixinhas e os 4 últimos dígitos do número da conta, cifrados, enquanto a autorização no banco estiver ativa. Se ela expirar ou for revogada no banco, os dados deixam de ser usados e são apagados após 30 dias.{isBusinessHolder(user) ? " Inclui observações de saldo disponível com data do banco, sujeitas ao mesmo prazo do histórico bancário. Quando o banco informa o CPF ou a conta completa do destinatário de uma saída, guardamos só códigos derivados deles (HMAC com chave secreta e o identificador da sua empresa; não são anônimos), usados apenas para identificar pagamentos aos funcionários que você cadastrou. Pagamento identificado não significa obrigação quitada." :" Inclui contratos de empréstimo (produto, valores contratados, CET, parcelas, saldo devedor e vencimentos), quando você autoriza operações de crédito; são só informativos e não entram nos totais."}</li>
           <li><strong>O que você cadastra:</strong> categorias e edições de nome/categoria das transações importadas.</li>
+          {isBusinessHolder(user) && (
+            <li><strong>Funcionários, fornecedores e caixa:</strong> cadastros de funcionários (nome, CPF, cargo, departamento, vínculo, admissão, salário bruto e desligamento) e de fornecedores (nomes, CPF ou CNPJ e categoria), formas de pagamento, custos adicionais, marcações de pagamento com o histórico de alterações e fechamentos de caixa. A empresa decide sobre os dados de funcionários e fornecedores; o Control Finance os trata em nome dela. Ficam até você excluí-los ou excluir a conta; fechamentos de caixa que usaram dados de um banco saem quando ele é desconectado, e o histórico de marcações continua.</li>
+          )}
           <li><strong>Aceites:</strong> qual versão dos Termos e da Política você aceitou e quando, e cada autorização de conexão bancária.</li>
+          <li><strong>Inatividade:</strong> a data do seu último acesso. Uma conta sem nenhum acesso por 3 anos é excluída com todos os dados, depois de avisos por e-mail com 90, 30 e 7 dias de antecedência; basta entrar na conta antes da data informada para mantê-la.</li>
           <li>
             <strong>Prazo do histórico bancário:</strong>{" "}
             {dataPolicy === null
               ? <Skeleton width="60%" />
               : dataPolicy.syncedHistoryMonths
-              ? `extrato, movimentações de investimento e histórico de posições e de caixinhas com mais de ${dataPolicy.syncedHistoryMonths} meses não são importados e são apagados automaticamente. A posição atual dos investimentos e o que você cadastrou não são afetados.`
-              : "sem prazo máximo definido: o histórico importado fica guardado enquanto o banco estiver conectado."}
+              ? `extrato, movimentações de investimento e histórico de posições e de caixinhas com mais de ${dataPolicy.syncedHistoryMonths} meses não são importados e são apagados automaticamente${isBusinessHolder(user) ? ", assim como os fechamentos de caixa e os valores do banco no histórico de marcações desse período" : ""}. A posição atual dos investimentos e o que você cadastrou não são afetados.`
+              : "sem prazo máximo definido: o histórico importado fica guardado enquanto a autorização no banco estiver ativa."}
           </li>
           {dataPolicy?.accessLogEnabled && (
             <li>
@@ -226,9 +230,10 @@ export default function Privacidade() {
           </ul>
         )}
         <p className="privacidade__hint">
-          Desconectar apaga do Control Finance tudo que veio daquele banco, inclusive investimentos e caixinhas, e solicita a
+          Desconectar apaga do Control Finance tudo que veio daquele banco, inclusive investimentos, caixinhas e contratos de empréstimo, e solicita a
           exclusão da conexão ao serviço de integração bancária.
           Sua conta no Control Finance continua existindo.
+          {isBusinessHolder(user) && " Fechamentos de caixa que usaram dados desse banco também são apagados; cadastros e marcações de pagamento continuam guardados."}
         </p>
       </PrivacySection>
 
@@ -295,7 +300,7 @@ export default function Privacidade() {
         <p className="privacidade__text">
           Apaga de forma definitiva sua conta e tudo que está guardado nos nossos servidores: cadastro, aceites,
           bancos conectados, contas, lançamentos, cartões, categorias, investimentos e caixinhas importados,
-          reserva de emergência, metas de economia e regras de rendimento informadas. Também solicitamos ao serviço de integração bancária a exclusão das suas
+          reserva de emergência, metas de economia e regras de rendimento informadas{isBusinessHolder(user) ? ", além de funcionários, fornecedores, custos, marcações de pagamento e fechamentos de caixa" : ""}. Também solicitamos ao serviço de integração bancária a exclusão das suas
           conexões bancárias. Não dá para desfazer.
         </p>
         <p className="privacidade__hint">
@@ -327,7 +332,7 @@ export default function Privacidade() {
         confirmVariant="danger"
         open={pendingDisconnect !== null}
         title={`Desconectar ${pendingDisconnect?.label}?`}
-        message="Todas as contas e cartões desta conexão saem do Control Finance, e apagamos na hora o saldo, o extrato, os investimentos e as caixinhas que vieram desse banco. Também solicitamos ao serviço de integração bancária a exclusão da conexão."
+        message={`Todas as contas e cartões desta conexão saem do Control Finance, e apagamos na hora o saldo, o extrato, os investimentos e as caixinhas que vieram desse banco${isBusinessHolder(user) ? ", além dos fechamentos de caixa que usaram esses dados" : ""}. Também solicitamos ao serviço de integração bancária a exclusão da conexão.`}
         confirmLabel="Desconectar e apagar dados"
         onConfirm={() => {
           const target = pendingDisconnect;

@@ -2,30 +2,31 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import Button from "../../../components/ui/Button/Button.jsx";
 import Skeleton from "../../../components/ui/Skeleton/Skeleton.jsx";
-import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog/ConfirmDialog.jsx";
 import FormDialog from "../../../components/ui/FormDialog/FormDialog.jsx";
 import { DateField } from "../../../components/ui/FormDialog/FormField.jsx";
 import EmployeeFormDialog from "./EmployeeFormDialog.jsx";
 import { ClassificationDialog } from "./EmployeeDetailDialogs.jsx";
-import { BankAccountDialog, PixDialog } from "./PaymentDialogs.jsx";
-import { Field, PaymentMethodsSection, Section, TextButton } from "./RecordDetailParts.jsx";
-import { paymentRemovalConfirmations } from "./payeePayment.js";
+import { PaymentMethodDialog } from "./PaymentDialogs.jsx";
+import { Field, PaymentMethodListSection, PaymentMonthToggle, Section, TextButton, usePaymentMonth } from "./RecordDetailParts.jsx";
+import EmployeeCosts from "./EmployeeCosts.jsx";
+import { paymentMethodRemoval } from "./payeePayment.js";
 import {
   deleteEmployee,
   getEmployee,
+  getEmployeePaymentMonth,
   getEmployeesSummary,
   reactivateEmployee,
-  removeEmployeeBankAccount,
-  removeEmployeePix,
-  setEmployeeBankAccount,
-  setEmployeePix,
+  addEmployeePaymentMethod,
+  removeEmployeePaymentMethod,
+  revealEmployeePixKey,
+  setEmployeePaymentMonth,
+  updateEmployeePaymentMethod,
   terminateEmployee,
 } from "../../../api/employees.js";
 import { isAbortError } from "../../../api/client.js";
 import { formatCurrency } from "../../../utils/financeMath.js";
-import { transactionTone } from "../../../utils/financialTone.js";
-import { EMPLOYEE_STATUS, employmentTypeLabel, formatDateOnly, todayIso } from "../../../utils/employees.js";
+import { employmentTypeLabel, formatDateOnly, todayIso } from "../../../utils/employees.js";
 import usePageTitle from "../../../hooks/usePageTitle.js";
 import "./RecordDetail.css";
 
@@ -51,11 +52,13 @@ export default function EmployeeDetail() {
   const [result, setResult] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [dialog, setDialog] = useState(null);
+  const [paymentTarget, setPaymentTarget] = useState(null);
   const [terminationDate, setTerminationDate] = useState(todayIso);
   const [actionError, setActionError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const employee = result?.key === employeeId ? result.data : null;
   usePageTitle(employee ? employee.fullName : "Funcionário");
+  const paymentMonth = usePaymentMonth(employeeId, getEmployeePaymentMonth, setEmployeePaymentMonth);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -130,12 +133,10 @@ export default function EmployeeDetail() {
     );
   }
 
-  const statusInfo = EMPLOYEE_STATUS[employee.status] ?? EMPLOYEE_STATUS.Active;
   const isActive = employee.status === "Active";
   const confirmations = {
-    ...paymentRemovalConfirmations(employee, {
-      removePix: () => removeEmployeePix(employee.id),
-      removeBank: () => removeEmployeeBankAccount(employee.id),
+    ...(paymentTarget && {
+      removePayment: paymentMethodRemoval(paymentTarget, () => removeEmployeePaymentMethod(employee.id, paymentTarget.id)),
     }),
     reactivate: CONFIRMATIONS.reactivate(employee),
     remove: CONFIRMATIONS.remove(employee),
@@ -150,7 +151,6 @@ export default function EmployeeDetail() {
         <div className="record-detail__identity">
           <div className="record-detail__name-row">
             <h1>{employee.fullName}</h1>
-            <StatusPill status={statusInfo.pill}>{statusInfo.label}</StatusPill>
           </div>
           <p className="record-detail__meta">
             {employee.role} · Admissão em {formatDateOnly(employee.admissionDate)}
@@ -187,7 +187,9 @@ export default function EmployeeDetail() {
           <Field label="CPF">{employee.cpfMasked}</Field>
           <Field label="Cargo ou função">{employee.role}</Field>
           <Field label="Admissão">{formatDateOnly(employee.admissionDate)}</Field>
-          <Field label="Salário bruto mensal" tone={transactionTone("Expense", employee.grossSalary)}>{formatCurrency(employee.grossSalary)}</Field>
+          <Field label="Salário bruto mensal" tone="money">
+            {formatCurrency(employee.grossSalary)}
+          </Field>
         </dl>
       </Section>
 
@@ -206,19 +208,40 @@ export default function EmployeeDetail() {
         </dl>
       </Section>
 
-      <PaymentMethodsSection id="employee-payment" payee={employee} onOpen={setDialog} />
+      <PaymentMethodListSection
+        id="employee-payment"
+        payee={employee}
+        loadPixKey={revealEmployeePixKey}
+        onAdd={() => {
+          setPaymentTarget(null);
+          setDialog("payment");
+        }}
+        onEdit={(method) => {
+          setPaymentTarget(method);
+          setDialog("payment");
+        }}
+        onRemove={(method) => {
+          setPaymentTarget(method);
+          setDialog("removePayment");
+        }}
+      />
+
+      <EmployeeCosts employee={employee} />
+
+      <PaymentMonthToggle key={employee.id} month={paymentMonth} />
 
       {dialog === "core" && <EmployeeFormDialog employee={employee} onClose={closeDialog} onSaved={applySaved} />}
       {dialog === "classification" && (
         <ClassificationDialog employee={employee} departments={departments} onClose={closeDialog} onSaved={applySaved} />
       )}
-      {dialog === "pix" && (
-        <PixDialog current={employee.pix} save={(payload) => setEmployeePix(employee.id, payload)} onClose={closeDialog} onSaved={applySaved} />
-      )}
-      {dialog === "bank" && (
-        <BankAccountDialog
-          current={employee.bank}
-          save={(payload) => setEmployeeBankAccount(employee.id, payload)}
+      {dialog === "payment" && (
+        <PaymentMethodDialog
+          current={paymentTarget}
+          save={(payload) =>
+            paymentTarget
+              ? updateEmployeePaymentMethod(employee.id, paymentTarget.id, payload)
+              : addEmployeePaymentMethod(employee.id, payload)
+          }
           onClose={closeDialog}
           onSaved={applySaved}
         />

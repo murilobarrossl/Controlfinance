@@ -15,6 +15,12 @@ namespace ControlFinance.API.Tests;
 
 public class EmployeesTests
 {
+    private static PayeePaymentMethodDto PixMethod(string type, string key) => new("Pix", new PayeePixDto(type, key), null, HolderCpf);
+
+    // Titular de quem recebe: obrigatório para TED e Pix sem chave de documento.
+    private const string HolderCpf = "52998224725";
+    private static PayeePaymentMethodDto BankMethod(PayeeBankDto bank) => new("Bank", null, bank, HolderCpf);
+
     // CPF válido a partir de 9 dígitos quaisquer: os testes precisam de vários CPFs diferentes.
     private static string Cpf(int seed)
     {
@@ -88,9 +94,26 @@ public class EmployeesTests
 
         Assert.Null(detail.EmploymentType);
         Assert.Null(detail.Department);
-        Assert.Null(detail.Pix);
-        Assert.Null(detail.Bank);
+        Assert.Empty(detail.PaymentMethods);
         Assert.Null(t.NewContext().Employees.Single().EmploymentType);
+    }
+
+    [Fact]
+    public async Task Titular_do_metodo_e_obrigatorio_fora_das_chaves_de_documento_e_fica_cifrado()
+    {
+        using var t = Company();
+        var created = await Create(t, Dto(cpf: Cpf(40)));
+        var c = Controller(t);
+        Assert.Equal(400, Http.Status(await c.AddPaymentMethod(created.Id, new("Pix", new PayeePixDto("Email", "ana@x.com"), null), default)));
+        Assert.Equal(400, Http.Status(await c.AddPaymentMethod(created.Id, new("Bank", null, new PayeeBankDto("341", "1234", "987654-3", "Corrente"), "11111111111"), default)));
+        Assert.Equal(200, Http.Status(await c.AddPaymentMethod(created.Id, new("Pix", new PayeePixDto("Cpf", Cpf(41)), null), default)));
+        var detail = Results.OkValue<EmployeeDetailDto>(await c.AddPaymentMethod(created.Id, PixMethod("Random", Guid.NewGuid().ToString()), default));
+
+        var random = detail.PaymentMethods.Single(m => m.Pix?.Type == "Random");
+        Assert.Equal(PayeeKeys.MaskDocument(HolderCpf), random.HolderDocumentMasked);
+        Assert.Null(detail.PaymentMethods.Single(m => m.Pix?.Type == "Cpf").HolderDocumentMasked);
+        Assert.DoesNotContain(HolderCpf, Http.Json(new OkObjectResult(detail)));
+        Assert.Contains(t.NewContext().EmployeePaymentMethods.AsEnumerable(), m => m.HolderDocument == HolderCpf);
     }
 
     [Fact]
@@ -99,21 +122,22 @@ public class EmployeesTests
         using var t = Company();
         var cpf = Cpf(2);
         var created = await Create(t, Dto(cpf: cpf));
-        await Controller(t).SetPix(created.Id, new PayeePixDto("Email", "Maria.Silva@Exemplo.com.br"), default);
+        await Controller(t).AddPaymentMethod(created.Id, PixMethod("Email", "Maria.Silva@Exemplo.com.br"), default);
         var detail = Results.OkValue<EmployeeDetailDto>(
-            await Controller(t).SetBankAccount(created.Id, new PayeeBankDto("341", "1234", "987654-3", "Corrente"), default));
+            await Controller(t).AddPaymentMethod(created.Id, BankMethod(new PayeeBankDto("341", "1234", "987654-3", "Corrente")), default));
 
         var json = Http.Json(new OkObjectResult(detail));
         Assert.DoesNotContain(cpf, json);
         Assert.DoesNotContain("maria.silva@exemplo", json);
         Assert.DoesNotContain("987654", json);
         Assert.Equal($"•••.•••.{cpf[6..9]}-{cpf[9..]}", detail.CpfMasked);
-        Assert.Equal("m•••@exemplo.com.br", detail.Pix!.KeyMasked);
-        Assert.Equal("•••• 6543", detail.Bank!.AccountMasked);
+        Assert.Equal("m•••@exemplo.com.br", detail.PaymentMethods[0].Pix!.KeyMasked);
+        Assert.Equal("•••• 6543", detail.PaymentMethods[1].Bank!.AccountMasked);
 
         await using var connection = t.Db.Database.GetDbConnection();
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT \"FullNameEncrypted\" || '|' || \"CpfEncrypted\" || '|' || \"GrossSalaryEncrypted\" || '|' || \"PixKeyEncrypted\" || '|' || \"PayeeAccountEncrypted\" FROM \"Employees\"";
+        cmd.CommandText = "SELECT (SELECT \"FullNameEncrypted\" || '|' || \"CpfEncrypted\" || '|' || \"GrossSalaryEncrypted\" FROM \"Employees\") || '|' || "
+            + "(SELECT group_concat(coalesce(\"PixKeyEncrypted\", '') || coalesce(\"AccountEncrypted\", ''), '|') FROM \"EmployeePaymentMethods\")";
         var raw = (string)(await cmd.ExecuteScalarAsync())!;
         Assert.DoesNotContain("Maria", raw);
         Assert.DoesNotContain(cpf, raw);
@@ -128,11 +152,11 @@ public class EmployeesTests
         using var t = Company();
         var cpf = Cpf(3);
         var first = await Create(t, Dto(cpf: cpf));
-        await Controller(t).SetPix(first.Id, new PayeePixDto("Phone", "(11) 98765-4321"), default);
+        await Controller(t).AddPaymentMethod(first.Id, PixMethod("Phone", "(11) 98765-4321"), default);
         var second = await Create(t, Dto(name: "Outra Pessoa", cpf: Cpf(4)));
 
         Assert.Equal(400, Http.Status(await Controller(t).Create(Dto(name: "Mais Alguém", cpf: cpf), default)));
-        var samePix = await Controller(t).SetPix(second.Id, new PayeePixDto("Phone", "+55 11 98765-4321"), default);
+        var samePix = await Controller(t).AddPaymentMethod(second.Id, PixMethod("Phone", "+55 11 98765-4321"), default);
         Assert.Equal(400, Http.Status(samePix));
         Assert.Contains("outro funcionário", Message(samePix));
 
@@ -169,11 +193,11 @@ public class EmployeesTests
         using var t = Company();
         var created = await Create(t, Dto());
 
-        var result = await Controller(t).SetPix(created.Id, new PayeePixDto(type, key), default);
+        var result = await Controller(t).AddPaymentMethod(created.Id, PixMethod(type, key), default);
 
         Assert.Equal(400, Http.Status(result));
         Assert.Contains(expected, Message(result));
-        Assert.Null(t.NewContext().Employees.Single().PixKeyHash);
+        Assert.Empty(t.NewContext().EmployeePaymentMethods);
     }
 
     [Fact]
@@ -188,8 +212,8 @@ public class EmployeesTests
             new PayeeBankDto("341", "1234", "12a4", "Corrente"),
             new PayeeBankDto("341", "1234", "1234-5", "Investimento"),
         })
-            Assert.Equal(400, Http.Status(await Controller(t).SetBankAccount(created.Id, bank, default)));
-        Assert.Null(t.NewContext().Employees.Single().PayeeBankCode);
+            Assert.Equal(400, Http.Status(await Controller(t).AddPaymentMethod(created.Id, BankMethod(bank), default)));
+        Assert.Empty(t.NewContext().EmployeePaymentMethods);
     }
 
     [Fact]
@@ -199,26 +223,33 @@ public class EmployeesTests
         var cpf = Cpf(5);
         var created = await Create(t, Dto(cpf: cpf));
         await Controller(t).SetClassification(created.Id, new EmployeeClassificationDto("Produção", "Clt"), default);
-        await Controller(t).SetPix(created.Id, new PayeePixDto("Cpf", cpf), default);
-        await Controller(t).SetBankAccount(created.Id, new PayeeBankDto("001", "0001", "12345-6", "Salario"), default);
+        await Controller(t).AddPaymentMethod(created.Id, PixMethod("Cpf", cpf), default);
+        await Controller(t).AddPaymentMethod(created.Id, BankMethod(new PayeeBankDto("001", "0001", "12345-6", "Salario")), default);
 
         var edited = Results.OkValue<EmployeeDetailDto>(await Controller(t).Update(created.Id, Dto(name: "Maria Souza", cpf: "", salary: 4000m), default));
         Assert.Equal("Maria Souza", edited.FullName);
         Assert.Equal(created.CpfMasked, edited.CpfMasked);
         Assert.Equal("Clt", edited.EmploymentType);
         Assert.Equal("Produção", edited.Department);
-        Assert.NotNull(edited.Pix);
-        Assert.NotNull(edited.Bank);
+        Assert.Equal(["Pix", "Bank"], edited.PaymentMethods.Select(m => m.Kind));
         Assert.Equal(4000m, edited.GrossSalary);
 
-        var changedPix = Results.OkValue<EmployeeDetailDto>(await Controller(t).SetPix(created.Id, new PayeePixDto("Email", "maria@padaria.com"), default));
-        Assert.Equal("Email", changedPix.Pix!.Type);
+        var pixId = edited.PaymentMethods[0].Id;
+        var bankId = edited.PaymentMethods[1].Id;
+        var secondPix = Results.OkValue<EmployeeDetailDto>(await Controller(t).AddPaymentMethod(created.Id, PixMethod("Email", "maria@padaria.com"), default));
+        Assert.Equal(3, secondPix.PaymentMethods.Count);
+        var duplicate = await Controller(t).AddPaymentMethod(created.Id, PixMethod("Email", "Maria@Padaria.com"), default);
+        Assert.Contains("este funcionário", Message(duplicate));
 
-        Assert.Null(Results.OkValue<EmployeeDetailDto>(await Controller(t).RemovePix(created.Id, default)).Pix);
-        Assert.Null(Results.OkValue<EmployeeDetailDto>(await Controller(t).RemoveBankAccount(created.Id, default)).Bank);
-        var stored = t.NewContext().Employees.Single();
-        Assert.Null(stored.PixKeyHash);
-        Assert.Null(stored.PayeeAccount);
+        var changed = Results.OkValue<EmployeeDetailDto>(await Controller(t).UpdatePaymentMethod(created.Id, pixId, BankMethod(new PayeeBankDto("341", "1234", "1111-1", "Corrente")), default));
+        Assert.Equal("Bank", changed.PaymentMethods.Single(m => m.Id == pixId).Kind);
+        Assert.Equal(3, changed.PaymentMethods.Count);
+
+        Assert.Equal(2, Results.OkValue<EmployeeDetailDto>(await Controller(t).RemovePaymentMethod(created.Id, bankId, default)).PaymentMethods.Count);
+        var stored = t.NewContext().EmployeePaymentMethods.ToList();
+        Assert.Equal(2, stored.Count);
+        Assert.DoesNotContain(stored, m => m.Id == bankId);
+        Assert.Null(stored.Single(m => m.Id == pixId).PixKeyHash);
     }
 
     [Fact]
@@ -295,10 +326,10 @@ public class EmployeesTests
         Assert.Equal(404, Http.Status(await c.Get(foreign.Id, default)));
         Assert.Equal(404, Http.Status(await c.Update(foreign.Id, Dto(), default)));
         Assert.Equal(404, Http.Status(await c.SetClassification(foreign.Id, new EmployeeClassificationDto("X", null), default)));
-        Assert.Equal(404, Http.Status(await c.SetPix(foreign.Id, new PayeePixDto("Email", "a@b.com"), default)));
-        Assert.Equal(404, Http.Status(await c.RemovePix(foreign.Id, default)));
-        Assert.Equal(404, Http.Status(await c.SetBankAccount(foreign.Id, new PayeeBankDto("341", "1", "1", "Corrente"), default)));
-        Assert.Equal(404, Http.Status(await c.RemoveBankAccount(foreign.Id, default)));
+        Assert.Equal(404, Http.Status(await c.AddPaymentMethod(foreign.Id, PixMethod("Email", "a@b.com"), default)));
+        Assert.Equal(404, Http.Status(await c.UpdatePaymentMethod(foreign.Id, Guid.NewGuid(), PixMethod("Email", "a@b.com"), default)));
+        Assert.Equal(404, Http.Status(await c.RemovePaymentMethod(foreign.Id, Guid.NewGuid(), default)));
+        Assert.Equal(404, Http.Status(await c.RevealPixKey(foreign.Id, Guid.NewGuid(), default)));
         Assert.Equal(404, Http.Status(await c.Terminate(foreign.Id, new EmployeeTerminationDto(new DateOnly(2025, 1, 1)), default)));
         Assert.Equal(404, Http.Status(await c.Reactivate(foreign.Id, default)));
         Assert.Equal(404, Http.Status(await c.Delete(foreign.Id, default)));
@@ -325,8 +356,8 @@ public class EmployeesTests
         await Controller(t).SetClassification(joao.Id, new EmployeeClassificationDto("Vendas", null), default);
         await Controller(t).Terminate(joao.Id, new EmployeeTerminationDto(new DateOnly(2025, 1, 10)), default);
 
-        var first = Results.OkValue<EmployeeListDto>(await Controller(t).List(null, null, null, 1, 25));
-        var second = Results.OkValue<EmployeeListDto>(await Controller(t).List(null, null, null, 2, 25));
+        var first = Results.OkValue<EmployeeListDto>(await Controller(t).List(null, null, null, null, 1, 25));
+        var second = Results.OkValue<EmployeeListDto>(await Controller(t).List(null, null, null, null, 2, 25));
         Assert.Equal(31, first.TotalCount);
         Assert.Equal(25, first.Items.Count);
         Assert.Equal(6, second.Items.Count);
@@ -336,7 +367,7 @@ public class EmployeesTests
         Assert.Equal(joao.Id, Assert.Single(Results.OkValue<EmployeeListDto>(await Controller(t).List(null, "Terminated", null)).Items).Id);
         Assert.Equal(15, Results.OkValue<EmployeeListDto>(await Controller(t).List(null, "Active", "Vendas")).TotalCount);
         Assert.Equal(400, Http.Status(await Controller(t).List(null, "Ferias", null)));
-        Assert.Equal(100, Results.OkValue<EmployeeListDto>(await Controller(t).List(null, null, null, 1, 10_000)).PageSize);
+        Assert.Equal(100, Results.OkValue<EmployeeListDto>(await Controller(t).List(null, null, null, null, 1, 10_000)).PageSize);
 
         var summary = Results.OkValue<EmployeeSummaryDto>(await Controller(t).Summary(default));
         Assert.Equal(30, summary.ActiveCount);

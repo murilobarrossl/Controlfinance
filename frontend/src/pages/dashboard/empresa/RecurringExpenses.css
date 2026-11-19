@@ -1,0 +1,215 @@
+.recurring-expenses__note {
+  max-width: 75ch;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.recurring-expenses__table td:first-child {
+  max-width: 26rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.recurring-expenses__table .registry__secondary {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.recurring-expenses__amount {
+  color: var(--color-text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.recurring-expenses__merchant {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.recurring-expenses__merchant-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.recurring-expenses__logo {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 1.375rem;
+}
+
+.recurring-expenses__header {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.recurring-expenses__header .record-detail__identity {
+  flex: 1 1 auto;
+}
+
+.recurring-expenses__header h1 {
+  overflow-wrap: anywhere;
+}
+
+.recurring-expenses__logo--header {
+  width: auto;
+  height: auto;
+  margin-inline-start: auto;
+}
+
+.recurring-logo {
+  --logo-box: 1.25rem;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: var(--logo-box);
+  height: var(--logo-box);
+  color: var(--color-text-primary);
+}
+
+.recurring-logo svg {
+  width: 80%;
+  height: 80%;
+}
+
+.recurring-logo--wide {
+  width: auto;
+}
+
+.recurring-logo--wide svg {
+  width: calc(var(--logo-box) * 2);
+  height: calc(var(--logo-box) * 0.6);
+}
+
+.recurring-logo--glyph {
+  border-radius: 50%;
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.recurring-logo--glyph svg {
+  width: 60%;
+  height: 60%;
+}
+
+.recurring-logo--neutral {
+  color: var(--color-text-tertiary);
+}
+
+.recurring-expenses__logo--header .recurring-logo {
+  --logo-box: 1.75rem;
+}
+
+.recurring-expenses__retry {
+  align-self: flex-start;
+  border: 0;
+  padding: 0.5rem 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.recurring-expenses__retry:hover {
+  color: var(--color-text-secondary);
+}
+
+.recurring-expenses__retry:focus-visible,
+.recurring-expenses .registry__name:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 4px;
+}
+
+@media (max-width: 64rem) {
+  .recurring-expenses__table,
+  .recurring-expenses__table tbody,
+  .recurring-expenses__table tr,
+  .recurring-expenses__table td {
+    display: block;
+    width: auto;
+  }
+
+  .recurring-expenses__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .recurring-expenses__table tr {
+    padding-block: 1rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .registry .recurring-expenses__table td {
+    border: 0;
+    padding: 0.35rem 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .recurring-expenses__table td:first-child {
+    max-width: none;
+    padding-bottom: 0.75rem;
+  }
+
+  .recurring-expenses__table td[data-label]:not(:first-child) {
+    display: grid;
+    grid-template-columns: minmax(8rem, 0.8fr) minmax(0, 1fr);
+    gap: 0.25rem 1rem;
+  }
+
+  .recurring-expenses__table td[data-label]:not(:first-child)::before {
+    content: attr(data-label);
+    color: var(--color-text-secondary);
+    font-size: 0.875rem;
+    font-weight: 400;
+  }
+
+  .recurring-expenses__table td .registry__secondary {
+    grid-column: 2;
+  }
+
+  .recurring-expenses__table td.biz-table__numeric {
+    text-align: left;
+  }
+
+  .recurring-expenses__table .recurring-expenses__merchant-text .registry__secondary {
+    grid-column: auto;
+  }
+
+  .recurring-expenses__history {
+    min-width: 28rem;
+  }
+}
+
+.recurring-expenses__period {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (min-width: 56.3125em) {
+  .recurring-expenses-page .biz-module__header {
+    min-height: var(--dash-header-height);
+    padding-right: var(--dash-toolbar-space, 0px);
+  }
+}
+
+@media (max-width: 40em) {
+  .recurring-expenses__period {
+    justify-content: flex-start;
+  }
+}

@@ -134,9 +134,12 @@ function joinUnique(parts) {
   return out.join(" · ");
 }
 
+const MOVEMENT_TAGS = { CardBillPayment: "Pagamento de fatura", LoanDisbursement: "Empréstimo recebido" };
+
 function movementTitle(t) {
   const income = t.type === "Income";
   if (t.movementKind === "CardBillPayment") return "Pagamento de fatura";
+  if (t.movementKind === "LoanDisbursement") return "Empréstimo recebido";
 
   const code = t.bank.operationType;
   if (t.account.isCard) {
@@ -384,7 +387,7 @@ export default function TransactionDetail() {
                 {future && <span className="tx-detail__tag">Lançamento futuro</span>}
                 {isTransfer && (
                   <span className="tx-detail__tag">
-                    {t.movementKind === "CardBillPayment" ? "Pagamento de fatura" : "Entre suas contas"}, fora dos totais
+                    {MOVEMENT_TAGS[t.movementKind] ?? "Entre suas contas"}, fora dos totais
                   </span>
                 )}
               </p>

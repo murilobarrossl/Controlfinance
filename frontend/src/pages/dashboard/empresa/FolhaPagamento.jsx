@@ -8,9 +8,9 @@ import StatusPill from "../../../components/ui/StatusPill/StatusPill.jsx";
 import Pager from "../../../components/ui/Pager/Pager.jsx";
 import { getEmployees, getEmployeesSummary } from "../../../api/employees.js";
 import { formatCurrency } from "../../../utils/financeMath.js";
-import { transactionTone } from "../../../utils/financialTone.js";
 import { EMPLOYEE_STATUS, formatDateOnly } from "../../../utils/employees.js";
-import { StatusFilter, SummaryItem } from "./RegistryParts.jsx";
+import { PaidAmountCell, PaymentFilter, PaymentStatusMark, StatusFilter, SummaryItem } from "./RegistryParts.jsx";
+import { openRow } from "./registryRow.js";
 import useRegistryData, { useDebounced } from "./useRegistryData.js";
 import "./RegistryList.css";
 
@@ -21,18 +21,25 @@ const STATUS_FILTERS = [
   { value: "", label: "Todos" },
 ];
 
+const PAYMENT_FILTERS = [
+  { value: "", label: "Todos os funcionários" },
+  { value: "paid", label: "Pagos neste mês" },
+  { value: "unpaid", label: "Não pagos neste mês" },
+];
+
 export default function FolhaPagamento() {
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState("");
   const search = useDebounced(searchInput.trim(), 350);
   const [status, setStatus] = useState("Active");
   const [department, setDepartment] = useState("");
+  const [payment, setPayment] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const { summary, summaryError, page, setPage, loaded, listError, shown, refreshing, items, totalCount, totalPages } = useRegistryData({
     loadSummary: getEmployeesSummary,
     loadList: getEmployees,
-    filters: { search, status, department },
+    filters: { search, status, department, payment },
     refreshKey,
     pageSize: PAGE_SIZE,
     listError: "Não foi possível carregar os funcionários.",
@@ -59,7 +66,6 @@ export default function FolhaPagamento() {
       }
     >
       <div className="registry">
-
         {summaryError ? (
           <p className="registry__error">{summaryError}</p>
         ) : (
@@ -67,7 +73,6 @@ export default function FolhaPagamento() {
             <SummaryItem label="Funcionários ativos" value={summary ? summary.activeCount : <Skeleton width="2.5rem" height="1.6rem" />} />
             <SummaryItem
               label="Soma dos salários brutos (ativos)"
-              tone={transactionTone("Expense", summary?.activeGrossSalaryTotal)}
               value={summary ? formatCurrency(summary.activeGrossSalaryTotal) : <Skeleton width="8rem" height="1.6rem" />}
             />
           </dl>
@@ -87,6 +92,12 @@ export default function FolhaPagamento() {
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   autoComplete="off"
+                />
+                <PaymentFilter
+                  label="Filtrar por pagamento neste mês"
+                  options={PAYMENT_FILTERS}
+                  value={payment}
+                  onChange={setPayment}
                 />
                 <StatusFilter options={STATUS_FILTERS} value={status} onChange={setStatus} />
                 {departments.length > 0 && (
@@ -117,6 +128,7 @@ export default function FolhaPagamento() {
                       <th scope="col" className="registry__col--optional">Departamento</th>
                       <th scope="col" className="registry__col--optional">Admissão</th>
                       <th scope="col" className="biz-table__numeric">Salário bruto</th>
+                      <th scope="col" className="biz-table__numeric">Pago no mês</th>
                       <th scope="col">Situação</th>
                     </tr>
                   </thead>
@@ -124,7 +136,7 @@ export default function FolhaPagamento() {
                     {!shown
                       ? Array.from({ length: 4 }, (_, i) => (
                           <tr key={i} className="registry__placeholder">
-                            <td colSpan={6}>
+                            <td colSpan={7}>
                               <Skeleton width="100%" height="1.1rem" />
                             </td>
                           </tr>
@@ -132,22 +144,28 @@ export default function FolhaPagamento() {
                       : items.length === 0
                         ? (
                           <tr className="biz-table__state">
-                            <td colSpan={6}>{noEmployeesAtAll ? "Nenhum funcionário cadastrado." : "Nenhum funcionário encontrado com esses filtros."}</td>
+                            <td colSpan={7}>{noEmployeesAtAll ? "Nenhum funcionário cadastrado." : "Nenhum funcionário encontrado com esses filtros."}</td>
                           </tr>
                         )
                         : items.map((employee) => {
                             const statusInfo = EMPLOYEE_STATUS[employee.status] ?? EMPLOYEE_STATUS.Active;
                             return (
-                              <tr key={employee.id}>
+                              <tr
+                                key={employee.id}
+                                className="registry__row"
+                                onClick={(e) => openRow(e, navigate, `/dashboard/folha-de-pagamento/${employee.id}`)}
+                              >
                                 <td>
                                   <Link className="registry__name" to={`/dashboard/folha-de-pagamento/${employee.id}`}>
                                     {employee.fullName}
                                   </Link>
+                                  <PaymentStatusMark status={employee.paymentStatus} />
                                 </td>
                                 <td className="registry__muted">{employee.role}</td>
                                 <td className="registry__muted registry__col--optional">{employee.department || "—"}</td>
                                 <td className="registry__muted registry__col--optional">{formatDateOnly(employee.admissionDate)}</td>
-                                <td className={`biz-table__numeric registry__amount--${transactionTone("Expense", employee.grossSalary)}`}>{formatCurrency(employee.grossSalary)}</td>
+                                <td className="biz-table__numeric registry__amount">{formatCurrency(employee.grossSalary)}</td>
+                                <PaidAmountCell status={employee.paymentStatus} amount={employee.bankPaidAmount} />
                                 <td>
                                   <StatusPill status={statusInfo.pill}>{statusInfo.label}</StatusPill>
                                 </td>

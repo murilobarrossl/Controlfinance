@@ -28,15 +28,15 @@ public class SuppliersController(AppDbContext db, IEncryptionService encryption)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
-
         var rows = (await db.Suppliers.AsNoTracking().Where(s => s.UserId == UserId)
             .Select(s => new
             {
                 s.Id, s.LegalName, s.TradeName, s.DocumentType, s.Document, s.Category,
-                HasPix = s.PixKeyHash != null, HasBank = s.PayeeBankCode != null
+                HasPix = s.PaymentMethods.Any(m => m.Kind == PayeePaymentKind.Pix),
+                HasBank = s.PaymentMethods.Any(m => m.Kind == PayeePaymentKind.Bank)
             })
             .ToListAsync(ct))
-            .Select(s => new SupplierListItemDto(s.Id, s.LegalName, s.TradeName, s.DocumentType, PayeeKeys.MaskDocument(s.Document),
+            .Select(s => new SupplierListItemDto(s.Id, s.LegalName, s.TradeName, s.DocumentType, PayeeKeys.SupplierDocumentView(s.Document),
                 s.Category, s.HasPix, s.HasBank));
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -55,16 +55,16 @@ public class SuppliersController(AppDbContext db, IEncryptionService encryption)
     {
         var own = db.Suppliers.AsNoTracking().Where(s => s.UserId == UserId);
         var total = await own.CountAsync(ct);
-        var withPayment = await own.CountAsync(s => s.PixKeyHash != null || s.PayeeBankCode != null, ct);
         var categories = await own.Where(s => s.Category != null).Select(s => s.Category!).Distinct().ToListAsync(ct);
         categories.Sort((a, b) => PtBr.Compare(a, b, CompareOptions.IgnoreCase));
-        return Ok(new SupplierSummaryDto(total, withPayment, categories));
+        return Ok(new SupplierSummaryDto(total, categories));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
-        var supplier = await db.Suppliers.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id && s.UserId == UserId, ct);
+        var supplier = await db.Suppliers.AsNoTracking().Include(s => s.PaymentMethods)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == UserId, ct);
         return supplier is null ? NotFound() : Ok(ToDetail(supplier));
     }
 
@@ -99,59 +99,93 @@ public class SuppliersController(AppDbContext db, IEncryptionService encryption)
         return NoContent();
     }
 
-    [HttpPut("{id:guid}/pix")]
-    public Task<IActionResult> SetPix(Guid id, [FromBody] PayeePixDto dto, CancellationToken ct) =>
+    // Pix ou conta para TED, para reconhecer pagamentos. Cada método é independente: incluir um
+    // nunca sobrescreve os outros.
+    [HttpPost("{id:guid}/payment-methods")]
+    public Task<IActionResult> AddPaymentMethod(Guid id, [FromBody] PayeePaymentMethodDto dto, CancellationToken ct) =>
         ChangeAsync(id, async supplier =>
         {
-            var error = PayeePayment.ParsePix(dto, out var type, out var key);
-            if (error is not null) return error;
-            var candidates = encryption.ComputeLookupHashCandidates(SupplierKeys.PixLookupInput(UserId, type, key));
-            if (await db.Suppliers.AnyAsync(s => s.UserId == UserId && s.Id != supplier.Id && s.PixKeyHash != null && candidates.Contains(s.PixKeyHash), ct))
-                return "Esta chave Pix já está cadastrada para outro fornecedor.";
-
-            supplier.PixKeyType = type;
-            supplier.PixKey = key;
-            supplier.PixKeyHash = encryption.ComputeLookupHash(SupplierKeys.PixLookupInput(UserId, type, key));
-            return null;
+            if (supplier.PaymentMethods.Count >= PayeePayment.MaxMethodsPerPayee)
+                return $"Limite de {PayeePayment.MaxMethodsPerPayee} métodos de pagamento por fornecedor.";
+            var method = new SupplierPaymentMethod { UserId = UserId, SupplierId = supplier.Id };
+            var error = await ApplyPaymentMethodAsync(supplier, method, dto, ct);
+            // Add explícito: com o Id já preenchido, entrar só pela coleção faria o EF tratar o método
+            // como existente (UPDATE em vez de INSERT).
+            if (error is null)
+            {
+                supplier.PaymentMethods.Add(method);
+                db.SupplierPaymentMethods.Add(method);
+            }
+            return error;
         }, ct);
 
-    [HttpDelete("{id:guid}/pix")]
-    public Task<IActionResult> RemovePix(Guid id, CancellationToken ct) =>
-        ChangeAsync(id, supplier =>
+    [HttpPut("{id:guid}/payment-methods/{methodId:guid}")]
+    public async Task<IActionResult> UpdatePaymentMethod(Guid id, Guid methodId, [FromBody] PayeePaymentMethodDto dto, CancellationToken ct)
+    {
+        if (!await PaymentMethodExistsAsync(id, methodId, ct)) return NotFound();
+        return await ChangeAsync(id, supplier =>
+            ApplyPaymentMethodAsync(supplier, supplier.PaymentMethods.Single(m => m.Id == methodId), dto, ct), ct);
+    }
+
+    [HttpDelete("{id:guid}/payment-methods/{methodId:guid}")]
+    public async Task<IActionResult> RemovePaymentMethod(Guid id, Guid methodId, CancellationToken ct)
+    {
+        if (!await PaymentMethodExistsAsync(id, methodId, ct)) return NotFound();
+        return await ChangeAsync(id, supplier =>
         {
-            supplier.PixKeyType = null;
-            supplier.PixKey = null;
-            supplier.PixKeyHash = null;
+            var method = supplier.PaymentMethods.Single(m => m.Id == methodId);
+            supplier.PaymentMethods.Remove(method);
+            db.SupplierPaymentMethods.Remove(method);
             return Task.FromResult<string?>(null);
         }, ct);
+    }
 
-    [HttpPut("{id:guid}/bank-account")]
-    public Task<IActionResult> SetBankAccount(Guid id, [FromBody] PayeeBankDto dto, CancellationToken ct) =>
-        ChangeAsync(id, supplier =>
-        {
-            var error = PayeePayment.ParseBank(dto, out var bank);
-            if (error is not null) return Task.FromResult<string?>(error);
-            supplier.PayeeBankCode = bank!.BankCode;
-            supplier.PayeeBranch = bank.Branch;
-            supplier.PayeeAccount = bank.Account;
-            supplier.PayeeAccountType = bank.AccountType;
-            return Task.FromResult<string?>(null);
-        }, ct);
+    // A chave completa sai só por esta rota, usada pelo detalhe do fornecedor.
+    [HttpGet("{id:guid}/payment-methods/{methodId:guid}/pix-key")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> RevealPixKey(Guid id, Guid methodId, CancellationToken ct)
+    {
+        var pix = await db.SupplierPaymentMethods.AsNoTracking()
+            .Where(m => m.Id == methodId && m.SupplierId == id && m.UserId == UserId && m.Kind == PayeePaymentKind.Pix)
+            .Select(m => new { m.PixKeyType, m.PixKey })
+            .FirstOrDefaultAsync(ct);
+        if (pix?.PixKeyType is not { } type || pix.PixKey is not { } key) return NotFound();
+        return Ok(new { type = type.ToString(), key });
+    }
 
-    [HttpDelete("{id:guid}/bank-account")]
-    public Task<IActionResult> RemoveBankAccount(Guid id, CancellationToken ct) =>
-        ChangeAsync(id, supplier =>
+    private Task<bool> PaymentMethodExistsAsync(Guid supplierId, Guid methodId, CancellationToken ct) =>
+        db.SupplierPaymentMethods.AnyAsync(m => m.Id == methodId && m.SupplierId == supplierId && m.UserId == UserId, ct);
+
+    private async Task<string?> ApplyPaymentMethodAsync(Supplier supplier, SupplierPaymentMethod method, PayeePaymentMethodDto dto, CancellationToken ct)
+    {
+        var error = PayeePayment.ParseMethod(dto, out var parsed);
+        if (error is not null) return error;
+
+        string? hash = null;
+        if (parsed!.Kind == PayeePaymentKind.Pix)
         {
-            supplier.PayeeBankCode = null;
-            supplier.PayeeBranch = null;
-            supplier.PayeeAccount = null;
-            supplier.PayeeAccountType = null;
-            return Task.FromResult<string?>(null);
-        }, ct);
+            var candidates = encryption.ComputeLookupHashCandidates(SupplierKeys.PixLookupInput(UserId, parsed.PixType, parsed.PixKey));
+            var owner = await db.SupplierPaymentMethods
+                .Where(m => m.UserId == UserId && m.Id != method.Id && m.PixKeyHash != null && candidates.Contains(m.PixKeyHash))
+                .Select(m => (Guid?)m.SupplierId)
+                .FirstOrDefaultAsync(ct);
+            if (owner is { } other)
+                return other == supplier.Id
+                    ? "Esta chave Pix já está cadastrada para este fornecedor."
+                    : "Esta chave Pix já está cadastrada para outro fornecedor.";
+            hash = encryption.ComputeLookupHash(SupplierKeys.PixLookupInput(UserId, parsed.PixType, parsed.PixKey));
+        }
+        else if (supplier.PaymentMethods.Any(m => m.Id != method.Id && PayeePayment.SameAccount(m, parsed.Bank!)))
+            return "Esta conta já está cadastrada para este fornecedor.";
+
+        PayeePayment.Assign(method, parsed, hash);
+        return null;
+    }
 
     private async Task<IActionResult> ChangeAsync(Guid id, Func<Supplier, Task<string?>> change, CancellationToken ct)
     {
-        var supplier = await db.Suppliers.FirstOrDefaultAsync(s => s.Id == id && s.UserId == UserId, ct);
+        var supplier = await db.Suppliers.Include(s => s.PaymentMethods)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == UserId, ct);
         if (supplier is null) return NotFound();
 
         var error = await change(supplier);
@@ -212,8 +246,7 @@ public class SuppliersController(AppDbContext db, IEncryptionService encryption)
     }
 
     private static SupplierDetailDto ToDetail(Supplier s) => new(
-        s.Id, s.LegalName, s.TradeName, s.DocumentType, PayeeKeys.MaskDocument(s.Document), s.Category,
-        PayeePayment.PixView(s.PixKeyType, s.PixKey),
-        PayeePayment.BankView(s.PayeeBankCode, s.PayeeBranch, s.PayeeAccount, s.PayeeAccountType),
+        s.Id, s.LegalName, s.TradeName, s.DocumentType, PayeeKeys.SupplierDocumentView(s.Document), s.Category,
+        PayeePayment.Views(s.PaymentMethods),
         s.CreatedAt, s.UpdatedAt);
 }

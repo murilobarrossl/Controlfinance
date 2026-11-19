@@ -15,14 +15,8 @@ public class Supplier
 
     public string? Category { get; set; }
 
-    public PixKeyType? PixKeyType { get; set; }
-    public string? PixKey { get; set; }
-    public string? PixKeyHash { get; set; }
+    public List<SupplierPaymentMethod> PaymentMethods { get; set; } = [];
 
-    public string? PayeeBankCode { get; set; }
-    public string? PayeeBranch { get; set; }
-    public string? PayeeAccount { get; set; }
-    public PayeeAccountType? PayeeAccountType { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

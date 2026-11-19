@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import useModalBehavior from "../../../hooks/useModalBehavior.js";
+import { CloseIcon } from "../icons/FeatureIcons.jsx";
 import "./FormDialog.css";
 
 // Mesma casca do ConfirmDialog (trava de scroll, Esc fecha, foco preso no painel), mas com um
@@ -16,6 +17,8 @@ export default function FormDialog({
   submitting = false,
   onSubmit,
   onClose,
+  showCloseButton = false,
+  closeButtonPlacement = "end",
   children,
 }) {
   const panelRef = useRef(null);
@@ -27,7 +30,7 @@ export default function FormDialog({
     <div className="form-dialog-overlay" onClick={onClose}>
       <div
         ref={panelRef}
-        className="form-dialog"
+        className={`form-dialog${showCloseButton ? ` form-dialog--closable form-dialog--close-${closeButtonPlacement}` : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="form-dialog-title"
@@ -35,6 +38,11 @@ export default function FormDialog({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
+        {showCloseButton && (
+          <button type="button" className="form-dialog__close" aria-label="Fechar" onClick={onClose} disabled={submitting}>
+            <CloseIcon />
+          </button>
+        )}
         <header className="form-dialog__header">
           <h2 id="form-dialog-title" className="form-dialog__title">
             {title}
@@ -56,9 +64,11 @@ export default function FormDialog({
           )}
 
           <div className="form-dialog__actions">
-            <button type="button" className="form-dialog__action form-dialog__action--ghost" onClick={onClose} disabled={submitting}>
-              {cancelLabel}
-            </button>
+            {cancelLabel && (
+              <button type="button" className="form-dialog__action form-dialog__action--ghost" onClick={onClose} disabled={submitting}>
+                {cancelLabel}
+              </button>
+            )}
             <button type="submit" className="form-dialog__action form-dialog__action--primary" disabled={submitting}>
               {submitting ? "Salvando…" : submitLabel}
             </button>

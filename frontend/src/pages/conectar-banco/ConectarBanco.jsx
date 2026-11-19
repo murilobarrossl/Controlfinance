@@ -274,11 +274,15 @@ export default function ConnectBankPage() {
                 <dd>
                   Contas, saldos, extrato de transações e, se houver, cartões de crédito (limite, fatura e
                   vencimento), além de investimentos disponíveis por Open Finance do banco que você escolher.
+                  {holderType !== HOLDER_CNPJ &&
+                    " Para CPF, também operações de crédito, das quais lemos só os contratos de empréstimo."}
                 </dd>
 
                 <dt>Para quê</dt>
                 <dd>
-                  Só para montar o seu painel: saldo, receitas e despesas, categorias, cartões, investimentos e relatórios.
+                  {holderType !== HOLDER_CNPJ
+                    ? "Só para montar o seu painel: saldo, receitas e despesas, categorias, cartões, investimentos, contratos de empréstimo e relatórios."
+                    : "Para montar o painel da empresa (saldo, receitas e despesas, cartões, investimentos, relatórios e fechamento de caixa), identificar pagamentos aos funcionários que você cadastrar, pelo CPF ou pela conta do destinatário que o banco informa, e identificar pagamentos de tributos."}{" "}
                   Não vendemos seus dados e não usamos para publicidade.
                 </dd>
 
@@ -293,8 +297,12 @@ export default function ConnectBankPage() {
 
                 <dt>O que guardamos</dt>
                 <dd>
-                  Saldos, extrato, dados de cartão e investimentos disponibilizados pela conexão, e só os 4 últimos dígitos do número da conta, cifrados no
-                  nosso banco de dados, enquanto a conexão estiver ativa.
+                  {holderType !== HOLDER_CNPJ
+                    ? "Saldos, extrato, dados de cartão, investimentos e contratos de empréstimo (sem número do contrato nem garantias)"
+                    : "Saldos, extrato, dados de cartão e investimentos"}{" "}
+                  disponibilizados pela conexão, e só os 4 últimos dígitos do número da conta, cifrados no
+                  nosso banco de dados, enquanto a autorização no banco estiver ativa. Se ela expirar ou for revogada no
+                  banco, os dados deixam de ser usados e são apagados após 30 dias.
                 </dd>
 
                 <dt>Como a sincronização funciona</dt>
@@ -360,7 +368,7 @@ export default function ConnectBankPage() {
                   required
                 />
                 <span>
-                  Li as informações sobre a conexão. O compartilhamento de contas, cartões e investimentos será autorizado diretamente no banco. Detalhes na{" "}
+                  Li as informações sobre a conexão. O compartilhamento de {holderType !== HOLDER_CNPJ ? "contas, cartões, investimentos e operações de crédito" : "contas, cartões e investimentos"} será autorizado diretamente no banco. Detalhes na{" "}
                   <Link to="/politica-de-privacidade" target="_blank" rel="noopener noreferrer">
                     Política de privacidade
                   </Link>

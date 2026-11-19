@@ -74,7 +74,15 @@ public class DataRetentionService(IServiceScopeFactory scopeFactory, IJobLock jo
                         await db.InvestmentPositionObservations.Where(x => x.ObservedAt < cutoff.Value).ExecuteDeleteAsync(stoppingToken);
                         await db.ReservedBalanceObservations.Where(x => x.ObservedAt < cutoff.Value).ExecuteDeleteAsync(stoppingToken);
                         await db.BankBalanceObservations.Where(x => x.ObservedAt < cutoff.Value).ExecuteDeleteAsync(stoppingToken);
+                        var closingCutoff = DateOnly.FromDateTime(cutoff.Value);
+                        await db.CashClosings.Where(c => c.Day < closingCutoff).ExecuteDeleteAsync(stoppingToken);
+                        // A marcação é decisão da empresa e fica; o valor que o banco mostrava é histórico bancário.
+                        var markCutoff = new DateOnly(closingCutoff.Year, closingCutoff.Month, 1);
+                        await db.PayeePaymentMarkEvents.Where(e => e.ReferenceMonth < markCutoff && e.BankPaidAmount != null)
+                            .ExecuteUpdateAsync(s => s.SetProperty(e => e.BankPaidAmount, (decimal?)null), stoppingToken);
                     }
+
+                    await db.RevokedTokens.Where(t => t.ExpiresAt < now).ExecuteDeleteAsync(stoppingToken);
 
                     var accessCutoff = now.AddDays(-DataRetentionPolicy.AccessLogRetentionDays(config));
                     var accessLogs = await db.AccessLogs

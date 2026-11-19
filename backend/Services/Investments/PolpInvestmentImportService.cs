@@ -270,11 +270,13 @@ public class PolpInvestmentImportService(AppDbContext db, IPolpService polp, IIn
         // Several notifications may address the same stream. Claim a short persistent read
         // lease before network calls, so multiple nodes do not fetch the same page at once.
         var readAt = PolpInboxTime.Now(clock);
+        var claimedFrom = scope.Status;
         var claimed = await integrationLock.RunAsync(db, scope.IntegrationId, async () =>
         {
             var current = await db.InvestmentSyncStates.SingleOrDefaultAsync(s => s.Id == scope.Id && s.RunId == scope.RunId && s.PageNumber == scope.PageNumber, ct);
             if (current is null || current.Status is "Complete" or "Blocked"
                 || (current.Status == "Reading" && current.LastAttemptAt > readAt.AddMinutes(-5))) return false;
+            claimedFrom = current.Status == "Reading" ? "Pending" : current.Status;
             current.Status = "Reading"; current.LastAttemptAt = readAt;
             await db.SaveChangesAsync(ct); return true;
         }, ct);
@@ -367,6 +369,16 @@ public class PolpInvestmentImportService(AppDbContext db, IPolpService polp, IIn
             db.ChangeTracker.Clear();
             foreach (var asset in imported) await RequestAsync(source, asset.Family, "movements", asset.ExternalId, null, false, ct);
             if (continuation is not null) await QueueAsync(continuation, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // No desligamento a inbox devolve o evento à fila; sem soltar a leitura, a nova tentativa
+            // esbarraria nesta reivindicação até o prazo de 5 min vencer.
+            db.ChangeTracker.Clear();
+            await db.InvestmentSyncStates.Where(s => s.Id == scope.Id && s.RunId == scope.RunId && s.PageNumber == scope.PageNumber
+                    && s.LastAttemptAt == readAt && s.Status == "Reading")
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, claimedFrom), CancellationToken.None);
+            throw;
         }
         catch (PermissionChangedException)
         {

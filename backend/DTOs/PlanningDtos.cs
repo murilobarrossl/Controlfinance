@@ -4,7 +4,7 @@ using ControlFinance.API.Models;
 namespace ControlFinance.API.DTOs;
 
 // Reserva e metas não guardam valor: o saldo vem sempre dos investimentos vinculados.
-public record EmergencyReserveDto(Guid? BankAccountId, List<Guid> ExcludedAutoIds, List<Guid> InvestmentIds, List<Guid> ReservedBalanceIds);
+public record EmergencyReserveDto(List<Guid> ReservedBalanceIds);
 
 public record SavingsGoalDto(Guid Id, string Name, decimal TargetAmount, DateOnly? Deadline, DateTime CreatedAt,
     List<Guid> InvestmentIds, List<Guid> ReservedBalanceIds);
@@ -17,7 +17,6 @@ public record InvestmentRateProfileDto(Guid BankAccountId, string Kind, decimal 
         new(p.BankAccountId, p.Kind, p.Value, p.IncomeTaxExempt, p.UpdatedAt);
 }
 
-public record SetReserveAccountDto(Guid? BankAccountId);
 
 public record SetInvestmentRateDto(
     [Required(ErrorMessage = "Tipo de rendimento é obrigatório.")] string Kind,

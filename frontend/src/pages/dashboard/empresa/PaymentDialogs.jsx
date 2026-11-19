@@ -1,7 +1,7 @@
 import { useState } from "react";
 import FormDialog from "../../../components/ui/FormDialog/FormDialog.jsx";
-import { BankFields, PixFields } from "./PaymentFields.jsx";
-import { bankPayload, bankProblem, EMPTY_BANK, EMPTY_PIX, pixPayload, pixProblem } from "./payeePayment.js";
+import { BankFields, PaymentSegmented, PixFields } from "./PaymentFields.jsx";
+import { EMPTY_BANK, EMPTY_PIX, PAYMENT_METHOD_OPTIONS, paymentMethodPayload, paymentProblem } from "./payeePayment.js";
 import useDialogSubmit from "./useDialogSubmit.js";
 
 function validatedSubmit(problem, setError, submit) {
@@ -15,43 +15,46 @@ function validatedSubmit(problem, setError, submit) {
   };
 }
 
-export function PixDialog({ current, save, onClose, onSaved }) {
-  const [pix, setPix] = useState({ ...EMPTY_PIX, type: current?.type ?? EMPTY_PIX.type });
-  const { submitting, error, setError, submit } = useDialogSubmit(() => save(pixPayload(pix)), onSaved);
-
-  return (
-    <FormDialog
-      open
-      title={current ? "Alterar chave Pix" : "Adicionar chave Pix"}
-      error={error}
-      submitting={submitting}
-      onSubmit={validatedSubmit(pixProblem(pix), setError, submit)}
-      onClose={onClose}
-    >
-      <PixFields value={pix} onChange={setPix} idPrefix="payee-pix" />
-    </FormDialog>
-  );
-}
-
-export function BankAccountDialog({ current, save, onClose, onSaved }) {
+// Incluir ou alterar um método (Pix ou conta para TED). Alterar pode trocar o tipo; a chave Pix e o
+// número da conta atuais nunca vêm preenchidos, só o tipo de chave, banco, agência e tipo de conta.
+export function PaymentMethodDialog({ current, save, onClose, onSaved }) {
+  const [payment, setPayment] = useState(current?.kind === "Bank" ? "bank" : "pix");
+  const [pix, setPix] = useState({ ...EMPTY_PIX, type: current?.pix?.type ?? EMPTY_PIX.type });
   const [bank, setBank] = useState({
     ...EMPTY_BANK,
-    bankCode: current?.bankCode ?? "",
-    branch: current?.branch ?? "",
-    accountType: current?.accountType ?? EMPTY_BANK.accountType,
+    bankCode: current?.bank?.bankCode ?? "",
+    branch: current?.bank?.branch ?? "",
+    accountType: current?.bank?.accountType ?? EMPTY_BANK.accountType,
   });
-  const { submitting, error, setError, submit } = useDialogSubmit(() => save(bankPayload(bank)), onSaved);
+  const { submitting, error, setError, submit } = useDialogSubmit(() => save(paymentMethodPayload(payment, { pix, bank })), onSaved);
 
   return (
     <FormDialog
       open
-      title={current ? "Alterar conta para transferência" : "Adicionar conta para transferência"}
+      title={current ? "Alterar método de pagamento" : "Adicionar método de pagamento"}
       error={error}
       submitting={submitting}
-      onSubmit={validatedSubmit(bankProblem(bank), setError, submit)}
+      onSubmit={validatedSubmit(paymentProblem(payment, pix, bank), setError, submit)}
       onClose={onClose}
     >
-      <BankFields value={bank} onChange={setBank} accountPlaceholder={current ? current.accountMasked : undefined} />
+      <PaymentSegmented
+        options={PAYMENT_METHOD_OPTIONS}
+        value={payment}
+        onChange={(value) => {
+          setPayment(value);
+          setError("");
+        }}
+      />
+      {payment === "pix" ? (
+        <PixFields value={pix} onChange={setPix} idPrefix="payment-method-pix" holderPlaceholder={current?.holderDocumentMasked} />
+      ) : (
+        <BankFields
+          value={bank}
+          onChange={setBank}
+          accountPlaceholder={current?.kind === "Bank" ? current.bank?.accountMasked : undefined}
+          holderPlaceholder={current?.holderDocumentMasked}
+        />
+      )}
     </FormDialog>
   );
 }

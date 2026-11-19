@@ -20,7 +20,7 @@ public record SupplierListItemDto(
 
 public record SupplierListDto(IReadOnlyList<SupplierListItemDto> Items, int TotalCount, int Page, int PageSize);
 
-public record SupplierSummaryDto(int TotalCount, int WithPaymentCount, IReadOnlyList<string> Categories);
+public record SupplierSummaryDto(int TotalCount, IReadOnlyList<string> Categories);
 
 public record SupplierDetailDto(
     Guid Id,
@@ -29,7 +29,6 @@ public record SupplierDetailDto(
     string DocumentType,
     string DocumentMasked,
     string? Category,
-    PayeePixView? Pix,
-    PayeeBankView? Bank,
+    IReadOnlyList<PayeePaymentMethodView> PaymentMethods,
     DateTime CreatedAt,
     DateTime UpdatedAt);

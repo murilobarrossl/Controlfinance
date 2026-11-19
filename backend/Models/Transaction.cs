@@ -2,7 +2,7 @@ namespace ControlFinance.API.Models;
 
 public enum TransactionType { Income, Expense }
 public enum TransactionStatus { Pending, Paid, Overdue }
-public enum PolpMovementKind { None, CardBillPayment, OwnTransfer }
+public enum PolpMovementKind { None, CardBillPayment, OwnTransfer, LoanDisbursement }
 
 public class Transaction
 {
@@ -29,6 +29,9 @@ public class Transaction
 
     public PolpMovementKind PolpMovementKind { get; set; }
 
+    public bool PolpTaxPayment { get; set; }
+    public string? TaxAuthority { get; set; }
+
     /// <summary>Quando o lembrete de vencimento por e-mail foi enviado (null = ainda não enviado).</summary>
     public DateTime? ReminderSentAt { get; set; }
 
@@ -41,6 +44,15 @@ public class Transaction
     public string? CounterpartyName { get; set; }
     public string? CounterpartyAlias { get; set; }
     public string? CounterpartyCnpj { get; set; }
+    /// <summary>CounterpartyCnpj veio do próprio banco (partie_cnpj_cpf), não do enriquecimento da Polp.
+    /// Só nesse caso o CNPJ serve de prova de destinatário.</summary>
+    public bool CounterpartyCnpjFromBank { get; set; }
+    /// <summary>HMAC por empresa do CPF da contraparte (EmployeeKeys.CpfLookupInput), só em login
+    /// CNPJ. O CPF em si nunca é guardado.</summary>
+    public string? CounterpartyCpfHash { get; set; }
+    /// <summary>HMAC por empresa da conta completa da contraparte (PayeeKeys.AccountLookupInput), só em
+    /// login CNPJ. Número, agência e dígito em si não são guardados.</summary>
+    public string? CounterpartyAccountHash { get; set; }
     public string? CounterpartyPersonType { get; set; }
     public string? CounterpartyBankCode { get; set; }
     public string? CounterpartyAccount { get; set; }

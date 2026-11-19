@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation } from "react-router";
 import { getCreditCardsSummary } from "../../../api/creditCards.js";
 import { getTransactions } from "../../../api/transactions.js";
 import { isAbortError } from "../../../api/client.js";
@@ -64,7 +64,9 @@ export default function Cartoes() {
   const loading = loadedKey !== reloadKey;
   // O topo e os próximos vencimentos somam sempre todos os cartões; a seleção só abre o painel do
   // cartão e escolhe o extrato.
-  const [selectedId, setSelectedId] = useState(null);
+  const location = useLocation();
+  const [selectedId, setSelectedId] = useState(() => location.state?.cardId ?? null);
+  const pendingScrollId = useRef(location.state?.cardId ?? null);
 
   const cards = data?.cards ?? EMPTY_LIST;
   const pendingTransactions = data?.pendingTransactions ?? EMPTY_LIST;
@@ -101,6 +103,15 @@ export default function Cartoes() {
   // Se o cartão escolhido deixou de existir (banco desconectado), a seleção some sozinha.
   const selectedCard = useMemo(() => cards.find((c) => c.id === selectedId) ?? null, [cards, selectedId]);
   const summary = useMemo(() => summarizeCards(cards), [cards]);
+
+  useEffect(() => {
+    if (loading || !pendingScrollId.current) return;
+    const targetId = pendingScrollId.current;
+    pendingScrollId.current = null;
+    if (selectedCard?.id === targetId) {
+      document.getElementById(`cartao-${targetId}`)?.scrollIntoView({ block: "start" });
+    }
+  }, [loading, selectedCard]);
   const { groups } = useMemo(() => groupCards(cards), [cards]);
 
   const connectorsMap = useMemo(() => buildConnectorsMap(connectors), [connectors]);

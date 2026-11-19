@@ -21,14 +21,3 @@ export function summaryNote({ count, withoutAmount, stale }) {
   if (stale) parts.push("inclui último saldo informado");
   return parts.join(" · ");
 }
-
-// Conta de banco vinculada à reserva antes da mudança para investimentos: o saldo é o do banco.
-export function legacyAccountEntry(account) {
-  const balance = typeof account.balance === "number" && Number.isFinite(account.balance) ? account.balance.toFixed(2) : null;
-  return {
-    key: `account:${account.id}`,
-    status: "ready",
-    legacy: true,
-    item: { key: `account:${account.id}`, name: account.name, institution: { name: account.name }, amounts: balance ? [{ amount: balance, currency: "BRL" }] : [] },
-  };
-}
